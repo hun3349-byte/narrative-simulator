@@ -6,7 +6,7 @@ import { useProjectStore } from '@/lib/store/project-store';
 import { PERSONA_ICONS } from '@/lib/presets/author-personas';
 import { WorldTimelinePanel } from '@/components/world-timeline';
 import EpisodeViewer from '@/components/episode/EpisodeViewer';
-import type { LayerName, Episode } from '@/lib/types';
+import type { LayerName, Episode, Character, SimulationConfig, WorldEvent, CharacterSeed } from '@/lib/types';
 
 const LAYER_LABELS: Record<LayerName, string> = {
   world: '세계',
@@ -91,6 +91,9 @@ export default function ProjectConversationPage() {
     addEpisode,
     addFeedback,
     getRecurringFeedback,
+    setCharacters,
+    setSeeds,
+    setProfiles,
   } = useProjectStore();
 
   // Hydration 상태 - 클라이언트에서 localStorage 로드 완료 전까지 로딩 표시
@@ -356,7 +359,7 @@ export default function ProjectConversationPage() {
           addMessage({
             role: 'author',
             content: data.message || `${data.episode.number}화 초안이야. 읽어봐.`,
-            episodeId: data.episode.id,
+            episode: data.episode,
             choices: [
               { label: '채택', action: 'adopt_episode' },
               { label: '수정 요청', action: 'request_revision' },
@@ -532,8 +535,9 @@ export default function ProjectConversationPage() {
 
             addMessage({
               role: 'author',
-              content: data.message || `${data.eras.length}개 시대의 역사가 완성됐어. 이제 캐릭터 시뮬레이션을 시작할 수 있어.`,
+              content: data.message || `${data.eras.length}개 시대의 역사가 완성됐어. 시뮬레이션을 하거나 바로 집필을 시작할 수 있어.`,
               choices: [
+                { label: '바로 1화 쓰기', action: 'skip_to_writing' },
                 { label: '시뮬레이션 시작', action: 'run_simulation' },
                 { label: '역사 탭에서 확인', action: 'view_history' },
               ],
@@ -568,11 +572,226 @@ export default function ProjectConversationPage() {
 
       generateWorldHistory();
     } else if (action === 'run_simulation') {
-      // TODO: 캐릭터 시뮬레이션 시작
+      // 캐릭터 시뮬레이션 시작
+      setIsLoading(true);
       addMessage({
         role: 'author',
-        content: '캐릭터 시뮬레이션 기능은 아직 준비 중이야. 곧 추가될 거야!',
+        content: '캐릭터 시뮬레이션을 시작할게. 캐릭터들의 인생을 시뮬레이션해서 입체적인 캐릭터를 만들어볼게.',
       });
+
+      try {
+        // 1. 레이어 데이터에서 캐릭터 생성
+        const heroArcData = project.layers.heroArc.data as { name?: string; origin?: string; coreNarrative?: string; initialState?: string; ultimateGoal?: string } | null;
+        const seedsData = project.layers.seeds.data as { npcs?: Array<{ name: string; role: string; personality?: string; hiddenMotivation?: string }> } | null;
+
+        const characters: Character[] = [];
+        const seeds: CharacterSeed[] = [];
+
+        // 주인공 캐릭터 생성
+        if (heroArcData?.name) {
+          const heroId = 'hero-' + Date.now();
+          characters.push({
+            id: heroId,
+            name: heroArcData.name,
+            alias: '',
+            age: 0,
+            birthYear: 0,
+            status: 'childhood',
+            stats: { combat: 50, intellect: 50, willpower: 50, social: 50, specialStat: { name: '잠재력', value: 80 } },
+            emotionalState: { primary: '평온', intensity: 50, trigger: '출생' },
+            profile: {
+              background: heroArcData.origin || '',
+              personality: heroArcData.coreNarrative || '',
+              motivation: heroArcData.ultimateGoal || '',
+              abilities: [],
+              weakness: '',
+              secretGoal: heroArcData.ultimateGoal || '',
+            },
+          });
+
+          // 주인공 씨앗 생성
+          seeds.push({
+            id: heroId,
+            codename: '주인공',
+            name: heroArcData.name,
+            birthYear: 0,
+            birthCondition: heroArcData.origin || '알 수 없는 출생',
+            initialCondition: heroArcData.initialState || '평범한 시작',
+            initialEnvironment: heroArcData.initialState || '',
+            temperament: '성장형',
+            innateTraits: ['주인공'],
+            latentAbility: '무한한 잠재력',
+            latentPotentials: ['성장 잠재력'],
+            physicalTrait: '평범한 외모',
+            wound: '아직 드러나지 않은 상처',
+            roleTendency: 'protagonist',
+            color: '#7B6BA8',
+          });
+        }
+
+        // NPC 캐릭터 생성
+        if (seedsData?.npcs) {
+          seedsData.npcs.forEach((npc, idx) => {
+            const npcId = `npc-${idx}-${Date.now()}`;
+            characters.push({
+              id: npcId,
+              name: npc.name,
+              alias: '',
+              age: 20 + idx * 5,
+              birthYear: -(20 + idx * 5),
+              status: 'training',
+              stats: { combat: 40, intellect: 40, willpower: 40, social: 40, specialStat: { name: '영향력', value: 50 } },
+              emotionalState: { primary: '평온', intensity: 50, trigger: '출생' },
+              profile: {
+                background: npc.role,
+                personality: npc.personality || '',
+                motivation: npc.hiddenMotivation || '',
+                abilities: [],
+                weakness: '',
+                secretGoal: npc.hiddenMotivation || '',
+              },
+            });
+
+            seeds.push({
+              id: npcId,
+              codename: npc.role,
+              name: npc.name,
+              birthYear: -(20 + idx * 5),
+              birthCondition: npc.role,
+              initialCondition: npc.role,
+              initialEnvironment: '',
+              temperament: npc.personality || '중립적',
+              innateTraits: [npc.role],
+              latentAbility: '미지의 능력',
+              latentPotentials: [],
+              physicalTrait: '일반적인 외모',
+              wound: '숨겨진 과거',
+              roleTendency: 'neutral',
+              color: '#808080',
+            });
+          });
+        }
+
+        // 2. 시뮬레이션 설정 생성
+        const worldEvents: WorldEvent[] = (project.worldHistory.eras || []).flatMap(era =>
+          (era.keyEvents || []).map((event) => ({
+            year: era.yearRange?.[0] || 0,
+            event: event,
+            impact: era.factionChanges || '세계에 변화가 생겼다',
+          }))
+        );
+
+        const simulationConfig: SimulationConfig = {
+          startYear: 0,
+          endYear: 20,  // 주인공 0세부터 20세까지
+          eventsPerYear: 3,
+          detailLevel: 'detailed',
+          worldEvents,
+          batchMode: true,
+        };
+
+        // 3. SSE로 시뮬레이션 실행
+        const response = await fetch('/api/simulate', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            config: simulationConfig,
+            existingCharacters: characters,
+            seeds,
+            memoryStacks: {},
+            worldSettingsFull: {
+              name: (project.layers.world.data as { continentName?: string })?.continentName || '세계',
+              description: (project.layers.world.data as { geography?: string })?.geography || '',
+            },
+          }),
+        });
+
+        if (!response.ok) {
+          throw new Error(`시뮬레이션 API 오류: ${response.status}`);
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error('스트림을 읽을 수 없습니다');
+
+        const decoder = new TextDecoder();
+        let simulationComplete = false;
+        let eventCount = 0;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+
+                if (data.type === 'progress') {
+                  // 진행 상황 업데이트
+                  addMessage({
+                    role: 'author',
+                    content: `${data.year}년 시뮬레이션 중... (${data.message || ''})`,
+                  });
+                } else if (data.type === 'completed') {
+                  eventCount++;
+                } else if (data.type === 'final_state') {
+                  simulationComplete = true;
+                  // 시뮬레이션 결과를 프로젝트에 저장
+                  if (data.characters) {
+                    setCharacters(data.characters);
+                  }
+                } else if (data.type === 'error') {
+                  throw new Error(data.message);
+                }
+              } catch (parseErr) {
+                // JSON 파싱 실패는 무시
+              }
+            }
+          }
+        }
+
+        if (simulationComplete) {
+          setCurrentPhase('writing');
+          setCurrentLayer('novel');
+          addMessage({
+            role: 'author',
+            content: `시뮬레이션 완료! ${eventCount}개의 이벤트가 발생했어. 캐릭터들이 살아있는 인생을 경험했어. 이제 집필을 시작할 수 있어.`,
+            choices: [
+              { label: '1화 쓰기', action: 'write_next_episode' },
+            ],
+          });
+        } else {
+          throw new Error('시뮬레이션이 완료되지 않았습니다');
+        }
+
+      } catch (error) {
+        console.error('Simulation error:', error);
+        const errorMsg = error instanceof Error ? error.message : '알 수 없는 오류';
+        addMessage({
+          role: 'author',
+          content: `시뮬레이션 중 문제가 생겼어. (${errorMsg})`,
+          choices: [
+            { label: '다시 시도', action: 'run_simulation' },
+            { label: '시뮬레이션 건너뛰기', action: 'skip_to_writing' },
+          ],
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    } else if (action === 'skip_to_writing') {
+      // 시뮬레이션 건너뛰고 바로 집필
+      setCurrentLayer('novel');
+      setCurrentPhase('writing');
+      addMessage({
+        role: 'author',
+        content: '좋아, 바로 집필 시작하자. 1화를 써볼게.',
+      });
+
+      // 자동으로 1화 작성 시작
+      setTimeout(() => handleChoiceClick('write_next_episode'), 500);
     } else if (action === 'write_next_episode') {
       // 다음 화 작성 요청
       const nextNumber = project.episodes.length + 1;
@@ -727,7 +946,7 @@ export default function ProjectConversationPage() {
           addMessage({
             role: 'author',
             content: data.message || `${data.episode.number}화 초안이야. 읽어봐.`,
-            episodeId: data.episode.id,
+            episode: data.episode,
             choices: [
               { label: '채택', action: 'adopt_episode' },
               { label: '수정 요청', action: 'request_revision' },

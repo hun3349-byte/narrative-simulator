@@ -23,29 +23,49 @@ export async function POST(req: NextRequest) {
     const persona = AUTHOR_PERSONA_PRESETS.find(p => p.id === body.authorPersonaId);
     const totalYears = body.totalYears || 1000;
 
+    // Null-safe data extraction
+    const worldData = body.world || {} as WorldLayer;
+    const coreRulesData = body.coreRules || {} as CoreRulesLayer;
+    const seedsData = body.seeds || {} as SeedsLayer;
+    const heroArcData = body.heroArc || {} as HeroArcLayer;
+    const ultimateMysteryData = body.ultimateMystery || {} as UltimateMysteryLayer;
+
+    const continentName = worldData.continentName || '(미설정)';
+    const geography = worldData.geography || '(미설정)';
+    const cities = worldData.cities || [];
+    const powerSystem = coreRulesData.powerSystem || '(미설정)';
+    const history = coreRulesData.history || '(미설정)';
+    const currentState = coreRulesData.currentState || '(미설정)';
+    const factions = seedsData.factions || [];
+    const heroName = heroArcData.name || '(미설정)';
+    const coreNarrative = heroArcData.coreNarrative || '(미설정)';
+    const surface = ultimateMysteryData.surface || '(미설정)';
+    const truth = ultimateMysteryData.truth || '(미설정)';
+    const hints = ultimateMysteryData.hints || [];
+
     const prompt = `당신은 "${persona?.name || '작가'}"입니다.
 
 ## 세계 정보
-- 대륙: ${body.world.continentName}
-- 지형: ${body.world.geography}
-- 도시들: ${body.world.cities.map(c => c.name).join(', ')}
+- 대륙: ${continentName}
+- 지형: ${geography}
+- 도시들: ${cities.length > 0 ? cities.map(c => c.name).join(', ') : '(미설정)'}
 
 ## 핵심 규칙
-- 힘의 체계: ${body.coreRules.powerSystem}
-- 역사: ${body.coreRules.history}
-- 현재 상태: ${body.coreRules.currentState}
+- 힘의 체계: ${powerSystem}
+- 역사: ${history}
+- 현재 상태: ${currentState}
 
 ## 세력들
-${body.seeds.factions.map(f => `- ${f.name}: ${f.nature}, ${f.goal}`).join('\n')}
+${factions.length > 0 ? factions.map(f => `- ${f.name}: ${f.nature}, ${f.goal}`).join('\n') : '(미설정)'}
 
 ## 주인공
-- 이름: ${body.heroArc.name}
-- 핵심 서사: ${body.heroArc.coreNarrative}
+- 이름: ${heroName}
+- 핵심 서사: ${coreNarrative}
 
 ## 궁극의 떡밥
-- 표면: ${body.ultimateMystery.surface}
-- 진실: ${body.ultimateMystery.truth}
-- 힌트들: ${body.ultimateMystery.hints.join(', ')}
+- 표면: ${surface}
+- 진실: ${truth}
+- 힌트들: ${hints.length > 0 ? hints.join(', ') : '(미설정)'}
 
 ## 임무
 이 세계의 ${totalYears}년 역사를 4-6개 시대로 나누어 생성해.
@@ -78,6 +98,10 @@ JSON으로 응답:
   "message": "작가의 설명 (자연스러운 말투)"
 }`;
 
+    console.log('=== GENERATE WORLD HISTORY ===');
+    console.log('Continent:', continentName);
+    console.log('Factions count:', factions.length);
+
     const response = await client.messages.create({
       model: 'claude-haiku-4-5-20251001',
       max_tokens: 4000,
@@ -85,23 +109,75 @@ JSON으로 응답:
     });
 
     const text = response.content[0].type === 'text' ? response.content[0].text : '';
+    console.log('Response length:', text.length);
+    console.log('Response preview:', text.substring(0, 200));
 
     try {
       const jsonMatch = text.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
-        return NextResponse.json(parsed);
+        console.log('Parsed eras count:', parsed.eras?.length || 0);
+
+        if (parsed.eras && parsed.eras.length > 0) {
+          return NextResponse.json(parsed);
+        }
       }
-    } catch {
-      return NextResponse.json({
-        eras: [],
-        message: text,
-      });
+    } catch (parseError) {
+      console.error('JSON parse error:', parseError);
     }
 
+    // JSON 파싱 실패 또는 eras 비어있음 - 기본 시대 생성
+    console.log('Generating default eras...');
+    const defaultEras: WorldHistoryEra[] = [
+      {
+        id: 'era-1',
+        name: '태초의 시대',
+        yearRange: [-1000, -700],
+        description: '세계가 형성되던 시기. 힘의 체계가 처음 발현되었다.',
+        keyEvents: ['세계 형성', '최초의 문명 등장'],
+        factionChanges: '원시 부족들이 세력으로 성장',
+        notableFigures: ['전설의 시조들'],
+        mysteryHints: hints.length > 0 ? [hints[0]] : ['고대의 비밀이 묻히다'],
+        mood: '원시적, 신비로운',
+      },
+      {
+        id: 'era-2',
+        name: '혼란의 시대',
+        yearRange: [-700, -300],
+        description: '세력들이 충돌하며 전쟁이 끊이지 않던 시기.',
+        keyEvents: ['대전쟁', '세력 재편'],
+        factionChanges: '강자만이 살아남았다',
+        notableFigures: ['전쟁 영웅들'],
+        mysteryHints: hints.length > 1 ? [hints[1]] : ['숨겨진 힘의 흔적'],
+        mood: '격동의, 피비린내 나는',
+      },
+      {
+        id: 'era-3',
+        name: '안정의 시대',
+        yearRange: [-300, -50],
+        description: '현재 질서가 확립된 시기. 평화롭지만 긴장이 감돈다.',
+        keyEvents: ['현 체제 수립', '세력 균형'],
+        factionChanges: '현재의 세력 구도 형성',
+        notableFigures: ['현 체제의 수립자들'],
+        mysteryHints: hints.length > 2 ? [hints[2]] : ['진실이 가려지다'],
+        mood: '평화로우나 불안한',
+      },
+      {
+        id: 'era-4',
+        name: '전야의 시대',
+        yearRange: [-50, 0],
+        description: '주인공이 태어나기 직전. 무언가 큰 변화가 다가오고 있다.',
+        keyEvents: ['불길한 징조', '영웅의 탄생 예언'],
+        factionChanges: '긴장 고조',
+        notableFigures: ['주인공의 부모 세대'],
+        mysteryHints: ['폭풍 전야의 고요함'],
+        mood: '긴장되는, 기대되는',
+      },
+    ];
+
     return NextResponse.json({
-      eras: [],
-      message: text,
+      eras: defaultEras,
+      message: '세계의 역사를 정리했어. 4개 시대로 나눠봤어.',
     });
   } catch (error) {
     console.error('World history generation error:', error);

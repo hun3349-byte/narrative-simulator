@@ -1631,3 +1631,179 @@ user.email: hun3349@gmail.com
 - `.env.local`은 gitignore에 포함됨 (API 키 안전)
 - Vercel에서 환경변수 별도 설정 필요
 - localStorage 기반 데이터 저장 (브라우저별 독립)
+
+---
+
+## 시뮬레이션 통합 구현 (2026-02-11 완료)
+
+7-레이어 프로젝트 시스템과 캐릭터 시뮬레이션 엔진 연동 완료.
+
+### 구현 내용
+
+#### 1. 레이어 데이터 → 캐릭터 변환
+- `heroArc` 레이어 → 주인공 Character + CharacterSeed
+- `seeds` 레이어의 NPCs → NPC Characters + CharacterSeeds
+- 모든 필수 필드 자동 생성 (codename, temperament, latentAbility 등)
+
+#### 2. 세계 역사 → WorldEvent 변환
+- `worldHistory.eras` → WorldEvent[] 변환
+- `keyEvents` 배열을 순회하며 WorldEvent 객체 생성
+- `year`, `event`, `impact` 필드 매핑
+
+#### 3. SSE 스트리밍 시뮬레이션
+- `/api/simulate` 호출 (POST)
+- SSE 이벤트 타입 처리:
+  - `progress`: 진행 상황 표시
+  - `completed`: 이벤트 카운트
+  - `final_state`: 캐릭터 데이터 저장
+  - `error`: 에러 처리
+
+#### 4. 시뮬레이션 후 흐름
+- 성공 시: `setCurrentPhase('writing')` + `setCurrentLayer('novel')`
+- [1화 쓰기] 버튼 표시
+- 실패 시: [다시 시도] + [시뮬레이션 건너뛰기] 버튼
+
+### 수정된 파일
+
+1. `app/projects/[id]/page.tsx`:
+   - `setCharacters`, `setSeeds`, `setProfiles` 스토어 훅 추가
+   - `run_simulation` 액션 핸들러 구현
+   - 타입 오류 수정:
+     - `episodeId` → `episode` (Message 타입)
+     - `status: 'alive'` → `'childhood'`/`'training'` (CharacterStatus 타입)
+     - `emotionalState.current` → `emotionalState.primary` (EmotionalState 타입)
+     - CharacterSeed 필수 필드 추가
+     - WorldEvent 필드 수정
+
+### 시뮬레이션 흐름
+
+```
+[세계 역사 생성 완료]
+  ↓
+[시뮬레이션 시작] 클릭
+  ↓
+레이어 데이터에서 캐릭터 생성 (heroArc + seeds.npcs)
+  ↓
+WorldEvent 배열 생성 (worldHistory.eras.keyEvents)
+  ↓
+/api/simulate SSE 호출
+  ↓
+진행 상황 표시 (N년 시뮬레이션 중...)
+  ↓
+완료 → setCharacters() + setCurrentPhase('writing')
+  ↓
+[1화 쓰기] 버튼 표시
+```
+
+### 빌드 성공 확인 (2026-02-11)
+
+### 시뮬레이션 API 테스트 완료 (2026-02-11)
+
+**테스트 방법:** curl로 `/api/simulate` 직접 호출
+
+**결과:**
+- SSE 스트리밍 정상 작동
+- 0~5년 유년기 시뮬레이션 성공
+- 4개 이벤트 생성 (첫 숨, 무너진 것들 사이에서, 음성의 울림, 평온한 나날)
+- 기억 스택에 4개 기억 저장
+- 프로필 발현 (성격 특성 5개, 능력 2개)
+- 응답 시간: 약 29초
+
+**생성된 캐릭터 기억 예시:**
+- "심장박동. 엄마의 가슴 위에서 들었던 규칙적인 두드림."
+- "금속의 차가움. 손가락 끝이 느꼈던 예리한 무언가."
+- "목소리들. 어떤 것은 안정적이었고, 어떤 것은 떨렸다."
+
+**발현된 능력:**
+- "무한한 잠재력 (발견)"
+- "음성 패턴 감지 - 원초적 신뢰 판단 (발견)"
+
+---
+
+## 다음 작업 예정 (2026-02-12)
+
+### 1. Vercel 배포
+
+**준비 상태:**
+- ✅ 프로덕션 빌드 성공
+- ✅ Git 커밋 완료 (a80f9d0)
+- ⏳ GitHub 저장소 생성 필요
+- ⏳ Vercel 연결 필요
+
+**배포 절차:**
+1. GitHub 저장소 생성 (`narrative-simulator`, Private 권장)
+2. 코드 푸시:
+   ```bash
+   cd "C:\Users\1\Desktop\웹소설\narrative-simulator"
+   git remote add origin https://github.com/[USERNAME]/narrative-simulator.git
+   git branch -M main
+   git push -u origin main
+   ```
+3. Vercel 연결 (https://vercel.com)
+4. 환경 변수 설정: `ANTHROPIC_API_KEY`
+5. Deploy
+
+### 2. 모바일 최적화
+
+**현재 상태:** 데스크톱 우선 설계, 모바일 미최적화
+
+**최적화 대상:**
+
+#### 2.1 레이아웃 반응형
+- [ ] 사이드 패널: 모바일에서 바텀 시트 또는 풀스크린 모달로 변경
+- [ ] 채팅 영역: 모바일 전체 화면 활용
+- [ ] 레이어 진행 표시: 가로 스크롤 또는 드롭다운으로 변경
+
+#### 2.2 터치 인터랙션
+- [ ] 버튼 크기 증가 (최소 44x44px)
+- [ ] 선택지 버튼 간격 확보
+- [ ] 스와이프 제스처 지원 (탭 전환)
+
+#### 2.3 폰트 및 가독성
+- [ ] 본문 폰트 크기 조정 (모바일 최소 16px)
+- [ ] 에피소드 뷰어 줄간격 최적화
+- [ ] 입력 필드 확대 방지 (`font-size: 16px`)
+
+#### 2.4 성능 최적화
+- [ ] 이미지 lazy loading (있을 경우)
+- [ ] 불필요한 리렌더링 방지
+- [ ] 모바일 키보드 대응 (채팅 입력 시 스크롤)
+
+**참고 브레이크포인트:**
+```css
+/* Tailwind 기본 */
+sm: 640px   /* 모바일 가로 */
+md: 768px   /* 태블릿 */
+lg: 1024px  /* 데스크톱 */
+```
+
+**주요 수정 예정 파일:**
+- `app/globals.css` - 모바일 기본 스타일
+- `app/projects/[id]/page.tsx` - 레이아웃 반응형
+- `components/episode/EpisodeViewer.tsx` - 모바일 가독성
+- `components/layout/Header.tsx` - 모바일 네비게이션
+
+### 3. 추가 고려사항
+
+- **PWA 지원** (선택): manifest.json, 서비스 워커 추가하면 홈 화면 설치 가능
+- **다크 모드** (선택): 이미 Tailwind dark: 지원, 토글 UI만 추가하면 됨
+- **오프라인 지원** (선택): localStorage 기반이라 기본적으로 데이터는 유지됨
+
+---
+
+## 현재 작동 상태 요약 (2026-02-11)
+
+| 기능 | 상태 | 비고 |
+|------|------|------|
+| 프로젝트 생성 | ✅ 작동 | 장르/톤/시점/작가 선택 |
+| 7레이어 구축 | ✅ 작동 | 대화형 레이어 확정 |
+| 세계 역사 생성 | ✅ 작동 | 4-6개 시대 자동 생성 |
+| 캐릭터 시뮬레이션 | ✅ 작동 | SSE 스트리밍, 유년기~성인기 |
+| 에피소드 집필 | ✅ 작동 | 4단계 사고 시스템 |
+| 피드백 누적 학습 | ✅ 작동 | 문체/페이스 피드백 자동 분류 |
+| 에피소드 편집 | ✅ 작동 | 부분 수정/전체 피드백/직접 편집 |
+| 내보내기 | ✅ 작동 | TXT/HTML/DOCX |
+| 프로젝트 저장 | ✅ 작동 | localStorage 자동 저장 |
+| 데스크톱 UI | ✅ 작동 | - |
+| 모바일 UI | ⚠️ 미최적화 | 내일 작업 예정 |
+| 배포 | ⏳ 대기 | 내일 작업 예정 |
