@@ -1582,3 +1582,52 @@ getRecurringFeedback: () => Feedback[];
 ```
 
 ### 컴파일 성공 확인 (2026-02-11)
+
+---
+
+## 배포 준비 (2026-02-11 진행 중)
+
+### Git 커밋 완료
+- 커밋 해시: `a80f9d0`
+- 커밋 메시지: "Initial commit: Narrative Simulator - AI Web Novel Generator"
+- 112개 파일, 31,113줄 추가
+
+### Git 설정
+```
+user.name: 윤지환
+user.email: hun3349@gmail.com
+```
+
+### 배포 대기 중 - Vercel
+
+**다음 단계:**
+
+1. **GitHub 저장소 생성**
+   - https://github.com/new 접속
+   - Repository name: `narrative-simulator`
+   - Private 선택 권장
+   - "Create repository" 클릭
+
+2. **코드 푸시**
+   ```bash
+   cd "C:\Users\1\Desktop\웹소설\narrative-simulator"
+   git remote add origin https://github.com/USERNAME/narrative-simulator.git
+   git branch -M main
+   git push -u origin main
+   ```
+
+3. **Vercel 연결**
+   - https://vercel.com 접속 → GitHub 로그인
+   - "Import Project" → 저장소 선택
+   - **Environment Variables 필수 설정:**
+     - `ANTHROPIC_API_KEY` = (API 키 값)
+   - Deploy 클릭
+
+4. **배포 완료 후**
+   - Vercel이 고정 URL 제공 (예: `https://narrative-simulator.vercel.app`)
+   - 커스텀 도메인 연결 가능
+
+### 주의사항
+- `.env.local`은 gitignore에 포함됨 (API 키 안전)
+- Vercel에서 환경변수 별도 설정 필요
+- localStorage 기반 데이터 저장 (브라우저별 독립)
