@@ -1,0 +1,1300 @@
+'use client';
+
+import { useEffect, useState, useRef, useCallback } from 'react';
+import { useRouter, useParams } from 'next/navigation';
+import { useProjectStore } from '@/lib/store/project-store';
+import { PERSONA_ICONS } from '@/lib/presets/author-personas';
+import { WorldTimelinePanel } from '@/components/world-timeline';
+import EpisodeViewer from '@/components/episode/EpisodeViewer';
+import type { LayerName, Episode } from '@/lib/types';
+
+const LAYER_LABELS: Record<LayerName, string> = {
+  world: '세계',
+  coreRules: '규칙',
+  seeds: '씨앗',
+  heroArc: '주인공',
+  villainArc: '빌런',
+  ultimateMystery: '떡밥',
+  novel: '소설',
+};
+
+const LAYER_ORDER: LayerName[] = [
+  'world',
+  'coreRules',
+  'seeds',
+  'heroArc',
+  'villainArc',
+  'ultimateMystery',
+  'novel',
+];
+
+// 레이어 키워드 매핑 (사용자 메시지에서 레이어 감지)
+const LAYER_KEYWORDS: Record<string, LayerName> = {
+  '세계': 'world',
+  '대륙': 'world',
+  '지형': 'world',
+  '도시': 'world',
+  '규칙': 'coreRules',
+  '힘의 체계': 'coreRules',
+  '마법': 'coreRules',
+  '무공': 'coreRules',
+  '종족': 'coreRules',
+  '씨앗': 'seeds',
+  '세력': 'seeds',
+  'npc': 'seeds',
+  '주인공': 'heroArc',
+  '히어로': 'heroArc',
+  '빌런': 'villainArc',
+  '악당': 'villainArc',
+  '적': 'villainArc',
+  '떡밥': 'ultimateMystery',
+  '반전': 'ultimateMystery',
+  '미스터리': 'ultimateMystery',
+  '비밀': 'ultimateMystery',
+};
+
+// 사용자 메시지에서 레이어 감지
+function detectLayerFromMessage(message: string): LayerName | null {
+  const lowerMessage = message.toLowerCase();
+
+  // "X 다시", "X 수정", "X 변경" 패턴 감지
+  const modifyPatterns = ['다시', '수정', '변경', '바꿔', '고쳐'];
+  const hasModifyIntent = modifyPatterns.some(p => lowerMessage.includes(p));
+
+  if (!hasModifyIntent) return null;
+
+  for (const [keyword, layer] of Object.entries(LAYER_KEYWORDS)) {
+    if (lowerMessage.includes(keyword.toLowerCase())) {
+      return layer;
+    }
+  }
+
+  return null;
+}
+
+export default function ProjectConversationPage() {
+  const router = useRouter();
+  const params = useParams();
+  const projectId = params.id as string;
+
+  const {
+    selectProject,
+    getCurrentProject,
+    addMessage,
+    updateLayer,
+    confirmLayer,
+    reopenLayer,
+    setCurrentLayer,
+    setWorldHistory,
+    setCurrentPhase,
+    updateEpisode,
+    addEpisode,
+    addFeedback,
+    getRecurringFeedback,
+  } = useProjectStore();
+
+  // Hydration 상태 - 클라이언트에서 localStorage 로드 완료 전까지 로딩 표시
+  const [isHydrated, setIsHydrated] = useState(false);
+  const [inputValue, setInputValue] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [loadingStartTime, setLoadingStartTime] = useState<number | null>(null);
+  const [loadingMessage, setLoadingMessage] = useState('작가가 생각하고 있어');
+  const [showTimeoutMessage, setShowTimeoutMessage] = useState(false);
+  const [lastError, setLastError] = useState<string | null>(null);
+  const [retryAction, setRetryAction] = useState<(() => void) | null>(null);
+  const [sideTab, setSideTab] = useState<'world' | 'timeline' | 'character' | 'manuscript'>('world');
+  const [editingEpisodeId, setEditingEpisodeId] = useState<string | null>(null);
+  const [isRevising, setIsRevising] = useState(false);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const loadingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Hydration 완료 체크 - 클라이언트 마운트 후에만 프로젝트 데이터 접근
+  useEffect(() => {
+    setIsHydrated(true);
+  }, []);
+
+  // hydration 전에는 null 반환
+  const project = isHydrated ? getCurrentProject() : null;
+
+  // 프로젝트 선택
+  useEffect(() => {
+    if (projectId) {
+      selectProject(projectId);
+    }
+  }, [projectId, selectProject]);
+
+  // 첫 진입 시 레이어 제안 생성
+  useEffect(() => {
+    if (project && project.messages.length === 0 && project.currentLayer === 'world') {
+      generateLayerProposal('world');
+    }
+  }, [project?.id]);
+
+  // 메시지 스크롤
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [project?.messages.length]);
+
+  // 로딩 타이머 관리
+  useEffect(() => {
+    if (isLoading) {
+      setLoadingStartTime(Date.now());
+      setShowTimeoutMessage(false);
+
+      // 점 애니메이션
+      let dots = 0;
+      loadingIntervalRef.current = setInterval(() => {
+        dots = (dots + 1) % 4;
+        const dotsStr = '.'.repeat(dots);
+        setLoadingMessage(`작가가 생각하고 있어${dotsStr}`);
+
+        // 30초 경과 체크
+        if (loadingStartTime && Date.now() - loadingStartTime > 30000) {
+          setShowTimeoutMessage(true);
+        }
+      }, 500);
+    } else {
+      if (loadingIntervalRef.current) {
+        clearInterval(loadingIntervalRef.current);
+        loadingIntervalRef.current = null;
+      }
+      setLoadingStartTime(null);
+      setShowTimeoutMessage(false);
+    }
+
+    return () => {
+      if (loadingIntervalRef.current) {
+        clearInterval(loadingIntervalRef.current);
+      }
+    };
+  }, [isLoading]);
+
+  // 레이어 제안 생성
+  const generateLayerProposal = useCallback(async (layer: LayerName) => {
+    if (!project || layer === 'novel') return;
+
+    setIsLoading(true);
+    setLastError(null);
+
+    const doGenerate = async () => {
+      try {
+        const response = await fetch('/api/author-chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectId: project.id,
+            action: 'generate_layer',
+            layer,
+            genre: project.genre,
+            tone: project.tone,
+            viewpoint: project.viewpoint,
+            authorPersonaId: project.authorPersona.id,
+            direction: project.direction,
+            previousLayers: {
+              world: project.layers.world.data,
+              coreRules: project.layers.coreRules.data,
+              seeds: project.layers.seeds.data,
+              heroArc: project.layers.heroArc.data,
+              villainArc: project.layers.villainArc.data,
+              ultimateMystery: project.layers.ultimateMystery.data,
+            },
+          }),
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        if (data.message) {
+          addMessage({
+            role: 'author',
+            content: data.message,
+            layerData: data.layer,
+            choices: [
+              { label: '확정', action: 'confirm_layer' },
+              { label: '다시 제안해줘', action: 'regenerate' },
+            ],
+          });
+
+          if (data.layer) {
+            updateLayer(layer, data.layer);
+          }
+        }
+      } catch (error) {
+        console.error('Layer proposal error:', error);
+        const errorMsg = error instanceof Error ? error.message : '알 수 없는 오류';
+        setLastError(errorMsg);
+        setRetryAction(() => () => generateLayerProposal(layer));
+        addMessage({
+          role: 'author',
+          content: `문제가 생겼어. (${errorMsg})`,
+          choices: [{ label: '다시 시도', action: 'retry' }],
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    await doGenerate();
+  }, [project, addMessage, updateLayer]);
+
+  // 메시지 전송
+  const handleSendMessage = async () => {
+    if (!inputValue.trim() || !project || isLoading) return;
+
+    const userMessage = inputValue.trim();
+    setInputValue('');
+    setLastError(null);
+
+    addMessage({
+      role: 'user',
+      content: userMessage,
+    });
+
+    // 레이어 수정 요청 감지
+    const targetLayer = detectLayerFromMessage(userMessage);
+
+    if (targetLayer && targetLayer !== 'novel') {
+      // 특정 레이어 수정 요청
+      const layerStatus = project.layers[targetLayer as keyof typeof project.layers]?.status;
+
+      if (layerStatus === 'confirmed' || layerStatus === 'drafting') {
+        // 확정된 레이어 재수정
+        reopenLayer(targetLayer as Exclude<LayerName, 'novel'>);
+        addMessage({
+          role: 'author',
+          content: `알겠어, ${LAYER_LABELS[targetLayer]}를 다시 만들어볼게.`,
+        });
+        setTimeout(() => generateLayerProposal(targetLayer), 300);
+        return;
+      }
+    }
+
+    // 일반 메시지 처리
+    setIsLoading(true);
+
+    // novel 단계면 일반 대화, 아니면 레이어 수정
+    const isNovelPhase = project.currentLayer === 'novel';
+
+    const doSend = async () => {
+      try {
+        // 대화 기록 준비 (최근 25개)
+        const conversationHistory = project.messages.slice(-25).map(m => ({
+          role: m.role,
+          content: m.content,
+        }));
+
+        // 세계 역사 요약 (생성되었으면)
+        const worldHistory = project.worldHistory?.eras?.length
+          ? {
+              eras: project.worldHistory.eras.map(era => ({
+                name: era.name,
+                yearRange: era.yearRange,
+                description: era.description,
+              })),
+            }
+          : undefined;
+
+        // 현재 에피소드 정보 (집필 중이면)
+        const currentEpisode = project.episodes.length > 0
+          ? {
+              number: project.episodes[project.episodes.length - 1].number,
+              title: project.episodes[project.episodes.length - 1].title,
+              status: project.episodes[project.episodes.length - 1].status,
+            }
+          : undefined;
+
+        // 누적 피드백 가져오기
+        const recurringFeedback = getRecurringFeedback();
+
+        const response = await fetch('/api/author-chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectId: project.id,
+            action: isNovelPhase ? 'conversation' : 'revise_layer',
+            layer: project.currentLayer,
+            userMessage,
+            genre: project.genre,
+            tone: project.tone,
+            viewpoint: project.viewpoint,
+            authorPersonaId: project.authorPersona.id,
+            direction: project.direction,
+            currentPhase: project.currentPhase,
+            conversationHistory: isNovelPhase ? conversationHistory : undefined,
+            previousLayers: {
+              world: project.layers.world.data,
+              coreRules: project.layers.coreRules.data,
+              seeds: project.layers.seeds.data,
+              heroArc: project.layers.heroArc.data,
+              villainArc: project.layers.villainArc.data,
+              ultimateMystery: project.layers.ultimateMystery.data,
+            },
+            currentDraft: isNovelPhase ? undefined : project.layers[project.currentLayer as keyof typeof project.layers]?.data,
+            // 추가 컨텍스트 (novel 단계에서만)
+            worldHistory: isNovelPhase ? worldHistory : undefined,
+            currentEpisode: isNovelPhase ? currentEpisode : undefined,
+            episodesCount: isNovelPhase ? project.episodes.length : undefined,
+            episodes: isNovelPhase ? project.episodes.slice(-3) : undefined,  // 이전 에피소드 (문체 참고용)
+            // 누적 피드백
+            recurringFeedback: isNovelPhase ? recurringFeedback : undefined,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (data.error) {
+          throw new Error(data.error);
+        }
+
+        // 에피소드 응답 처리
+        if (data.isEpisode && data.episode) {
+          addEpisode(data.episode);
+          setEditingEpisodeId(data.episode.id);
+          addMessage({
+            role: 'author',
+            content: data.message || `${data.episode.number}화 초안이야. 읽어봐.`,
+            episodeId: data.episode.id,
+            choices: [
+              { label: '채택', action: 'adopt_episode' },
+              { label: '수정 요청', action: 'request_revision' },
+              { label: '직접 편집', action: 'direct_edit' },
+            ],
+          });
+        } else if (data.message) {
+          addMessage({
+            role: 'author',
+            content: data.message,
+            layerData: data.layer,
+            choices: data.layer ? [
+              { label: '확정', action: 'confirm_layer' },
+              { label: '다시 제안해줘', action: 'regenerate' },
+            ] : undefined,
+          });
+
+          if (data.layer && project.currentLayer !== 'novel') {
+            updateLayer(project.currentLayer as Exclude<LayerName, 'novel'>, data.layer);
+          }
+
+          // 피드백이 감지되었으면 저장
+          if (data.feedback) {
+            addFeedback({
+              episodeNumber: data.feedback.episodeNumber,
+              type: data.feedback.type,
+              content: data.feedback.content,
+              isRecurring: data.feedback.isRecurring,
+            });
+            console.log('Feedback saved:', data.feedback);
+          }
+        }
+      } catch (error) {
+        console.error('Send message error:', error);
+        const errorMsg = error instanceof Error ? error.message : '알 수 없는 오류';
+        setLastError(errorMsg);
+        setRetryAction(() => handleSendMessage);
+        addMessage({
+          role: 'author',
+          content: `문제가 생겼어. (${errorMsg})`,
+          choices: [{ label: '다시 시도', action: 'retry' }],
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    await doSend();
+  };
+
+  // 레이어 클릭 (진행 바에서)
+  const handleLayerClick = (layer: LayerName) => {
+    if (!project || layer === 'novel' || isLoading) return;
+
+    const layerStatus = project.layers[layer as keyof typeof project.layers]?.status;
+
+    if (layerStatus === 'confirmed') {
+      // 확정된 레이어 재수정
+      reopenLayer(layer as Exclude<LayerName, 'novel'>);
+      addMessage({
+        role: 'author',
+        content: `${LAYER_LABELS[layer]}를 다시 수정할게. 어떤 부분을 바꾸고 싶어?`,
+        choices: [
+          { label: '전체 다시 제안해줘', action: `regenerate_${layer}` },
+        ],
+      });
+    } else if (layerStatus === 'drafting' || layerStatus === 'pending') {
+      // 현재 레이어로 이동 (아직 확정 안 된 경우)
+      if (project.currentLayer !== layer) {
+        setCurrentLayer(layer);
+        if (layerStatus === 'pending') {
+          generateLayerProposal(layer);
+        }
+      }
+    }
+  };
+
+  // 선택지 클릭
+  const handleChoiceClick = async (action: string) => {
+    if (!project || isLoading) return;
+
+    // 재시도
+    if (action === 'retry' && retryAction) {
+      retryAction();
+      return;
+    }
+
+    // 특정 레이어 재생성 (regenerate_world, regenerate_coreRules 등)
+    if (action.startsWith('regenerate_')) {
+      const layer = action.replace('regenerate_', '') as LayerName;
+      if (layer !== 'novel') {
+        generateLayerProposal(layer);
+      }
+      return;
+    }
+
+    if (action === 'confirm_layer') {
+      confirmLayer(project.currentLayer);
+
+      // 다음 레이어로 이동
+      const currentIndex = LAYER_ORDER.indexOf(project.currentLayer);
+      if (currentIndex < LAYER_ORDER.length - 2) {
+        const nextLayer = LAYER_ORDER[currentIndex + 1];
+        addMessage({
+          role: 'author',
+          content: `좋아, ${LAYER_LABELS[project.currentLayer]}는 이렇게 가자. 이제 ${LAYER_LABELS[nextLayer]}을 만들어볼게.`,
+        });
+        setTimeout(() => generateLayerProposal(nextLayer), 500);
+      } else if (currentIndex === LAYER_ORDER.length - 2) {
+        // 마지막 레이어 (ultimateMystery) 확정 후
+        addMessage({
+          role: 'author',
+          content: '좋아, 세계 구축이 끝났어. 이제 세계 역사를 생성하고 시뮬레이션을 시작할 준비가 됐어. 준비되면 말해줘.\n\n위에서 확정한 레이어를 수정하고 싶으면 상단 진행 바에서 클릭하거나, "떡밥 다시 수정해줘" 같이 말해줘.',
+          choices: [
+            { label: '시작하자', action: 'start_simulation' },
+          ],
+        });
+      }
+    } else if (action === 'regenerate') {
+      addMessage({
+        role: 'user',
+        content: '다시 제안해줘',
+      });
+      generateLayerProposal(project.currentLayer);
+    } else if (action === 'start_simulation') {
+      // 세계 역사 생성 시작
+      setIsLoading(true);
+      setLastError(null);
+
+      addMessage({
+        role: 'author',
+        content: '세계 역사를 생성하고 있어...',
+      });
+
+      const generateWorldHistory = async () => {
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60초 타임아웃
+
+        try {
+          const response = await fetch('/api/generate-world-history', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              genre: project.genre,
+              tone: project.tone,
+              authorPersonaId: project.authorPersona.id,
+              world: project.layers.world.data,
+              coreRules: project.layers.coreRules.data,
+              seeds: project.layers.seeds.data,
+              heroArc: project.layers.heroArc.data,
+              ultimateMystery: project.layers.ultimateMystery.data,
+              totalYears: 1000,
+            }),
+            signal: controller.signal,
+          });
+
+          clearTimeout(timeoutId);
+
+          if (!response.ok) {
+            throw new Error(`API 오류: ${response.status}`);
+          }
+
+          const data = await response.json();
+
+          if (data.error) {
+            throw new Error(data.error);
+          }
+
+          // 세계 역사 저장
+          if (data.eras && data.eras.length > 0) {
+            setWorldHistory(data.eras, []);
+            setCurrentPhase('simulation');
+
+            addMessage({
+              role: 'author',
+              content: data.message || `${data.eras.length}개 시대의 역사가 완성됐어. 이제 캐릭터 시뮬레이션을 시작할 수 있어.`,
+              choices: [
+                { label: '시뮬레이션 시작', action: 'run_simulation' },
+                { label: '역사 탭에서 확인', action: 'view_history' },
+              ],
+            });
+          } else {
+            throw new Error('역사 데이터가 비어 있어');
+          }
+        } catch (error) {
+          console.error('World history generation error:', error);
+
+          let errorMsg = '알 수 없는 오류';
+          if (error instanceof Error) {
+            if (error.name === 'AbortError') {
+              errorMsg = '시간이 너무 오래 걸렸어 (60초 초과)';
+            } else {
+              errorMsg = error.message;
+            }
+          }
+
+          setLastError(errorMsg);
+          setRetryAction(() => () => handleChoiceClick('start_simulation'));
+
+          addMessage({
+            role: 'author',
+            content: `문제가 생겼어. (${errorMsg})`,
+            choices: [{ label: '다시 시도', action: 'retry' }],
+          });
+        } finally {
+          setIsLoading(false);
+        }
+      };
+
+      generateWorldHistory();
+    } else if (action === 'run_simulation') {
+      // TODO: 캐릭터 시뮬레이션 시작
+      addMessage({
+        role: 'author',
+        content: '캐릭터 시뮬레이션 기능은 아직 준비 중이야. 곧 추가될 거야!',
+      });
+    } else if (action === 'write_next_episode') {
+      // 다음 화 작성 요청
+      const nextNumber = project.episodes.length + 1;
+      setIsLoading(true);
+
+      addMessage({
+        role: 'author',
+        content: `${nextNumber}화 작성 시작할게.`,
+      });
+
+      // 누적 피드백 가져오기
+      const recurringFeedback = getRecurringFeedback();
+
+      try {
+        // 캐릭터 프로필 문자열 생성 (seeds에서)
+        const seedsData = project.layers.seeds.data;
+        let characterProfiles = '';
+        let characterMemories = '';
+
+        if (seedsData && typeof seedsData === 'object') {
+          const seeds = (seedsData as { npcs?: Array<{ name: string; role: string; description?: string }> }).npcs || [];
+          characterProfiles = seeds.map((s: { name: string; role: string; description?: string }) =>
+            `- ${s.name}: ${s.role}${s.description ? ` - ${s.description}` : ''}`
+          ).join('\n');
+        }
+
+        // 확정된 레이어들을 문자열로 변환
+        const layerToString = (data: unknown): string => {
+          if (!data) return '';
+          if (typeof data === 'string') return data;
+          return JSON.stringify(data, null, 2);
+        };
+
+        const response = await fetch('/api/write-episode', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            episodeNumber: nextNumber,
+            projectConfig: {
+              genre: project.genre,
+              tone: project.tone,
+              viewpoint: project.viewpoint,
+              authorPersonaId: project.authorPersona?.id,
+            },
+            confirmedLayers: {
+              world: layerToString(project.layers.world.data),
+              coreRules: layerToString(project.layers.coreRules.data),
+              seeds: layerToString(project.layers.seeds.data),
+              heroArc: layerToString(project.layers.heroArc.data),
+              villainArc: layerToString(project.layers.villainArc.data),
+              ultimateMystery: layerToString(project.layers.ultimateMystery.data),
+            },
+            characterProfiles,
+            characterMemories,
+            authorDirection: `${nextNumber}화 - ${project.direction || '자유롭게 전개'}`,
+            previousEpisodes: project.episodes.slice(-3),
+            // 누적 피드백
+            recurringFeedback,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (data.episode) {
+          addEpisode(data.episode);
+          setEditingEpisodeId(data.episode.id);
+          addMessage({
+            role: 'author',
+            content: data.authorComment || `${nextNumber}화 초안이야. 읽어봐.`,
+          });
+        } else {
+          addMessage({
+            role: 'author',
+            content: data.authorComment || '문제가 생겼어.',
+            choices: [{ label: '다시 시도', action: 'write_next_episode' }],
+          });
+        }
+      } catch (error) {
+        console.error('Write episode error:', error);
+        addMessage({
+          role: 'author',
+          content: '에피소드 작성 중 문제가 생겼어.',
+          choices: [{ label: '다시 시도', action: 'write_next_episode' }],
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    } else if (action === 'adopt_episode') {
+      // 에피소드 채택
+      const episode = project.episodes.find(ep => ep.id === editingEpisodeId);
+      if (episode) {
+        updateEpisode(episode.id, { status: 'final' });
+        addMessage({
+          role: 'author',
+          content: `좋아, ${episode.number}화 채택! 다음 화 쓸까?`,
+          choices: [
+            { label: '다음 화 써줘', action: 'write_next_from_chat' },
+            { label: '잠깐, 다시 볼게', action: 'revert_adopt' },
+          ],
+        });
+        setEditingEpisodeId(null);
+      }
+    } else if (action === 'write_next_from_chat') {
+      // 다음 화 작성 (채팅에서)
+      const nextNumber = project.episodes.length + 1;
+      addMessage({
+        role: 'user',
+        content: `${nextNumber}화 써줘`,
+      });
+      // handleSendMessage를 직접 호출하는 대신 메시지를 보냄
+      setInputValue('');
+      setIsLoading(true);
+
+      // 누적 피드백 가져오기
+      const recurringFeedback = getRecurringFeedback();
+
+      try {
+        const response = await fetch('/api/author-chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            projectId: project.id,
+            action: 'conversation',
+            layer: 'novel',
+            userMessage: `${nextNumber}화 써줘`,
+            genre: project.genre,
+            tone: project.tone,
+            viewpoint: project.viewpoint,
+            authorPersonaId: project.authorPersona.id,
+            direction: project.direction,
+            currentPhase: project.currentPhase,
+            previousLayers: {
+              world: project.layers.world.data,
+              coreRules: project.layers.coreRules.data,
+              seeds: project.layers.seeds.data,
+              heroArc: project.layers.heroArc.data,
+              villainArc: project.layers.villainArc.data,
+              ultimateMystery: project.layers.ultimateMystery.data,
+            },
+            episodesCount: project.episodes.length,
+            episodes: project.episodes.slice(-3),
+            // 누적 피드백
+            recurringFeedback,
+          }),
+        });
+
+        const data = await response.json();
+
+        if (data.isEpisode && data.episode) {
+          addEpisode(data.episode);
+          setEditingEpisodeId(data.episode.id);
+          addMessage({
+            role: 'author',
+            content: data.message || `${data.episode.number}화 초안이야. 읽어봐.`,
+            episodeId: data.episode.id,
+            choices: [
+              { label: '채택', action: 'adopt_episode' },
+              { label: '수정 요청', action: 'request_revision' },
+              { label: '직접 편집', action: 'direct_edit' },
+            ],
+          });
+        } else {
+          addMessage({
+            role: 'author',
+            content: data.message || '문제가 생겼어.',
+          });
+        }
+      } catch (error) {
+        console.error('Write next episode error:', error);
+        addMessage({
+          role: 'author',
+          content: '에피소드 작성 중 문제가 생겼어.',
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    } else if (action === 'request_revision') {
+      // 수정 요청 - 입력창에 포커스
+      addMessage({
+        role: 'author',
+        content: '어떻게 수정할까? 수정 방향을 알려줘.',
+      });
+      // 다음 메시지를 수정 요청으로 처리하도록 표시
+      setInputValue('');
+    } else if (action === 'direct_edit') {
+      // 직접 편집 모드
+      const episode = project.episodes.find(ep => ep.id === editingEpisodeId);
+      if (episode) {
+        addMessage({
+          role: 'author',
+          content: '본문을 직접 수정해. 수정 완료하면 알려줘.',
+        });
+        // EpisodeViewer에서 편집 모드 활성화 (별도 상태로 관리)
+      }
+    } else if (action === 'revert_adopt') {
+      // 채택 취소
+      const lastEpisode = project.episodes[project.episodes.length - 1];
+      if (lastEpisode) {
+        updateEpisode(lastEpisode.id, { status: 'drafted' });
+        setEditingEpisodeId(lastEpisode.id);
+        addMessage({
+          role: 'author',
+          content: '알겠어, 다시 수정해보자.',
+        });
+      }
+    } else if (action === 'view_history') {
+      setSideTab('timeline');
+    }
+  };
+
+  // 에피소드 부분 수정
+  const handlePartialEdit = async (selectedText: string, feedback: string) => {
+    if (!project || isRevising) return;
+
+    const episode = project.episodes.find(ep => ep.id === editingEpisodeId);
+    if (!episode) return;
+
+    setIsRevising(true);
+    addMessage({
+      role: 'author',
+      content: `"${selectedText.slice(0, 50)}${selectedText.length > 50 ? '...' : ''}" 부분을 수정할게.`,
+    });
+
+    try {
+      const response = await fetch('/api/revise-episode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          episode,
+          feedback,
+          mode: 'partial',
+          selectedText,
+          genre: project.genre,
+          tone: project.tone,
+          viewpoint: project.viewpoint,
+          authorPersonaId: project.authorPersona.id,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.episode) {
+        updateEpisode(episode.id, {
+          content: data.episode.content,
+          charCount: data.episode.charCount,
+          updatedAt: data.episode.updatedAt,
+        });
+        addMessage({
+          role: 'author',
+          content: data.authorComment || '수정했어. 어때?',
+        });
+      } else {
+        addMessage({
+          role: 'author',
+          content: data.authorComment || '문제가 생겼어.',
+        });
+      }
+    } catch (error) {
+      console.error('Partial edit error:', error);
+      addMessage({
+        role: 'author',
+        content: '수정하는 중에 문제가 생겼어.',
+      });
+    } finally {
+      setIsRevising(false);
+    }
+  };
+
+  // 에피소드 전체 피드백
+  const handleFullFeedback = async (feedback: string) => {
+    if (!project || isRevising) return;
+
+    const episode = project.episodes.find(ep => ep.id === editingEpisodeId);
+    if (!episode) return;
+
+    setIsRevising(true);
+    addMessage({
+      role: 'user',
+      content: feedback,
+    });
+    addMessage({
+      role: 'author',
+      content: '피드백 반영해서 전체적으로 수정할게.',
+    });
+
+    // 피드백 분류 및 저장 (간단한 로컬 분류)
+    const isStyleFeedback = ['문체', '톤', '스타일', '말투', '표현', '묘사', '대사', '서술', '짧', '길'].some(kw => feedback.includes(kw));
+    if (isStyleFeedback) {
+      addFeedback({
+        episodeNumber: episode.number,
+        type: 'style',
+        content: feedback,
+        isRecurring: true,  // 문체 피드백은 대부분 누적형
+      });
+      console.log('Style feedback saved as recurring:', feedback);
+    }
+
+    try {
+      const response = await fetch('/api/revise-episode', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          episode,
+          feedback,
+          mode: 'full',
+          genre: project.genre,
+          tone: project.tone,
+          viewpoint: project.viewpoint,
+          authorPersonaId: project.authorPersona.id,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (data.episode) {
+        updateEpisode(episode.id, {
+          title: data.episode.title,
+          content: data.episode.content,
+          charCount: data.episode.charCount,
+          endHook: data.episode.endHook,
+          updatedAt: data.episode.updatedAt,
+        });
+        addMessage({
+          role: 'author',
+          content: data.authorComment || '수정했어. 다시 읽어봐.',
+        });
+      } else {
+        addMessage({
+          role: 'author',
+          content: data.authorComment || '문제가 생겼어.',
+        });
+      }
+    } catch (error) {
+      console.error('Full feedback error:', error);
+      addMessage({
+        role: 'author',
+        content: '수정하는 중에 문제가 생겼어.',
+      });
+    } finally {
+      setIsRevising(false);
+    }
+  };
+
+  // 에피소드 채택 → 다음 화
+  const handleAdopt = async () => {
+    if (!project || isRevising) return;
+
+    const episode = project.episodes.find(ep => ep.id === editingEpisodeId);
+    if (!episode) return;
+
+    // 에피소드 상태를 'final'로 변경
+    updateEpisode(episode.id, { status: 'final' });
+
+    addMessage({
+      role: 'author',
+      content: `좋아, ${episode.number}화 채택! 다음 화 쓸까?`,
+      choices: [
+        { label: '다음 화 작성', action: 'write_next_episode' },
+        { label: '잠깐, 수정 다시', action: 'revert_adopt' },
+      ],
+    });
+
+    setEditingEpisodeId(null);
+  };
+
+  // 환님이 본문 직접 편집
+  const handleDirectEdit = (newContent: string) => {
+    if (!project) return;
+
+    const episode = project.episodes.find(ep => ep.id === editingEpisodeId);
+    if (!episode) return;
+
+    // editedContent에 환님 수정본 저장
+    updateEpisode(episode.id, {
+      editedContent: newContent,
+      charCount: newContent.length,
+      updatedAt: new Date().toISOString(),
+    });
+
+    addMessage({
+      role: 'author',
+      content: `알겠어, 수정본 저장했어. 다음 화 쓸 때 참고할게.`,
+    });
+  };
+
+  // Hydration 중 또는 프로젝트가 없으면
+  if (!isHydrated) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-base-primary">
+        <div className="text-center">
+          <div className="text-text-muted">프로젝트를 불러오는 중...</div>
+        </div>
+      </div>
+    );
+  }
+
+  if (!project) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-base-primary">
+        <div className="text-center">
+          <div className="mb-4 text-text-muted">프로젝트를 찾을 수 없습니다</div>
+          <button
+            onClick={() => router.push('/projects')}
+            className="text-seojin hover:underline"
+          >
+            프로젝트 목록으로
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex h-screen flex-col bg-base-primary">
+      {/* 헤더 */}
+      <header className="flex items-center justify-between border-b border-base-border bg-base-secondary px-6 py-4">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={() => router.push('/projects')}
+            className="text-text-muted hover:text-text-primary"
+          >
+            ←
+          </button>
+          <div className="flex items-center gap-2">
+            <span className="text-xl">{PERSONA_ICONS[project.authorPersona.id]}</span>
+            <span className="font-medium text-text-primary">{project.authorPersona.name}</span>
+          </div>
+          <span className="rounded-full bg-base-tertiary px-3 py-1 text-sm text-text-muted">
+            {project.genre} / {project.tone}
+          </span>
+        </div>
+        <button
+          onClick={() => router.push(`/projects/${projectId}/result`)}
+          className="rounded-lg bg-base-tertiary px-4 py-2 text-sm text-text-secondary hover:bg-base-border"
+        >
+          결과물 →
+        </button>
+      </header>
+
+      {/* 레이어 진행 바 - 클릭 가능 */}
+      <div className="flex items-center justify-center gap-2 border-b border-base-border bg-base-secondary px-6 py-3">
+        {LAYER_ORDER.slice(0, -1).map((layer, index) => {
+          const status = project.layers[layer as keyof typeof project.layers]?.status || 'pending';
+          const isCurrent = project.currentLayer === layer;
+          const isClickable = status === 'confirmed' || status === 'drafting';
+
+          return (
+            <div key={layer} className="flex items-center gap-2">
+              <button
+                onClick={() => handleLayerClick(layer)}
+                disabled={isLoading || (!isClickable && !isCurrent)}
+                className={`flex items-center gap-1 rounded-lg px-2 py-1 transition-all ${
+                  isClickable
+                    ? 'cursor-pointer hover:bg-base-tertiary'
+                    : isCurrent
+                    ? 'cursor-default'
+                    : 'cursor-not-allowed opacity-50'
+                }`}
+                title={status === 'confirmed' ? '클릭하여 수정' : undefined}
+              >
+                <span
+                  className={`text-lg ${
+                    status === 'confirmed'
+                      ? 'text-seojin'
+                      : isCurrent
+                      ? 'text-yellow-400'
+                      : 'text-text-muted'
+                  }`}
+                >
+                  {status === 'confirmed' ? '●' : isCurrent ? '◐' : '○'}
+                </span>
+                <span
+                  className={`text-sm ${
+                    isCurrent ? 'font-medium text-text-primary' : 'text-text-muted'
+                  }`}
+                >
+                  {LAYER_LABELS[layer]}
+                </span>
+              </button>
+              {index < LAYER_ORDER.length - 2 && (
+                <span className="text-text-muted">→</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* 메인 컨텐츠 */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* 대화 영역 */}
+        <div className="flex flex-1 flex-col">
+          {/* 메시지 목록 */}
+          <div className="flex-1 overflow-y-auto p-6">
+            <div className="mx-auto max-w-2xl space-y-4">
+              {project.messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                >
+                  <div
+                    className={`max-w-[80%] rounded-lg px-4 py-3 ${
+                      message.role === 'user'
+                        ? 'bg-seojin text-white'
+                        : 'bg-base-secondary text-text-primary'
+                    }`}
+                  >
+                    <div className="whitespace-pre-wrap">{message.content}</div>
+
+                    {/* 선택지 */}
+                    {message.choices && message.choices.length > 0 && (
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        {message.choices.map((choice, idx) => (
+                          <button
+                            key={idx}
+                            onClick={() => handleChoiceClick(choice.action)}
+                            disabled={isLoading}
+                            className="rounded-lg bg-base-tertiary px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-base-border disabled:opacity-50"
+                          >
+                            {choice.label}
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+
+              {/* 에피소드 뷰어 */}
+              {editingEpisodeId && project.currentLayer === 'novel' && (() => {
+                const episode = project.episodes.find(ep => ep.id === editingEpisodeId);
+                if (!episode || episode.status === 'final') return null;
+                return (
+                  <EpisodeViewer
+                    episodeNumber={episode.number}
+                    title={episode.title}
+                    content={episode.content}
+                    editedContent={episode.editedContent}
+                    charCount={episode.charCount}
+                    status={episode.status}
+                    onPartialEdit={handlePartialEdit}
+                    onFullFeedback={handleFullFeedback}
+                    onDirectEdit={handleDirectEdit}
+                    onAdopt={handleAdopt}
+                    isLoading={isRevising}
+                  />
+                );
+              })()}
+
+              {/* 로딩 인디케이터 */}
+              {isLoading && (
+                <div className="flex justify-start">
+                  <div className="rounded-lg bg-base-secondary px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">✍️</span>
+                      <span className="text-text-muted">{loadingMessage}</span>
+                    </div>
+                    {showTimeoutMessage && (
+                      <div className="mt-2 text-sm text-yellow-600">
+                        시간이 좀 걸리고 있어. 조금만 기다려줘.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div ref={messagesEndRef} />
+            </div>
+          </div>
+
+          {/* 입력 영역 */}
+          <div className="border-t border-base-border bg-base-secondary p-4">
+            <div className="mx-auto flex max-w-2xl gap-2">
+              <input
+                type="text"
+                value={inputValue}
+                onChange={(e) => setInputValue(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+                placeholder={isLoading ? '작가가 응답 중...' : '메시지를 입력하세요... (예: 떡밥 다시 수정해줘)'}
+                disabled={isLoading}
+                className="flex-1 rounded-lg border border-base-border bg-base-primary px-4 py-3 text-text-primary placeholder:text-text-muted focus:border-seojin focus:outline-none disabled:opacity-50"
+              />
+              <button
+                onClick={handleSendMessage}
+                disabled={isLoading || !inputValue.trim()}
+                className="rounded-lg bg-seojin px-6 py-3 font-medium text-white transition-colors hover:bg-seojin/90 disabled:opacity-50"
+              >
+                {isLoading ? '...' : '전송'}
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* 사이드 패널 */}
+        <div className="w-96 border-l border-base-border bg-base-secondary">
+          {/* 탭 */}
+          <div className="flex border-b border-base-border">
+            {(['world', 'timeline', 'character', 'manuscript'] as const).map((tab) => (
+              <button
+                key={tab}
+                onClick={() => setSideTab(tab)}
+                className={`flex-1 py-3 text-sm transition-colors ${
+                  sideTab === tab
+                    ? 'border-b-2 border-seojin text-text-primary'
+                    : 'text-text-muted hover:text-text-secondary'
+                }`}
+              >
+                {tab === 'world' ? '세계' : tab === 'timeline' ? '역사' : tab === 'character' ? '캐릭터' : '원고'}
+              </button>
+            ))}
+          </div>
+
+          {/* 탭 내용 */}
+          <div className="overflow-y-auto p-4" style={{ height: 'calc(100% - 45px)' }}>
+            {sideTab === 'world' && (
+              <div className="space-y-4">
+                {project.layers.world.data ? (
+                  <>
+                    <div>
+                      <h3 className="mb-1 text-sm font-medium text-text-primary">대륙</h3>
+                      <p className="text-sm text-text-muted">{project.layers.world.data.continentName}</p>
+                    </div>
+                    <div>
+                      <h3 className="mb-1 text-sm font-medium text-text-primary">지형</h3>
+                      <p className="text-sm text-text-muted">{project.layers.world.data.geography}</p>
+                    </div>
+                    {project.layers.world.data.cities?.length > 0 && (
+                      <div>
+                        <h3 className="mb-1 text-sm font-medium text-text-primary">도시</h3>
+                        <ul className="space-y-1">
+                          {project.layers.world.data.cities.map((city, idx) => (
+                            <li key={idx} className="text-sm text-text-muted">
+                              • {city.name}: {city.description}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-sm text-text-muted">아직 세계가 구축되지 않았습니다</div>
+                )}
+
+                {project.layers.coreRules.data && (
+                  <>
+                    <hr className="border-base-border" />
+                    <div>
+                      <h3 className="mb-1 text-sm font-medium text-text-primary">힘의 체계</h3>
+                      <p className="text-sm text-text-muted">{project.layers.coreRules.data.powerSystem}</p>
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {sideTab === 'timeline' && (
+              <WorldTimelinePanel
+                eras={project.worldHistory.eras}
+                decades={project.worldHistory.detailedDecades}
+                heroSeed={project.seeds?.[0]}
+              />
+            )}
+
+            {sideTab === 'character' && (
+              <div className="space-y-4">
+                {project.layers.heroArc.data ? (
+                  <div className="rounded-lg bg-base-primary p-3">
+                    <div className="mb-1 text-xs text-seojin">주인공</div>
+                    <div className="font-medium text-text-primary">{project.layers.heroArc.data.name}</div>
+                    <p className="mt-1 text-sm text-text-muted">{project.layers.heroArc.data.coreNarrative}</p>
+                  </div>
+                ) : (
+                  <div className="text-sm text-text-muted">아직 주인공이 설정되지 않았습니다</div>
+                )}
+
+                {project.layers.villainArc.data && (
+                  <div className="rounded-lg bg-base-primary p-3">
+                    <div className="mb-1 text-xs text-red-400">빌런</div>
+                    <div className="font-medium text-text-primary">{project.layers.villainArc.data.name}</div>
+                    <p className="mt-1 text-sm text-text-muted">{project.layers.villainArc.data.motivation}</p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {sideTab === 'manuscript' && (
+              <div className="space-y-2">
+                {project.episodes.length > 0 ? (
+                  project.episodes.map((ep) => (
+                    <button
+                      key={ep.id}
+                      onClick={() => {
+                        if (ep.status !== 'final') {
+                          setEditingEpisodeId(ep.id);
+                        }
+                      }}
+                      className={`w-full rounded-lg p-3 text-left transition-colors ${
+                        editingEpisodeId === ep.id
+                          ? 'bg-seojin/20 border border-seojin'
+                          : 'bg-base-primary hover:bg-base-tertiary'
+                      } ${ep.status === 'final' ? 'opacity-60' : ''}`}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium text-text-primary">
+                            {ep.number}화: {ep.title}
+                          </span>
+                          {ep.status === 'final' && (
+                            <span className="text-xs text-seojin">✓</span>
+                          )}
+                        </div>
+                        <span className="text-xs text-text-muted">{ep.charCount}자</span>
+                      </div>
+                    </button>
+                  ))
+                ) : (
+                  <div className="text-sm text-text-muted">아직 작성된 원고가 없습니다</div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

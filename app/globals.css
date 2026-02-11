@@ -1,0 +1,247 @@
+@import "tailwindcss";
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+
+  /* 캐릭터 컬러 */
+  --color-seojin: #7B6BA8;
+  --color-seojin-light: #9B8DC8;
+  --color-seojin-dark: #5B4B88;
+  --color-yeonhwa: #C74B50;
+  --color-yeonhwa-light: #E76B70;
+  --color-yeonhwa-dark: #A73B40;
+  --color-muhan: #D4D0E0;
+  --color-muhan-light: #E8E6F0;
+  --color-muhan-dark: #A8A4B8;
+
+  /* 다크 테마 베이스 */
+  --color-base-primary: #0A0A0F;
+  --color-base-secondary: #12121A;
+  --color-base-tertiary: #1A1A28;
+  --color-base-card: #16161F;
+  --color-base-border: #2A2A3A;
+
+  /* 텍스트 */
+  --color-text-primary: #E8E6F0;
+  --color-text-secondary: #A8A4B8;
+  --color-text-muted: #6B6880;
+
+  /* 폰트 */
+  --font-serif: "Noto Serif KR", serif;
+  --font-sans: "Pretendard", sans-serif;
+  --font-mono: var(--font-geist-mono);
+}
+
+:root {
+  --background: #0A0A0F;
+  --foreground: #E8E6F0;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: "Pretendard", sans-serif;
+}
+
+/* 스크롤바 커스텀 */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-base-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--color-base-border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--color-text-muted);
+}
+
+/* 먹물 텍스처 배경 효과 */
+.ink-texture {
+  background-image:
+    radial-gradient(ellipse at 20% 50%, rgba(123, 107, 168, 0.03) 0%, transparent 50%),
+    radial-gradient(ellipse at 80% 20%, rgba(199, 75, 80, 0.02) 0%, transparent 50%),
+    radial-gradient(ellipse at 50% 80%, rgba(212, 208, 224, 0.02) 0%, transparent 50%);
+}
+
+/* 캐릭터별 글로우 효과 */
+.glow-seojin {
+  box-shadow: 0 0 20px rgba(123, 107, 168, 0.3);
+}
+
+.glow-yeonhwa {
+  box-shadow: 0 0 20px rgba(199, 75, 80, 0.3);
+}
+
+.glow-muhan {
+  box-shadow: 0 0 20px rgba(212, 208, 224, 0.2);
+}
+
+/* 타임라인 연결선 애니메이션 */
+@keyframes pulse-line {
+  0%, 100% { opacity: 0.3; }
+  50% { opacity: 1; }
+}
+
+.timeline-connection {
+  animation: pulse-line 2s ease-in-out infinite;
+}
+
+/* 터미널 스타일 로그 */
+.terminal-log {
+  font-family: var(--font-mono);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.terminal-log .log-entry {
+  opacity: 0;
+  animation: fadeInUp 0.3s ease forwards;
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* 먹물 번지는 효과 (장면 생성 완료 시) */
+@keyframes ink-spread {
+  0% { opacity: 0; filter: blur(10px); transform: scale(0.8); }
+  50% { opacity: 0.6; filter: blur(3px); }
+  100% { opacity: 1; filter: blur(0); transform: scale(1); }
+}
+
+.scene-loading {
+  animation: ink-spread 0.8s ease-out;
+}
+
+/* 로딩 중 "..." 순환 애니메이션 */
+.loading-dots::after {
+  content: '';
+  animation: dots 1.5s steps(4, end) infinite;
+}
+
+@keyframes dots {
+  0% { content: ''; }
+  25% { content: '.'; }
+  50% { content: '..'; }
+  75% { content: '...'; }
+  100% { content: ''; }
+}
+
+/* 웹소설 프리뷰 영역 (라이트모드) */
+.novel-preview-area {
+  background-color: #FAF8F5;
+  min-height: 100%;
+}
+
+.novel-chapter-title {
+  font-family: "Noto Serif KR", serif;
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #2A2A2A;
+  margin: 0.75rem 0;
+}
+
+.novel-chapter-divider {
+  color: #BFBFBF;
+  font-size: 0.75rem;
+  letter-spacing: 0.5em;
+}
+
+.novel-content .novel-paragraph {
+  font-family: "Pretendard", sans-serif;
+  font-size: 17px;
+  line-height: 2.0;
+  color: #333;
+  margin-bottom: 1.5em;
+  text-indent: 1em;
+}
+
+/* 장면 전환 구분자 */
+.novel-separator {
+  text-align: center;
+  color: #AAA;
+  font-size: 0.85rem;
+  letter-spacing: 0.2em;
+  padding: 2rem 0;
+}
+
+.novel-separator.time-jump {
+  font-weight: 600;
+  color: #888;
+}
+
+.novel-separator.character-change {
+  font-size: 1rem;
+  letter-spacing: 0.8em;
+}
+
+.novel-separator.same-character {
+  color: #CCC;
+  letter-spacing: 0.5em;
+}
+
+/* 드래그 앤 드롭 가이드라인 */
+.drop-indicator {
+  height: 2px;
+  background: var(--color-seojin);
+  opacity: 0.6;
+  border-radius: 1px;
+  transition: opacity 0.15s;
+}
+
+/* 토스트 알림 애니메이션 */
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.animate-toast-in {
+  animation: toast-in 0.2s ease-out;
+}
+
+/* 페이지 전환 */
+@keyframes page-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+main {
+  animation: page-fade-in 0.2s ease-out;
+}
+
+/* 저장됨 표시 애니메이션 */
+@keyframes fade-in {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}

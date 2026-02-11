@@ -1,0 +1,1584 @@
+# Narrative Simulator - 프로젝트 가이드
+
+## 작업 규칙 (필수)
+- **모든 작업이 완료되면 반드시 이 CLAUDE.md 파일을 업데이트할 것.** 새로운 기능, 아키텍처 변경, 파일 추가/수정 내역을 반영하여 다음 세션에서 즉시 이어서 작업할 수 있도록 한다.
+- 프로젝트 정체서(`project-identity.md`)와 최상위 원칙(`supreme-principles.md`)을 모든 설계/구현 판단의 기준으로 삼는다.
+
+---
+
+## 프로젝트 정체서 (project-identity.md)
+
+> **이 프로젝트의 존재 이유를 정의한다. 모든 지시서는 이 문서에 봉사한다.**
+
+### 핵심 목적
+```
+흥행하는 웹소설을 만드는 시스템이다.
+조회수가 높고, 연독율이 높은 웹소설.
+
+시뮬레이션, 작가 AI, 세계관, 캐릭터 시스템 —
+이 모든 것은 "재미있는 웹소설"을 만들기 위한 도구일 뿐이다.
+도구가 목적이 되면 안 된다.
+```
+
+### 시뮬레이션의 목적
+- 캐릭터에게 **"진짜 인생"**을 부여하는 도구
+- 0세부터 시련과 성장을 살아온 캐릭터 = 더 입체적
+- 캐릭터가 매력적이면 성공, 평면적이면 실패
+
+### 워크플로우
+```
+환님 (사용자)
+  │ 큰 틀의 주제 + 핵심 워딩 제공
+  ▼
+작가 AI (페르소나)
+  │ ├─ 세계관 구축
+  │ ├─ 캐릭터 서사 아크 설계
+  │ ├─ 시뮬레이션 지휘
+  │ ├─ 스토리 구조 설계
+  │ └─ 집필
+  ▼
+흥행하는 웹소설 (결과물)
+  ▼
+환님 검토/피드백 → 작가 수정 → 반복
+```
+
+### 각 시스템의 역할 (도구로서)
+| 시스템 | 역할 | 봉사하는 목적 |
+|--------|------|--------------|
+| 시뮬레이션 엔진 | 캐릭터에게 살아온 인생을 부여 | 매력적인 캐릭터 |
+| 경험 레이어 | 씨앗에서 성격/능력이 자연 발현 | 캐릭터의 입체성 |
+| NPC 자연 발생 | 동료/조력자/빌런이 서사에서 탄생 | 관계의 자연스러움 |
+| 서사 아크 | 캐릭터의 여정 큰 그림 설계 | 이야기의 구조 |
+| 작가 디렉션 | 시련/성장/만남을 적재적소에 | 스토리의 재미 |
+| 스토리라인 모니터 | 방향 이탈/패턴 반복 감지 | 품질 유지 |
+| 집필 엔진 | 실제 웹소설 텍스트 생성 | 최종 산출물 |
+| 최상위 원칙 | 모든 시스템의 행동 규범 | **재미 > 나머지 전부** |
+
+### 지시서 계층 구조
+```
+프로젝트 정체서 (최상위)
+  ├─ 최상위 원칙 (supreme-principles.md)
+  ├─ 통합 지시서 (MASTER-INSTRUCTION-FINAL.md)
+  └─ 추가 지시서들 (씨앗, 스토리라인, 작가 AI 등)
+
+※ 상위 문서와 하위 문서 충돌 시 → 상위 문서 우선
+```
+
+---
+
+## 최상위 원칙 (supreme-principles.md)
+
+> **이 원칙은 모든 지시서·설계 헌법·코드 구현보다 우선한다.**
+
+### 원칙 1: 캐릭터의 자율성
+- 캐릭터 시뮬레이션은 자율적으로 진행된다.
+- 처음부터 나쁜 놈은 없다. 세상이, 환경이 그리 만들었을 뿐이다.
+- 악인도 악인이 된 이유가 있고, 영웅도 나약했던 시절이 있다.
+- 모든 캐릭터는 자신의 경험이 만든 존재다.
+
+### 원칙 2: 작가의 역할
+- 작가는 캐릭터에게 시련과 성장의 계기를 부여하는 "신(God)".
+- 작가는 상황을 만들고, 캐릭터는 자율적으로 반응한다.
+- 캐릭터의 반응을 하드코딩하지 않는다.
+
+### 원칙 3: 반복의 경계
+- 시련→성장→시련→성장 단순 반복 금지.
+- 기연→각성→기연→각성 단순 반복 금지.
+- 패턴을 깨라: 성장인 줄 알았는데 함정, 시련이 오히려 기회, 기연의 대가가 너무 큼, 평온이 가장 위험, 적이 유일한 아군.
+- 독자가 "다음에 뭐가 올지" 예측하는 순간 이야기는 죽는다.
+
+### 원칙 4: 임팩트 있는 집필
+- 재미가 최우선. 문학성·구조·깊이 전부 중요하지만 재미보다 우선하지 않는다.
+- 매 화 첫 문장이 독자를 잡고, 마지막 문장이 다음 화를 클릭하게 만든다.
+- 감정은 설명하지 않고 보여준다 (Show, Don't Tell).
+- 대사는 짧고 강렬하게. 70%만 보여주고 30%는 상상하게.
+
+### 적용 범위
+| 시스템 | 적용 내용 |
+|--------|----------|
+| 시뮬레이션 엔진 | 캐릭터 반응 자율성 보장, 하드코딩된 이벤트 유형/나이별 가이드 금지 |
+| 작가 AI | 패턴 반복 회피, 예측 불가능한 전개, 임팩트 있는 문체 |
+| 스토리라인 모니터 | 패턴 반복 감지 경고(`repetitive`), 흥미도 저하 감지 경고(`interest`) |
+| 세계관/연대기 | 세상이 캐릭터를 만든다는 전제, 환경이 선택을 이끈다 |
+| 설계 헌법 | 최상위 원칙 > 설계 헌법 (단, 하드코딩 금지 원칙은 유지) |
+
+---
+
+## 프로젝트 개요
+무협/판타지 웹소설의 서사를 AI로 생성하는 시뮬레이터. 캐릭터가 세계관 안에서 해마다 이벤트를 겪고, 그 이벤트를 편집해 소설로 완성하는 도구.
+
+## 기술 스택
+- **프레임워크**: Next.js 16.1.6 (Turbopack, App Router)
+- **UI**: React 19 + Tailwind CSS v4 (`@theme inline` in globals.css, NOT tailwind.config.ts)
+- **상태관리**: Zustand 5 + localStorage persist
+- **AI**: @anthropic-ai/sdk
+  - 시뮬레이션: `claude-haiku-4-5-20251001` (저비용)
+  - 세밀 장면: `claude-sonnet-4-5-20250929` (고품질)
+- **내보내기**: `docx` npm 패키지 (DOCX), 자체 TXT/HTML
+- **TypeScript**: strict mode
+
+## 알려진 이슈 & 해결 이력
+- 한국어 경로 `웹소설` → Turbopack panic → `next.config.ts`에 `turbopack.root: "."` 로 해결
+- `--no-turbopack` 플래그 없음 (Next.js 16에서 turbopack 기본)
+- `CharacterStats` → `Record<string, number>` 변환 시 `unknown` 중간 캐스트 필요
+- `Packer.toBuffer()`는 `Uint8Array` 반환 → `as unknown as BodyInit`
+- Faction 타입 캐스트: spread 패턴 `{ ...updated[idx], [field]: val }` 사용
+- **씨앗 모드 캐릭터 생성 버그 (수정완료)**: `/create` 마법사에서 `CharacterBuilder`에 `onSeedsChange` prop 미전달 → seeds가 store에 저장 안 됨. `TimelineSetup`에서도 `setSeeds()`/`setWorldEvents()`/`setStoryDirectorConfig()` 미호출. 3곳 수정으로 해결
+
+## 파일 구조 (UNIFIED-INSTRUCTION 기반 재구현 - 2026-02-10)
+
+```
+app/
+├── page.tsx                    # 루트 → /projects 리다이렉트
+├── layout.tsx                  # 루트 레이아웃
+├── globals.css                 # Tailwind v4 @theme inline + 커스텀 테마
+├── projects/
+│   ├── page.tsx                # 프로젝트 목록
+│   ├── new/
+│   │   └── page.tsx            # 새 프로젝트 (장르/톤/시점/작가 선택)
+│   └── [id]/
+│       ├── page.tsx            # 작가 대화 (핵심 화면 - 레이어 구축)
+│       └── result/
+│           └── page.tsx        # 결과물 (에피소드 뷰어 + 내보내기)
+└── api/
+    ├── author-chat/route.ts    # 레이어 구축 + 작가 대화 통합 (Sonnet)
+    ├── generate-world-history/route.ts # 세계 역사 생성 (Haiku)
+    ├── detail-era/route.ts     # 시대 상세화 (Haiku)
+    ├── simulate/
+    │   ├── route.ts            # SSE 스트리밍 시뮬레이션
+    │   └── control/route.ts    # 시뮬레이션 제어 (pause/resume/abort)
+    ├── write-episode/route.ts  # 에피소드 집필 (Sonnet)
+    ├── revise-episode/route.ts # 에피소드 수정 (Sonnet)
+    ├── generate-detail/route.ts # 세밀 장면 생성 (Sonnet)
+    ├── generate-chronology/route.ts # AI 연대기 자동 생성 (Haiku)
+    ├── export/route.ts         # TXT/HTML/DOCX 내보내기
+    ├── structure-world/route.ts # AI 세계관 구조화 (Haiku)
+    └── structure-character/route.ts # AI 캐릭터 구조화 (Haiku)
+
+lib/
+├── types/index.ts              # 모든 타입 정의 (Project, 7 Layers, WorldHistoryEra, Message, Choice 등)
+├── store/
+│   ├── project-store.ts        # 다중 프로젝트 스토어 (projects[], layers, messages, episodes)
+│   ├── simulation-store.ts     # 기존 시뮬레이션 상태 (하위 호환)
+│   ├── timeline-store.ts       # 디테일 씬
+│   └── editor-store.ts         # 프로젝트/챕터
+├── agents/
+│   ├── simulation-engine.ts    # 핵심 엔진 (V1/V2/V3)
+│   ├── storyline-analyzer.ts   # 스토리라인 분석
+│   ├── story-director.ts       # 스토리 디렉터
+│   ├── profile-calculator.ts   # 프로필 계산기
+│   └── npc-detector.ts         # NPC 탐지
+├── presets/
+│   └── author-personas.ts      # 작가 페르소나 프리셋 4종
+├── prompts/
+│   ├── simulation-prompt.ts    # V1 프롬프트
+│   ├── simulation-prompt-v2.ts # V2 프롬프트
+│   └── detail-prompt.ts        # 세밀 장면 프롬프트
+└── utils/
+    ├── api-client.ts           # Anthropic SDK 래퍼
+    ├── simulation-sessions.ts  # 서버 사이드 세션 관리
+    ├── export-txt.ts           # TXT 내보내기
+    ├── export-html.ts          # HTML 내보내기
+    └── export-docx.ts          # DOCX 내보내기
+
+components/                     # 기존 컴포넌트 (하위 호환용)
+├── layout/        Header, Sidebar
+├── common/        ClientProviders, Toast
+├── characters/    CharacterPanel, CharacterAvatar
+├── simulation/    SimulationControl, StorylineMonitor
+└── ...
+```
+
+## 핵심 아키텍처 (UNIFIED-INSTRUCTION 기반)
+
+### 라우트 구조
+| 라우트 | 용도 |
+|--------|------|
+| `/` | `/projects`로 리다이렉트 |
+| `/projects` | 프로젝트 목록 |
+| `/projects/new` | 새 프로젝트 (장르/톤/시점/작가 선택) |
+| `/projects/[id]` | 작가 대화 (핵심 화면) |
+| `/projects/[id]/result` | 결과물 (에피소드 뷰어) |
+
+### 7 레이어 시스템
+1. **세계 (World)** - 대륙, 도시, 지형
+2. **핵심 규칙 (Core Rules)** - 힘의 체계, 종족, 역사
+3. **씨앗 (Seeds)** - 세력, 종족, 위협, NPC
+4. **주인공 서사 (Hero Arc)** - 주인공의 태생, 핵심 서사, 목표
+5. **빌런 서사 (Villain Arc)** - 빌런의 동기, 서사, 관계
+6. **궁극의 떡밥 (Ultimate Mystery)** - 표면/진실, 힌트들
+7. **소설 (Novel)** - 시뮬레이션 + 집필
+
+### 세계 시뮬레이션 3단계
+1. **세계 역사** - 수백~천 년을 시대 단위로 생성
+2. **시대 상세화** - 주인공 시대 50년을 10년 단위로 상세화
+3. **캐릭터 시뮬레이션** - 기존 엔진으로 연도별 시뮬레이션
+
+### 핵심 흐름
+```
+[프로젝트 목록] → [새 프로젝트] → 장르/톤/시점/작가 선택
+                                       ↓
+[작가 대화] ← 7개 레이어 순차 구축 (대화형)
+     ↓
+세계 역사 생성 → 시대 상세화 → 캐릭터 시뮬레이션
+     ↓
+[에피소드 집필] ← 작가와 환님 피드백 루프
+     ↓
+[결과물] → 읽기/내보내기
+```
+
+### 다중 프로젝트 지원
+- `lib/store/project-store.ts` - 새 Zustand 스토어
+- `projects[]` 배열로 여러 프로젝트 관리
+- 각 프로젝트별 독립적인 layers, messages, episodes
+    ├── export-txt.ts
+    ├── export-html.ts
+    ├── export-docx.ts
+    ├── timeline-utils.ts
+    └── mock-data.ts
+
+data/
+└── world-settings.json         # 기본 세계관 설정
+```
+
+## 핵심 아키텍처
+
+### 캐릭터 시스템 (V1 + V2 공존)
+
+**V1 (기존):** `Character` 타입으로 하드코딩된 프로필. CHARACTERS 상수에서 시작.
+
+**V2 (경험 레이어):** `CharacterSeed` → `Memory` 축적 → `EmergentProfile` 발현.
+- `seeds[]`가 존재하면 V2 파이프라인 자동 활성화 (`isV2` getter)
+- `ProfileCalculator.computeProfile(seed, memories)` → EmergentProfile
+- `ProfileCalculator.toCharacter(seed, memories, year)` → Character (하위 호환 브릿지)
+- 하위 시스템(편집기, 내보내기, 통계)은 Character 타입만 소비하므로 변경 불필요
+
+### 데이터 흐름
+```
+1. 프리셋 로드 / /create 마법사 (6단계)
+   → setCharacters() + setSeeds() + setWorldEvents()
+   → setStoryDirectorConfig()  [스토리 디렉터]
+   → setMonitorConfig()        [모니터링 설정]
+   → localStorage에 projectConfig 저장
+
+2. 시뮬레이션 시작
+   → POST /api/simulate (config, characters, seeds?, memoryStacks?,
+      grammarConfig?, characterArcs?, npcPool?,
+      storyDirectorConfig?, worldSettingsFull?, monitorConfig?)
+   → 세션 생성 (sessionId, AbortController, pauseFlag)
+   → SSE: session_init → progress → storyline_preview → integrated_storyline → auto_paused → events → final_state
+
+3. 시뮬레이션 제어
+   → POST /api/simulate/control { sessionId, action: 'pause'|'resume'|'abort' }
+   → activeSessions Map에서 세션 조회 → pauseFlag/abortController 조작
+
+4. SSE 이벤트 수신 (SimulationControl)
+   → session_init → setSessionId()
+   → completed → addEvents()
+   → storyline_preview → setStorylinePreview()
+   → integrated_storyline → setIntegratedStoryline()
+   → auto_paused → setSimulationStatus('paused') + setPendingWarning()
+   → final_state → setCharacters/Memories/Profiles/Arcs/NPC + addSimulationRun()
+   → done → setRunning(false) + 이력 기록
+
+5. 세밀 장면 생성
+   → POST /api/generate-detail (character, event, worldContext,
+      authorPersona?, worldSettings?)
+   → buildDetailPrompt에 페르소나/감각정보 주입
+
+6. UI 렌더링
+   → StorylineMonitor: 건강도 바 + 캐릭터별 지표 + 경고 + 교차분석
+   → StorylineWarningPopup: Critical 시 자동 팝업 (무시/정지/중단)
+   → SimulationHistory: 이력 목록 + 스냅샷 확인
+   → CharacterPanel: profile/memories/role props
+   → TimelineView: imprints 아이콘 배지
+   → StatsOverview: 텐션 커브 + 스토리 디렉터 통계
+   → Dashboard: 로그라인, 역할 배지, NPC 위젯, 연대기 바
+```
+
+### 스토어 구조 (simulation-store)
+```typescript
+// V1 (기존)
+isRunning, currentYear, progress, characters[], events[], worldEvents[]
+
+// V2 (경험 레이어)
+seeds: CharacterSeed[]
+memoryStacks: Record<string, Memory[]>  // characterId → memories
+profiles: Record<string, EmergentProfile>  // characterId → profile
+
+// 서사 문법
+grammarConfig: NarrativeGrammarConfig
+characterArcs: CharacterArc[]
+masterArc: MasterArc | null
+
+// NPC
+npcPool: NPCPool  // { npcs: NPC[], maxSize: 30 }
+
+// 스토리 디렉터
+storyDirectorConfig?: StoryDirectorConfig  // A중심서사 + 페르소나
+
+// 씨앗 수정
+seedEditHistory: SeedEditLog[]
+
+// 스토리라인 모니터링
+simulationStatus: SimulationStatus  // 'idle'|'running'|'paused'|'completed'|'aborted'
+sessionId: string | null
+storylinePreviews: Record<string, StorylinePreview>
+integratedStoryline: IntegratedStoryline | null
+monitorConfig: StorylineMonitorConfig  // { previewFrequency, autoPauseOnCritical, integratedAnalysisEnabled }
+simulationHistory: SimulationRun[]
+pendingWarning: IntegratedStoryline | null  // non-null → 경고 팝업 표시
+
+// 모두 localStorage persist 대상
+```
+
+### 시뮬레이션 제어 메커니즘
+
+**Pause/Resume:**
+- 서버 엔진 내부에 `pauseFlag: { paused: boolean }` 뮤터블 객체
+- `lib/utils/simulation-sessions.ts`에 `activeSessions` Map으로 세션 관리
+- SSE route와 control route가 같은 모듈 import → 같은 Map 참조
+- 엔진 루프가 매 year마다 `pauseFlag.paused`를 폴링 (500ms 간격)
+- 클라이언트 → POST `/api/simulate/control` → Map에서 세션 조회 → pauseFlag 토글
+
+**Abort:**
+- `AbortController` + `AbortSignal`
+- SSE route에서 생성, 엔진에 signal 전달
+- 엔진 루프가 매 year마다 `abortSignal.aborted` 체크
+- ReadableStream의 `cancel()` 콜백에서도 abort 트리거
+
+**스토리라인 모니터링:**
+- `StorylineAnalyzer` — Haiku(`generateStructure`, temp 0.2, max 1024)로 프리뷰 생성
+- `shouldGeneratePreview()` — auto: turning_point 이벤트, semi_auto: 5년마다, manual/off: false
+- 프리뷰 → SSE `storyline_preview` → 통합 분석 → SSE `integrated_storyline`
+- `storyHealth === 'critical' && autoPauseOnCritical` → 자동 일시정지 + 경고 팝업
+
+### 기억 각인 시스템 (ImprintType)
+| 타입 | 아이콘 | 설명 |
+|------|--------|------|
+| insight | 🧠 | 깨달음 |
+| emotion | 💭 | 감정 각인 |
+| skill | ⚔️ | 기술 습득 |
+| speech | 💬 | 말투/화법 |
+| name | 📛 | 이름/이명 획득 |
+| relationship | 🤝 | 관계 형성 |
+| trauma | 🩸 | 트라우마 |
+| belief | ✨ | 신념/가치관 |
+
+### 기본 캐릭터 (서문대륙 프리셋)
+| ID | 코드명 | 이름(V1) | 색상 | birthYear |
+|----|--------|----------|------|-----------|
+| yoon-seojin | 금서고의 아이 | 윤서진 | #7B6BA8 | -3 |
+| ha-yeonhwa | 독화의 아이 | 하연화 | #C74B50 | -2 |
+| baek-muhan | 서자 | 백무한 | #D4D0E0 | -5 |
+
+### SimulationEngine 모드
+| 모드 | 조건 | V1 메서드 | V2 메서드 |
+|------|------|-----------|-----------|
+| 개별 | !batchMode | runYear() | runYearV2() |
+| 묶음 | batchMode | runYearBatched() | runYearBatchedV2() |
+| 유년기 | 모두 0~5세 | runYearRange() | runYearRangeV2() |
+
+### SimulationEngine 확장 파라미터
+```typescript
+constructor(
+  config, existingEvents?, existingCharacters?, seeds?, memoryStacks?,
+  grammarConfig?, existingCharacterArcs?, existingMasterArc?, npcPool?,
+  storyDirectorConfig?, worldSettingsFull?,
+  abortSignal?, pauseFlag?, monitorConfig?, theme?
+)
+```
+
+### 스토리 디렉터 시스템
+
+**4레이어 세계관 구축:**
+- Layer 1: `WorldCoreRule` — 핵심 법칙 (law, cost, implication)
+- Layer 2: `WorldHistoricalWound` — 역사적 상처 (event, consequence, livingMemory)
+- Layer 3: `WorldCurrentTension` — 현재 갈등 (faction, desire, method, blocked)
+- Layer 4: 감각/사회/일상 (sensoryDetails[], socialNorms[], dailyLife[])
+
+**작가 페르소나:** `lib/presets/author-personas.ts`
+| 프리셋 | 코드 | 특징 |
+|--------|------|------|
+| 열혈전투형 | PERSONA_BATTLE | 짧은 문장, 의성어, 파워업 |
+| 다크서사형 | PERSONA_DARK | 내면 독백, 도덕적 모호함 |
+| 감성서정형 | PERSONA_LYRICAL | 자연 묘사, 감정 은유 |
+| 신무협정통형 | PERSONA_CLASSIC | 한문 혼용, 절제된 감정 |
+
+**A중심 서사 구조:**
+- `StoryDirectorConfig` — protagonistId, ratio(A:B:C 기본 6:2:2), characterRoles, logline
+- `StoryDirector.buildADirective()` → A 중심 프롬프트 룰 생성
+- `StoryDirector.composeStory()` → A-relevance 체크 후 에피소드 분할
+- `ARelevanceCheck` — direct_impact / foreshadow / theme_mirror / hidden_truth
+
+**데이터 흐름:**
+```
+/create wizard (6단계):
+  Step 1: WorldBuilder → worldSettings (4레이어 세계관 포함)
+  Step 1.5: ChronologyBuilder → worldSettings.chronology (연대기)
+  Step 2: CharacterBuilder → characters[] + seeds[] (씨앗 모드 시 onSeedsChange)
+  Step 3: RelationshipBuilder → relationships[]
+  Step 4: StorySetup → storyDirectorConfig (로그라인, 역할, 페르소나)
+  Step 5: TimelineSetup → store에 일괄 저장:
+    - setCharacters() + setSeeds() + setWorldEvents() + setStoryDirectorConfig() + setMonitorConfig()
+    - localStorage에 projectConfig 저장 (monitorConfig 포함)
+
+시뮬레이션 시:
+  → SimulationControl → API request body에 monitorConfig 포함
+  → SimulationEngine constructor에 abortSignal, pauseFlag, monitorConfig, theme 전달
+  → 매 year마다: abort 체크 → pause 폴링 → 시뮬 → 프리뷰 생성(조건부) → 통합 분석 → auto-pause
+
+UI 표시:
+  → CharacterPanel: A/B/C 역할 배지
+  → SimulationControl: 시작/일시정지/재개/중단 버튼 + "스토리 디렉터" 배지
+  → StorylineMonitor: 건강도 바 + 4지표 + 경고 + 수렴/배신/권장
+  → StorylineWarningPopup: Critical 감지 시 모달
+  → SimulationHistory: 이력 목록 (접기/펼치기 + 스냅샷)
+  → Dashboard: 로그라인 표시, 연대기 바
+```
+
+### 작가 AI v2 시스템
+**관계 화학작용:** `Relationship`에 `dynamic?`, `frictionPoints?`, `resonancePoints?`, `history?` 필드 추가. 관계도 UI에서 간선에 dynamic 표시, 호버 시 friction/resonance 상세.
+
+**각성 모멘텀:** `StorylineMetrics`에 `awakeningPotential` (0~100) 추가. 시뮬레이션 프롬프트에 전환점 규칙 (축적→폭발). 타임라인에서 `turning_point` 이벤트를 ★ + 골드 테두리 + "TURNING POINT" 라벨로 강조.
+
+**마일스톤 (Anchor Events):** `AnchorEvent` 타입, `WorldSettings.anchorEvents?` 필드. 시뮬레이션 엔진이 해당 연도에 강제 사건 주입 (상황만 강제, 반응은 시뮬레이션). `/create` Step 5에서 입력 UI (연도, 사건, 세계 영향, 캐릭터별 상황). 타임라인에 ⚓ 아이콘.
+
+**출력 퀄리티:** 시뮬레이션 프롬프트(V2)에 Show Don't Tell / 구체적 감각 / 짧고 강렬 / 행동으로 성격 / sensory 오감 규칙 추가. 세밀 장면 프롬프트에 출력 퀄리티 절대 규칙 (감정 설명 금지, 묘사적 서술만, 대사 짧게, 70/30 법칙).
+
+### 설계 헌법 (Design Constitution)
+핵심 원칙:
+- **하드코딩 허용**: 세계관, 시간축, 작가 페르소나(문체)
+- **하드코딩 금지**: 캐릭터 성격/가치관/동기/외형/능력/대사/관계
+- **시뮬레이션은 중립**: A-directive/charm 주입 금지
+- **StoryDirector는 편집 단계 도구로만** 사용
+
+### 완료된 기능 목록
+1. **프로젝트 설정**: 타입, 스토어, UI (mock data)
+2. **Claude API 통합**: 시뮬레이션 엔진 + SSE 스트리밍 + localStorage 영속
+3. **세밀 장면 생성**: Sonnet 기반 + 3열 DnD 편집기 + 네비게이션
+4. **내보내기**: TXT/HTML/DOCX + 통계 + 관계도 + 토스트 + 데이터 관리 + 온보딩
+5. **최적화+커스텀빌더**: API 모델 분리 + 프롬프트 압축 + 묶음 모드 + /create 마법사 + 프리셋
+6. **경험 레이어**: 씨앗→경험→발현 시스템 (CharacterSeed→Memory→EmergentProfile)
+7. **서사 문법 엔진**: 서사 아크 + 비트 추적 + 텐션 커브 + 프롬프트 유도
+8. **NPC Emergence**: 자연 발생 NPC + lifecycle + 프롬프트 주입 + 대시보드 위젯
+9. **스토리 디렉터**: 4레이어 세계관 + 작가 페르소나 4종 + A중심 서사(6:2:2)
+10. **설계 헌법 감사**: UI 하드코딩 제거 + CharmDevice 삭제 + 시뮬 중립화 + NPC role 자유화 + 외형 필드
+11. **씨앗 수정+연대기**: soft_edit/hard_reset + 되감기 + 세계 연대기 CRUD/AI생성 + 대시보드 연대기 바
+12. **스토리라인 모니터링**: 실시간 프리뷰 + 통합 분석 + auto-pause + 경고 팝업 + pause/resume/abort + 이력 관리
+13. **작가 AI v2**: 관계 화학작용(dynamic/friction/resonance) + 각성 모멘텀(awakeningPotential+turning_point 강조) + 마일스톤(AnchorEvent 강제 주입+UI) + 출력 퀄리티(Show Don't Tell)
+14. **작가 AI as God**: 서사 아크 설계 + 동적 디렉션 + 하드코딩 제거 + 아크 검토/수정 UI
+15. **UI 뷰 개선**: 캐릭터 성장 뷰 (/characters) + 작가 집필 뷰 (/author 4탭) + 네비게이션 확장 + 에피소드/코멘트/떡밥 시스템
+
+> **모든 지시서 완료 (체크포인트 1-145).** 프로덕션 빌드 통과 확인 (2026-02-08).
+
+### 작가 AI as God 시스템 (체크포인트 99-115 완료)
+
+**핵심 개념:** 작가 AI가 시뮬레이션의 "신(God)"이 되어, 시뮬레이션 전에 서사 아크를 설계하고 매 연도마다 동적 디렉션을 생성. 기존 하드코딩된 나이별 가이드 제거.
+
+**흐름:**
+```
+환님 → 주제+방향 → 작가 AI가 캐릭터별 서사 아크 설계 (시뮬 시작 전)
+매 연도: Profile 계산 → 합친 프롬프트(작가 디렉션+시뮬레이션 1회 호출) → 캐릭터 자율 반응
+→ AuthorDirection의 phaseTransition으로 아크 페이즈 자동 전환
+→ turning_point 이벤트 감지 시 아크 revision 기록
+→ validateEvents 필터로 평온한 나날 제거
+```
+
+**타입:**
+- `AuthorNarrativeArc` — characterId, phases[], currentPhaseIndex, revisions[], designedAt
+- `ArcPhase` — id, name, estimatedAgeRange, intent, keyMoments[], emotionalArc, endCondition
+- `ArcRevision` — year, reason, changes
+- `AuthorDirection` — characterId, year, age, arcPosition, narrativeIntent, worldPressure, avoid, desiredEffect, phaseTransition?
+
+**새 파일:**
+- `lib/agents/author-ai-engine.ts` — AuthorAIEngine 클래스 (아크 설계, 디렉션 처리, 아크 조정, validateEvents)
+- `lib/prompts/author-direction-prompt.ts` — 4개 프롬프트 빌더 (아크 설계, 개별+합친, 묶음+합친, 유년기+합친)
+- `components/simulation/ArcEditor.tsx` — 서사 아크 검토/수정 UI (대시보드 위젯)
+
+**변경된 파일:**
+- `lib/types/index.ts` — AuthorNarrativeArc, ArcPhase, ArcRevision, AuthorDirection 추가, ProgressUpdate에 arc_designed/author_direction 추가
+- `lib/prompts/simulation-prompt-v2.ts` — 하드코딩 나이별 가이드(0~5세, 6~12세, 13+세) 제거
+- `lib/agents/simulation-engine.ts` — AuthorAIEngine 통합, runFullSimulation에 아크 설계 단계, V2 메서드에 합친 프롬프트, parseResponseV3WithDirection, parseBatchedResponseV3WithDirection, validateEvents, narrativeArcs 파라미터/getter
+- `lib/store/simulation-store.ts` — narrativeArcs 상태 + setNarrativeArcs/updateNarrativeArc 액션 + persist
+- `app/api/simulate/route.ts` — narrativeArcs 파라미터 수신 + final_state에 포함
+- `components/simulation/SimulationControl.tsx` — narrativeArcs 송수신 + arc_designed SSE 처리
+- `app/page.tsx` — ArcEditor 대시보드 위젯 통합
+
+**기존 Grammar 시스템과의 관계:**
+- Grammar Engine(비트 추적/텐션 관리)과 Author AI(동적 디렉션)는 공존
+- Author AI 아크가 있으면 합친 프롬프트(디렉션+시뮬) 사용, 없으면 기존 Grammar 프롬프트로 fallback
+- validateEvents: AuthorAIEngine.validateEvents() 정적 메서드로 "평온한 나날" 필터링
+
+**API 비용 최적화:**
+- 아크 설계: Haiku(generateStructure) × 캐릭터 수 (시뮬 시작 시 1회만)
+- 매 연도: 디렉션+시뮬레이션을 합친 1회 호출 (Haiku, generateSimulation) → 기존 대비 호출 수 동일
+
+### UI 뷰 개선 (체크포인트 116-145 완료)
+
+**캐릭터 성장 뷰 (`/characters`):**
+- 캐릭터 선택 탭 (탭 클릭으로 전환)
+- 좌측 프로필 패널: 씨앗 + 발현 프로필 + 잠재력 바 + 능력 레벨 + 외형 변화 + 관계(NPC 포함) + 성향(빛/어둠, 질서/혼돈)
+- 중앙 성장 타임라인: 세로 이벤트 카드, 연도별 구분, 필터(전체/위기/성장/관계/전환점) + 정렬(시간순/중요도)
+- 이벤트 아이콘 자동 매핑: ★(TP) ⚡(능력) 👤(NPC) 💀(상실) ⚓(앵커) 🌑(출생) 🔒(미스터리) ○(일반)
+- TURNING POINT / ANCHOR 시각적 강조 (골드 테두리, 라벨)
+- 하단 이벤트 상세 뷰: 감각 기억 + 각인 상세 + 작가 디렉션 + [세밀 장면 생성] [편집기로 보내기] 버튼
+
+**작가 집필 뷰 (`/author`) — 4탭:**
+- **탭 1 (스토리 전체)**: 주제+세계관 요약 / 스토리 구조(MasterArc acts 시각화) / 캐릭터 서사 흐름 가로 타임라인 / 떡밥 현황(planted/collected/planned + CRUD) / 예상 통계(총화수, 집필완료, 시점비율)
+- **탭 2 (서사 아크)**: 캐릭터별 아크 페이즈 시각화(현재/완료/미래 구분) / 페이즈 상세 편집(의도, 핵심순간 체크리스트, 감정흐름, 종료조건) / 수정 이력 / 다음 디렉션 미리보기 / 페이즈 추가
+- **탭 3 (집필)**: 에피소드 목록(planned/drafted/reviewed/final 상태 아이콘) / 3분할 집필 뷰(시뮬 소스|본문|작가 메모) / 이벤트 연결 / 화 끝 훅 / 상태 변경+삭제
+- **탭 4 (코멘트)**: 코멘트 목록(필터: 유형별, 미해결만) / 선택지 버튼 + 자유 응답 / 해결/미해결 상태 / 피드백 전송
+
+**새 타입:**
+- `Episode`: id, number, title, status(planned/drafted/reviewed/final), pov, sourceEventIds, content, charCount, authorNote, endHook
+- `AuthorComment`: id, type(suggestion/question/discovery/warning), content, relatedTo, options?, selectedOption?, userResponse?, resolved
+- `Foreshadow`: id, content, status(planted/collected/planned), plantedEpisode?, collectedEpisode?, relatedCharacters
+
+**변경 파일:**
+- `lib/types/index.ts` — Episode, AuthorComment, Foreshadow 타입 추가
+- `lib/store/simulation-store.ts` — episodes/authorComments/foreshadows 상태 + CRUD 액션 + persist
+- `components/layout/Header.tsx` — [캐릭터] [작가] 네비게이션 탭 추가
+- `app/characters/page.tsx` — 캐릭터 성장 뷰 (새 파일)
+- `app/author/page.tsx` — 작가 집필 뷰 4탭 (새 파일)
+
+## 개발 명령어
+```bash
+npm run dev    # 개발 서버 (Turbopack)
+npx next build # 프로덕션 빌드 + 타입 체크
+```
+
+## 환경 변수 (.env.local)
+```
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+## 지시서 파일 현황
+| 파일 | 체크포인트 | 위치 | 상태 |
+|------|-----------|------|------|
+| Phase 1~4 지시서 | 1-24 | `진행완료/` | ✅ 완료 |
+| instruction-seed-edit-and-chronology.md | 25-42 | `진행완료/` | ✅ 완료 |
+| instruction-storyline-monitor.md | 43-61 | `진행완료/` | ✅ 완료 |
+| instruction-author-ai-v2.md | 81-98 | `진행완료/` | ✅ 완료 |
+| instruction-author-as-god.md | 99-115 | 루트 | ✅ 완료 |
+| instruction-ui-views.md | 116-145 | 루트 | ✅ 완료 |
+| instruction-ui-simplified.md | 116-131 | 루트 | ✅ 완료 |
+| instruction-project-creation-update.md | - | 루트 | ✅ 완료 |
+
+---
+
+## UI 재설계 (instruction-ui-simplified) — 체크포인트 116-131 완료
+
+### 핵심 변경
+기존 8개 페이지 → **3개 화면**으로 단순화:
+1. `/project` — 프로젝트 생성 (주제 + 스토리라인 + 방향성 + 작가 선택)
+2. `/conversation` — 작가 대화 (채팅 + 사이드 패널 4탭)
+3. `/result` — 결과물 (원고 뷰어 + 내보내기)
+
+### 핵심 루프
+```
+환님이 주제+스토리라인 입력 → [작가에게 맡기기]
+→ 작가 AI가 스토리라인 분석 → 세계관/캐릭터/아크 자동 생성
+→ 작가가 1화 작성 → 환님이 읽음 → 피드백(연재승인/수정요청/방향변경)
+→ 다음 화 → 반복
+```
+
+### 새 타입 (`lib/types/index.ts`)
+- `SimplifiedProjectConfig` — 단순화된 프로젝트 설정 (`storyline: string`, `protagonistCount` 제거)
+- `ConversationMessage` — 대화 메시지 (author, author_episode, author_choice, user)
+- `ConversationChoice` — 선택지 (approve, revise, redirect 등)
+- `GenerationProgress` — 자동 생성 진행 상태
+
+### 스토어 확장 (`lib/store/simulation-store.ts`)
+```typescript
+// SimulationStoreConversation
+simplifiedProject: SimplifiedProjectConfig | null
+conversationMessages: ConversationMessage[]
+generationProgress: GenerationProgress | null
+currentEpisodeNumber: number
+
+// 액션
+setSimplifiedProject()
+addConversationMessage()
+clearConversationMessages()
+setGenerationProgress()
+updateGenerationStep()
+setCurrentEpisodeNumber()
+respondToChoice()
+```
+
+### 새 페이지
+- `app/project/page.tsx` — 주제+워딩+작가 선택 폼 + 자동 생성 프로그레스
+- `app/conversation/page.tsx` — 채팅 UI + 사이드 패널 4탭 (미리보기/캐릭터/세계관/원고)
+- `app/result/page.tsx` — 원고 뷰어 + 내보내기
+
+### 새 API
+- `/api/generate-project` — SSE 스트림으로 세계관+캐릭터+아크+시뮬레이션 자동 생성
+- `/api/write-episode` — Sonnet으로 화 작성 (4000-6000자)
+- `/api/author-respond` — 환님 메시지에 작가 AI 응답
+
+### Header 변경 (`components/layout/Header.tsx`)
+- 3개 탭: 프로젝트 / 작가 대화 / 결과물
+- 기존 상세 뷰(/characters, /author 등)는 사이드 패널 "상세 보기"로 접근
+- 상세 뷰 진입 시 "← 작가 대화로 돌아가기" 표시
+
+### 라우팅
+- `/` → `/project` 또는 `/conversation` 리다이렉트 (simplifiedProject 유무에 따라)
+- 기존 페이지들 유지 (Header에서 숨김, 사이드 패널에서 접근)
+
+### 프로덕션 빌드
+- ✅ 빌드 성공 (2026-02-09)
+
+---
+
+## 프로젝트 생성 수정 (instruction-project-creation-update.md) — 완료
+
+### 핵심 변경
+**기존:** 핵심 워딩을 여러 줄 입력 (`wordings: string[]`)
+**변경:** 스토리라인을 자유 텍스트로 입력 (`storyline: string`)
+
+### 타입 변경 (`lib/types/index.ts`)
+```typescript
+// 기존
+wordings: string[];
+advancedSettings: { protagonistCount?: number; ... }
+
+// 변경
+storyline: string;  // 자유 텍스트 (한 줄이든 한 페이지든)
+advancedSettings: { ... }  // protagonistCount 제거 (캐릭터 수는 AI가 결정)
+```
+
+### UI 변경 (`app/project/page.tsx`)
+- 워딩 여러 줄 입력 → 스토리라인 textarea
+- 캐릭터 수 설정 제거
+
+### API 변경 (`app/api/generate-project/route.ts`)
+1. **스토리라인 분석 단계 추가** (`storyline_analysis`)
+   - 스토리라인에서 핵심 인물, 구도, 갈등, 감정, 훅 포인트 추출
+2. **세계관 프롬프트 수정**
+   - 스토리라인 분석 결과를 바탕으로 세계관 구축
+3. **캐릭터 프롬프트 수정**
+   - 스토리라인에 언급된 인물 반드시 포함
+   - 캐릭터 수는 AI가 자유롭게 결정 (2~5명 권장)
+4. **아크 프롬프트 수정**
+   - 스토리라인의 전개에 맞춰 페이즈 설계
+5. **스토리 구조 프롬프트 수정**
+   - 스토리라인 기반 3부 구조 설계
+
+### 생성 흐름
+```
+사용자 입력:
+  - topic: "이뤄질 수 없는 사랑, 다음 생에선 내가 꼭 찾아가서 내 사랑을 이루겠다"
+  - storyline: "전생에 공녀였던 이사벨을 곁에서 지키던 근위기사 아룬은..."
+  - genre: "판타지+로맨스"
+  - tone: "감성적"
+
+작가 AI가 하는 것:
+  1. 스토리라인 분석 → 핵심 인물(아룬, 이사벨), 구도(전생+빙의+재회), 갈등, 감정 추출
+  2. 세계관 구축 → 스토리라인의 "근위기사", "공국", "제국", "황자" 등 반영
+  3. 캐릭터 설계 → 아룬, 이사벨 + 필요시 추가 캐릭터 자유 생성
+  4. 서사 아크 설계 → 스토리라인의 전개(빙의→적응→재회→결말) 반영
+  5. 스토리 구조 → 3부 구성 + 1화 오프닝 제안
+```
+
+---
+
+## 하드코딩 데이터 제거 (2026-02-09 완료)
+
+### 제거된 하드코딩 데이터
+모든 특정 세계관/캐릭터/스토리 데이터가 코드에서 제거됨. 이제 모든 데이터는 generate-project API에서 동적 생성됨.
+
+### 수정된 파일
+1. `lib/prompts/character-profiles.ts` — CHARACTERS 배열을 빈 배열로
+2. `lib/prompts/character-seeds.ts` — CHARACTER_SEEDS 배열을 빈 배열로
+3. `lib/utils/mock-data.ts` — MOCK_EVENTS 배열을 빈 배열로
+4. `lib/presets/seomun-preset.ts` — 모든 하드코딩 데이터 제거, 빈 기본값으로
+5. `data/world-settings.json` — 빈 기본값으로
+6. `lib/prompts/simulation-prompt.ts` — "판타지/무협" 하드코딩 제거
+7. `lib/prompts/simulation-prompt-v2.ts` — "판타지/무협" 하드코딩 제거, 예시 텍스트 일반화
+8. `lib/prompts/detail-prompt.ts` — "판타지/무협" 하드코딩 제거
+9. `lib/types/index.ts` — 주석의 특정 예시 일반화
+10. `components/create/WorldBuilder.tsx` — 플레이스홀더 텍스트 일반화
+11. `components/create/CharacterBuilder.tsx` — 플레이스홀더 텍스트 일반화
+12. `components/simulation/SimulationControl.tsx` — "서문대륙" 제거
+13. `components/editor/NovelEditor.tsx` — "서문대륙 이야기" 제거
+14. `app/page.tsx` — 프리셋 UI 제거/비활성화
+
+### 남아있어도 되는 것
+- UI 구조, API 로직, 타입 정의, 시스템 규칙
+- 장르/톤 선택 옵션 (사용자가 선택하는 것)
+- 작가 페르소나 (스타일 프리셋, 세계관이 아님)
+- CLAUDE.md, docs/ 폴더 (문서)
+
+### 원칙
+코드에 남아있어도 되는 것: UI 구조, API 로직, 타입 정의, 시스템 규칙
+코드에 남아있으면 안 되는 것: 특정 이야기의 내용
+
+---
+
+## 작가 대화 시스템 버그 수정 (2026-02-09 완료)
+
+### 수정된 버그 목록
+
+#### 1. 에피소드 번호 버그 (1화 요청 → 4화 생성)
+**원인:** `currentEpisodeNumber`가 localStorage에 persist되어 새 프로젝트에서도 이전 값 유지
+**수정:** `app/project/page.tsx`에서 새 프로젝트 시작 시 `reset()` + `setCurrentEpisodeNumber(0)` 호출
+
+#### 2. 캐릭터 1명만 생성되는 문제
+**원인:** 캐릭터 프롬프트가 "2~5명 권장"으로 약하게 설정됨
+**수정:** `app/api/generate-project/route.ts`의 캐릭터 프롬프트에 "절대 규칙" 추가
+```
+**절대 규칙:**
+1. 스토리라인에 언급된 인물은 반드시 포함
+2. **최소 3명 이상** 생성
+3. 다양한 인물 유형 (조력자, 대립 인물, 권력자 등)
+```
+
+#### 3. "평온한 나날" 패딩 시작 문제
+**원인:** `write-episode` 프롬프트에 느슨한 시작 금지 규칙 없음
+**수정:** `app/api/write-episode/route.ts`에 절대 규칙 추가
+```
+## 절대 규칙 (반드시 지킬 것)
+1. **첫 문장부터 임팩트**: "평온한 나날이 계속되었다" 같은 느슨한 시작 금지
+2. **매 단락 긴장 유지**: 일상 묘사가 3문장 이상 연속되면 안 됨
+3. **패딩 금지**: "그 후로 아무 일 없이" 같은 표현 절대 금지
+4. **첫 씬부터 사건**: 1화든 10화든, 첫 장면에서 무언가가 일어나야 함
+```
+
+#### 4. 작가 코멘트 선택지 빈약 문제
+**원인:** 스토리 구조 API가 `recommendedOpening` 필드를 반환하지 않음
+**수정:**
+1. `app/api/generate-project/route.ts` - 스토리 구조를 JSON으로 반환 (part1/2/3, recommendedOpening, openingScene, summary)
+2. `app/project/page.tsx` - 초기 메시지에 전체 구조 + 오프닝 제안 표시
+3. `app/conversation/page.tsx` - 누락된 액션 핸들러 추가 (alt_opening, view_characters, discuss, revise, redirect)
+4. `app/api/author-respond/route.ts` - `alt_opening` 액션용 특화 프롬프트 추가
+
+### 추가 수정 사항
+
+#### JSON 파싱 개선
+**파일:** `app/api/generate-project/route.ts`
+- `tryRepairJson` 함수 강화: 잘린 문자열 닫기, 열린 괄호 자동 닫기
+
+#### 에피소드 저장 누락 수정
+**파일:** `app/conversation/page.tsx`
+- `addEpisode(data.episode)` 호출 추가 - 작성된 에피소드를 스토어에 저장
+
+### 수정된 파일 목록
+1. `app/project/page.tsx` - 초기화 로직 + 향상된 초기 메시지
+2. `app/conversation/page.tsx` - 액션 핸들러 추가 + 에피소드 저장
+3. `app/api/generate-project/route.ts` - 스토리 구조 JSON + JSON 복구 강화
+4. `app/api/write-episode/route.ts` - 패딩 금지 규칙 (이전 세션)
+5. `app/api/author-respond/route.ts` - alt_opening 프롬프트
+
+### 현재 상태
+- 개발 서버 정상 작동 중
+- 모든 수정사항 컴파일 성공
+- 테스트 필요: 새 프로젝트 생성 → 1화 작성 플로우
+
+---
+
+## 2026-02-10 버그 수정
+
+### 에피소드 번호 버그 재발 (1화 → 4화)
+**증상:** 새 프로젝트에서 1화 작성을 요청했는데 4화가 생성됨
+**원인:** `conversation/page.tsx`에서 `currentEpisodeNumber + 1`로 에피소드 번호를 계산했는데, 이 값이 localStorage에서 이전 프로젝트의 값을 복원하여 잔존함. `reset()` 호출 후에도 Zustand persist 미들웨어가 값을 복원하는 race condition 발생.
+
+**해결:**
+- `currentEpisodeNumber` 대신 `episodes.length` 기반으로 다음 에피소드 번호 계산
+- `episodes.length + 1`은 항상 올바른 다음 화 번호를 보장 (스토어의 실제 에피소드 배열 기준)
+
+**수정 파일:** `app/conversation/page.tsx`
+```typescript
+// 변경 전
+episodeNumber: currentEpisodeNumber + 1,
+
+// 변경 후
+const nextEpisodeNumber = episodes.length + 1;
+episodeNumber: nextEpisodeNumber,
+```
+
+### 캐릭터 프롬프트 강화
+**증상:** 여전히 캐릭터가 1명만 생성되는 경우가 발생
+**수정:** `app/api/generate-project/route.ts`의 캐릭터 프롬프트를 더 강화
+- "최소 3명 이상" → "반드시 3명 이상 생성 - 1명이나 2명만 생성하면 실패"
+- 역할 분배 필수 명시 (protagonist 1명, antagonist 최소 1명, neutral 최소 1명)
+- 위반 시 실패라는 강한 경고 추가
+
+### 수정된 파일 목록 (2026-02-10)
+1. `app/conversation/page.tsx` - 에피소드 번호 계산 로직 수정 (`episodes.length` 기반)
+2. `app/api/generate-project/route.ts` - 캐릭터 프롬프트 강화
+
+### 기존 수정 확인 (이미 완료됨)
+- ✅ "평온한 나날" 패딩 금지 규칙 (`write-episode/route.ts`)
+- ✅ 작가 코멘트 선택지 강화 (`author-respond/route.ts`)
+- ✅ 프로젝트 초기화 시 `reset()` + `setCurrentEpisodeNumber(0)` (`project/page.tsx`)
+
+**다음 작업:** 사용자 테스트 후 피드백 반영
+
+---
+
+## 집필 스타일 규칙 구현 (instruction-writing-style.md, 2026-02-10 완료)
+
+### 핵심 변경
+
+1. **시점 선택 UI 추가** (`app/project/page.tsx`)
+   - 프로젝트 생성 화면에 시점 선택 (1인칭 주인공 / 3인칭 작가 / 직접 입력)
+   - `SimplifiedProjectConfig.viewpoint` 필드에 저장
+
+2. **시점별 문체 규칙** (`app/api/write-episode/route.ts`)
+   - 1인칭: "나"로 서술, 주인공 시점 제한, 다른 인물 속마음 추측만 가능
+   - 3인칭: 캐릭터 이름으로 서술, 시점 전환 가능, 인물 없는 장면도 가능
+
+3. **마크다운 서식 금지** (소설 본문)
+   - 볼드, 이탤릭, 제목, 목록, 인용, 코드 블록, 구분선 일체 금지
+   - 순수 텍스트만 사용, 강조는 짧은 문장/단독 행으로 표현
+   - 장면 전환은 빈 줄로만
+
+4. **작가 대화 톤 변경** (`app/api/author-respond/route.ts`)
+   - 존댓말 → 반말 (동등한 창작 파트너)
+   - 보고서 형태 → 이야기하듯이
+   - "제안드립니다" → "이렇게 쓸 거야"
+   - 기술 용어 금지 ("시뮬레이션", "서사 아크" 등)
+   - 확신 있는 태도, 허락 구하지 않음
+
+5. **초기 보고서 톤 변경** (`app/project/page.tsx`)
+   - 마크다운 서식 제거
+   - 작가 말투로 자연스럽게 설명
+
+### 수정된 파일
+1. `lib/types/index.ts` - `viewpoint` 필드 추가
+2. `app/project/page.tsx` - 시점 선택 UI + 초기 보고서 톤 변경
+3. `app/api/write-episode/route.ts` - 시점별 규칙 + 마크다운 금지
+4. `app/api/author-respond/route.ts` - 작가 톤 변경
+
+### 빌드 이슈 해결
+- 프롬프트 내 백틱(```)이 템플릿 리터럴 파싱 에러 유발
+- "코드 블록(백틱) 금지"로 텍스트 대체하여 해결
+
+### 프로덕션 빌드 성공 (2026-02-10)
+
+---
+
+## 세계 우선 아키텍처 구현 (instruction-world-first-architecture.md, 2026-02-10 진행 중)
+
+### 핵심 변경
+
+**기존 방식:** 폼 입력 → 자동 생성 (generate-project API)
+**새 방식:** 대화형 레이어 구축 (7개 레이어를 작가와 함께 하나씩 구축)
+
+### 7개 레이어
+1. **세계 (World)** - 대륙, 도시, 지형
+2. **핵심 규칙 (Core Rules)** - 힘의 체계, 종족, 역사
+3. **씨앗 (Seeds)** - 세력, 종족, 몬스터, NPC
+4. **주인공 서사 (Hero Arc)** - 주인공의 태생, 핵심 서사, 목표
+5. **빌런 서사 (Villain Arc)** - 빌런의 동기, 서사, 주인공과의 관계
+6. **궁극의 떡밥 (Ultimate Mystery)** - 표면/진실, 힌트들
+7. **소설 (Novel)** - 시뮬레이션 + 집필
+
+### 새 타입 (`lib/types/index.ts`)
+- `WorldFirstProject` - 전체 프로젝트 구조
+- `WorldLayer`, `CityInfo` - 세계 레이어
+- `CoreRulesLayer` - 규칙 레이어
+- `SeedsLayer`, `FactionSeedInfo`, `RaceInfo`, `ThreatInfo`, `NPCSeedInfo` - 씨앗 레이어
+- `HeroArcLayer` - 주인공 레이어
+- `VillainArcLayer` - 빌런 레이어
+- `UltimateMysteryLayer` - 떡밥 레이어
+- `LayerName`, `LayerStatus`, `LayerBuildMessage`, `LayerChoice` - 레이어 구축 관련
+
+### 새 스토어 상태 (`lib/store/simulation-store.ts`)
+- `worldFirstProject: WorldFirstProject | null`
+- `layerBuildMessages: LayerBuildMessage[]`
+- 레이어별 업데이트 액션들 (updateWorldLayer, updateCoreRulesLayer, 등)
+- `confirmLayer()`, `setCurrentLayer()`, `initWorldFirstProject()` 등
+
+### 새 API (`app/api/layer-build/route.ts`)
+- 각 레이어별 AI 제안 생성
+- 작가 톤으로 자연스러운 대화
+
+### UI 변경
+
+1. **프로젝트 시작 페이지 (`app/project/page.tsx`)**
+   - 기존 "주제+스토리라인 폼" → "장르/톤/시점/작가 + 초기 아이디어(선택)"
+   - [세계 만들기 시작] 버튼 → 대화 화면으로 이동
+
+2. **대화 화면 (`app/conversation/page.tsx`)** - 전면 재작성
+   - 상단: 레이어 진행 표시 (● 확정 / ◐ 진행 중 / ○ 대기)
+   - 중앙: 작가와 대화 (레이어 제안 → 피드백 → 확정)
+   - 하단: [레이어 확정] [다시 제안] 버튼
+   - 사이드 패널: 7개 레이어별 탭 (확정된 내용 표시)
+
+3. **대화 흐름**
+   - 첫 진입 시 자동으로 "세계" 레이어 제안 생성
+   - 환님이 피드백 → 작가가 수정안 제안
+   - [확정] 클릭 → 다음 레이어로 자동 진행
+   - 모든 레이어 확정 → 1화 자동 집필 시작
+
+### 수정된 파일 목록
+1. `lib/types/index.ts` - 7개 레이어 타입 추가
+2. `lib/store/simulation-store.ts` - WorldFirst 상태 + 액션 추가
+3. `app/api/layer-build/route.ts` - 새 API (레이어별 제안 생성)
+4. `app/project/page.tsx` - 간소화된 시작 폼
+5. `app/conversation/page.tsx` - 레이어 구축 대화 UI
+
+### 프로덕션 빌드 성공 (2026-02-10)
+
+---
+
+## UNIFIED-INSTRUCTION2 기반 보강 (2026-02-10)
+
+UNIFIED-INSTRUCTION2.md 스펙에 맞춰 타입, 스토어, API, UI를 보강했다.
+
+### 타입 보강 (`lib/types/index.ts`)
+
+**새 타입:**
+- `SimulationEvent` - 감각 디테일, 감정 임팩트, 결과, 중요도, 전환점 여부
+- `EpisodeHooks` - 오프닝/클로징 훅
+- `ProjectPhase` - 프로젝트 진행 단계 (`'setup' | 'worldbuilding' | 'simulation' | 'writing'`)
+- `CharacterProfileV2` - UNIFIED2 스펙의 상세 캐릭터 프로필
+
+**기존 타입 확장:**
+- `CharacterSeed` - `name`, `birthCondition`, `initialEnvironment`, `innateTraits[]`, `latentPotentials[]`, `roleTendency` 추가
+- `WorldHistoryEra` - `period`, `events[]`, `worldMood`, `mysteryHint`, `legacy` 추가
+- `DetailedDecade` - `period`, `factionStatus`, `tension`, `worldState`, `events[]` 추가
+- `Episode` - `viewpointCharacter`, `wordCount`, `hooks` 추가
+- `Project` - `currentPhase` 추가
+
+### 스토어 보강 (`lib/store/project-store.ts`)
+
+- `setCurrentPhase(phase: ProjectPhase)` 액션 추가
+- 프로젝트 생성 시 `currentPhase: 'setup'`으로 초기화
+
+### 집필 API 보강
+
+**write-episode (`app/api/write-episode/route.ts`):**
+- 나레이션 위주 규칙 추가:
+  - 대화보다 서술이 훨씬 많아야 함
+  - 한 화에 대화 5~10회 미만
+  - 짧은 왕복 대화 (핑퐁 대화) 금지
+  - 대화 없이 긴장감 만들기: 행동, 감각, 생각으로 장면 채우기
+
+**revise-episode (`app/api/revise-episode/route.ts`):**
+- 동일한 나레이션 규칙 추가
+
+### 세계 타임라인 UI (`components/world-timeline/`)
+
+**새 컴포넌트:**
+- `WorldTimelineOverview.tsx` - 축소 뷰 (전체 역사 가로 타임라인)
+- `DecadeDetailView.tsx` - 확대 뷰 (10년 단위, 세력 상태, 긴장도)
+- `WorldTimelinePanel.tsx` - 통합 패널 (3탭: 전체 역사, 10년 단위, 캐릭터별)
+
+**프로젝트 페이지 통합:**
+- `app/projects/[id]/page.tsx`에 "역사" 탭 추가
+- 사이드 패널에서 세계 역사 타임라인 확인 가능
+
+### 파일 변경 목록
+1. `lib/types/index.ts` - 타입 보강
+2. `lib/store/project-store.ts` - currentPhase + setCurrentPhase 추가
+3. `app/api/write-episode/route.ts` - 나레이션 규칙 추가
+4. `app/api/revise-episode/route.ts` - 나레이션 규칙 추가
+5. `components/world-timeline/WorldTimelineOverview.tsx` - 신규
+6. `components/world-timeline/DecadeDetailView.tsx` - 신규
+7. `components/world-timeline/WorldTimelinePanel.tsx` - 신규
+8. `components/world-timeline/index.ts` - 신규
+9. `app/projects/[id]/page.tsx` - 역사 탭 추가
+10. `components/characters/SeedEditModal.tsx` - 타입 수정
+
+### 빌드 성공 확인 완료
+
+---
+
+## 프로젝트 자동 저장 및 내보내기/불러오기 (2026-02-10)
+
+### 구현 내용
+
+#### 1. 저장됨 표시 (`components/common/SaveIndicator.tsx`)
+- 프로젝트 데이터 변경 시 화면 하단 중앙에 "✓ 저장됨" 토스트 표시
+- 2초 후 자동으로 사라짐
+- Zustand persist 미들웨어가 localStorage에 자동 저장 (기존 기능)
+- 시각적 피드백으로 저장 완료를 사용자에게 알림
+
+#### 2. 프로젝트 목록 개선 (`app/projects/page.tsx`)
+- 프로젝트 카드에 초기 방향(direction)을 제목으로 표시 (2줄 제한)
+- 장르, 톤, 진행 단계, 마지막 작업 시간 표시
+- 호버 시 내보내기(↓) 및 삭제(✕) 버튼 표시
+
+#### 3. 내보내기/불러오기 기능
+**내보내기:**
+- 개별 프로젝트: 카드 호버 → ↓ 버튼 → JSON 파일 다운로드
+- 전체 프로젝트: 헤더의 [전체 내보내기] 버튼 → 모든 프로젝트 JSON 다운로드
+- 파일명: `narrative-{장르}-{날짜}.json` 또는 `narrative-all-projects-{날짜}.json`
+
+**불러오기:**
+- 헤더의 [불러오기] 버튼 → JSON 파일 선택
+- 단일 프로젝트 또는 복수 프로젝트 파일 모두 지원
+- 불러온 프로젝트는 새 ID가 부여되어 중복 방지
+
+### 파일 변경 목록
+1. `components/common/SaveIndicator.tsx` - 신규 (저장됨 토스트)
+2. `components/common/ClientProviders.tsx` - SaveIndicator 추가
+3. `app/globals.css` - fade-in 애니메이션 추가
+4. `app/projects/page.tsx` - 내보내기/불러오기 + 제목 표시
+
+### JSON 내보내기 형식
+```json
+{
+  "version": "1.0",
+  "exportedAt": "2026-02-10T...",
+  "project": { ... }  // 단일 프로젝트
+  // 또는
+  "projects": [ ... ]  // 복수 프로젝트
+}
+```
+
+---
+
+## Hydration 에러 수정 (2026-02-10)
+
+### 문제
+- Zustand persist 미들웨어가 localStorage에서 데이터를 로드
+- 서버 렌더링 시 localStorage가 없어서 빈 데이터
+- 클라이언트 hydration 시 localStorage 데이터와 불일치 발생
+
+### 해결 방법
+각 페이지에 `isHydrated` 상태 추가:
+
+```typescript
+const [isHydrated, setIsHydrated] = useState(false);
+
+useEffect(() => {
+  setIsHydrated(true);
+}, []);
+
+// hydration 전에는 로딩 UI 또는 null 반환
+if (!isHydrated) {
+  return <div>불러오는 중...</div>;
+}
+```
+
+### 수정된 파일
+1. `app/projects/page.tsx` - 프로젝트 목록
+2. `app/projects/[id]/page.tsx` - 프로젝트 대화 화면
+3. `app/projects/[id]/result/page.tsx` - 결과물 페이지
+
+---
+
+## 세계 역사 생성 기능 구현 (2026-02-10)
+
+### 문제
+- [시작하자] 클릭 시 "세계 역사를 생성하고 있어..." 메시지만 표시되고 실제 API 호출 없음
+- `start_simulation` 액션에 TODO 주석만 있었음
+
+### 해결 방법
+`app/projects/[id]/page.tsx`의 `start_simulation` 액션에 실제 구현 추가:
+
+1. `/api/generate-world-history` API 호출
+2. 60초 타임아웃 (AbortController)
+3. 에러 시 메시지 + [다시 시도] 버튼
+4. 성공 시 `setWorldHistory()`, `setCurrentPhase('simulation')`
+5. [시뮬레이션 시작], [역사 탭에서 확인] 버튼 표시
+
+### 추가된 액션
+- `run_simulation`: 캐릭터 시뮬레이션 (TODO)
+- `view_history`: 사이드 패널 "역사" 탭으로 전환
+
+---
+
+## 작가 대화 AI 호출 버그 수정 (2026-02-10)
+
+### 문제
+- 모든 레이어 확정 후 (`currentLayer === 'novel'`) 어떤 메시지를 보내도 하드코딩된 응답만 반환
+- API에서 `layer === 'novel'`일 때 Claude API 호출 없이 바로 반환
+
+### 해결 방법
+
+#### API 수정 (`app/api/author-chat/route.ts`)
+1. `action: 'conversation'` 타입 추가
+2. `conversationHistory`, `currentPhase` 파라미터 추가
+3. `buildConversationPrompt()` 함수 추가:
+   - 프로젝트 정보 (장르, 톤, 시점, 현재 단계)
+   - 완성된 세계 요약 (대륙, 주인공, 빌런, 떡밥)
+   - 최근 대화 기록 (마지막 10개)
+   - 환님의 현재 메시지
+4. `layer === 'novel'`일 때도 실제 Claude API 호출
+
+#### 클라이언트 수정 (`app/projects/[id]/page.tsx`)
+- novel 단계에서 `action: 'conversation'` 사용
+- 대화 기록(`conversationHistory`) 전달
+- 현재 단계(`currentPhase`) 전달
+
+### 이제 동작하는 것
+- 어떤 질문이든 맥락에 맞는 실제 AI 응답
+- 세계/캐릭터/스토리에 대한 질문에 만든 세계 기반으로 답변
+- 진행 상황 문의에 현재 단계와 다음 할 일 안내
+
+### 프로덕션 빌드 성공 (2026-02-10)
+
+---
+
+## 에피소드 편집 기능 구현 (2026-02-10)
+
+1화가 작성됐을 때 환님이 할 수 있는 3가지 액션을 구현했다.
+
+### 구현된 기능
+
+#### 1. 부분 수정 (Partial Edit)
+- 본문에서 텍스트를 드래그로 선택하면 "이 부분 수정" 버튼 표시
+- 선택한 텍스트 + 수정 방향 입력 → `/api/revise-episode` (mode: 'partial')
+- 해당 부분만 수정되고 나머지는 유지
+
+#### 2. 전체 피드백 (Full Feedback)
+- 본문 아래 "전체 피드백" 버튼 → textarea 입력
+- 피드백 내용 전송 → `/api/revise-episode` (mode: 'full')
+- 전체 본문을 피드백에 맞춰 수정
+
+#### 3. 채택 → 다음 화 (Adopt)
+- "채택 → 다음 화" 버튼 클릭
+- 현재 에피소드 status를 'final'로 변경
+- 다음 화 작성 여부 선택지 표시
+
+### 새 컴포넌트
+
+**`components/episode/EpisodeViewer.tsx`**
+- 에피소드 본문 표시 (소설 스타일 렌더링)
+- 텍스트 선택 감지 (window.getSelection)
+- 부분 수정 팝업 UI
+- 전체 피드백 입력 UI
+- 채택 버튼
+
+### API 수정
+
+**`app/api/revise-episode/route.ts`**
+- `mode: 'partial' | 'full'` 파라미터 추가
+- `selectedText` 파라미터 (partial 모드용)
+- 부분 수정: 선택한 텍스트만 수정 후 전체 본문에 반영
+- 전체 수정: 피드백 반영하여 전체 재작성
+
+### 페이지 수정
+
+**`app/projects/[id]/page.tsx`**
+- `updateEpisode`, `addEpisode` 스토어 함수 추가
+- `editingEpisodeId`, `isRevising` 상태 추가
+- `handlePartialEdit`, `handleFullFeedback`, `handleAdopt` 핸들러 구현
+- `write_next_episode`, `revert_adopt` 액션 핸들러 추가
+- EpisodeViewer 조건부 렌더링 (currentLayer === 'novel' && editingEpisodeId)
+- 사이드 패널 원고 탭에서 에피소드 클릭으로 편집 모드 전환
+
+### 흐름
+
+```
+1화 작성 완료
+  ↓
+EpisodeViewer 표시 (본문 읽기)
+  ↓
+┌──────────────────────────────────────────┐
+│ [텍스트 선택] → "이 부분 수정" → 부분 수정 │
+│ [전체 피드백] → 피드백 입력 → 전체 수정   │
+│ [채택 → 다음 화] → 확정 → 다음 화 여부   │
+└──────────────────────────────────────────┘
+  ↓
+[다음 화 작성] → 2화 집필 시작
+```
+
+### 프로덕션 빌드 성공 (2026-02-10)
+
+---
+
+## 에피소드 분량 및 문체 개선 (2026-02-10)
+
+### 문제
+- 에피소드 분량이 약 1,900자로 너무 짧음
+- 네이버 웹소설 연재 기준 최소 5,000자 이상 필요
+- "늪이다. 발이 빠진다." 같은 짧은 문장만 나열되는 문체
+
+### 해결
+
+#### 1. 분량 지시 강화 (`app/api/write-episode/route.ts`)
+```
+분량 절대 규칙:
+- 반드시 5,000자 이상 7,000자 이하로 작성
+- 장면을 충분히 묘사
+- 인물의 내면을 깊이 파고듦
+- 감각적 디테일을 풍부하게
+- 서술과 묘사를 충분히 넣을 것
+```
+
+#### 2. 분량 검증 및 자동 재시도
+- 응답 받은 후 글자 수 체크
+- 4,000자 미만이면 보강 요청하여 재생성
+- 최대 2회 재시도
+- 보강 프롬프트:
+  - 장면 묘사 구체화 (공간, 빛, 소리, 냄새, 온도)
+  - 인물 내면 심리 확장
+  - 동작 섬세하게 풀어쓰기
+  - 배경/분위기 묘사 추가
+  - 과거 회상/생각 삽입
+
+#### 3. 문체 리듬 규칙 추가
+```
+- 짧은 문장과 긴 서술을 리듬감 있게 섞을 것
+- 액션은 짧게, 심리/묘사는 길게
+- 한 장면 안에서 시각/청각/촉각/후각 중 최소 2가지 감각 포함
+
+잘못된 예: "늪이다. 발이 빠진다. 진흙탕이다."
+올바른 예: "늪이다. 발목까지 빠져든 진흙이 차갑게 살을 물었다.
+           썩은 풀냄새가 코를 찔렀고, 어디선가 뻐꾸기가 울었다..."
+```
+
+#### 4. API 설정 변경
+- `max_tokens`: 8000 → 16000 (분량 증가 대응)
+- 상수 정의:
+  - `MIN_CHAR_COUNT = 4000` (재시도 기준)
+  - `TARGET_MIN_CHAR = 5000`
+  - `TARGET_MAX_CHAR = 7000`
+  - `MAX_RETRY = 2`
+
+### 수정된 파일
+- `app/api/write-episode/route.ts` - 전면 재작성
+
+---
+
+## 상업 웹소설 집필 규칙 적용 (instruction-commercial-writing.md, 2026-02-10)
+
+`write-episode` API에 상업 웹소설 집필 규칙 전체 반영.
+
+### 에피소드 번호별 미션 분기
+
+| 화 | 미션 |
+|----|------|
+| 1화 | 상황 + 갈등 + 미스터리. 시작이지 끝이 아님. |
+| 2화 | 주인공 능력 힌트. 완전히 보여주지 않음. |
+| 3화 | 사건 폭발. 쌓은 긴장이 터짐. |
+| 4화 | 연결과 확장. 5화 중독 포인트 향해 준비. |
+| 5화 | 중독 포인트 확정. 정체성/목표/매력/세계규칙 확립. |
+| 6화+ | 매 화 보상 + 클리프행어 유지. |
+
+### 반영된 규칙
+
+1. **캐릭터 상품성**
+   - 팔리는 주인공: 능력/결단력/명확한 감정/강한 욕망/적극적 행동
+   - 금지: 수동적/고민만/평범함 강조/늦은 성장
+
+2. **회차 보상 구조**
+   - 정보/감정/능력/전개 보상 중 1개 이상 필수
+   - 아무 일도 안 일어나는 화 = 독자 이탈
+
+3. **클리프행어 필수**
+   - 마지막 2줄이 다음 화 클릭 결정
+   - 위기/발견/반전/선언 중 택1
+
+4. **속도감과 리듬**
+   - 한 장면 800자 이내
+   - 사건 없이 1,500자 금지
+   - 긴 묘사 → 긴 심리 → 짧은 행동 → 임팩트
+
+5. **대사 규칙**
+   - 짧고 성격 드러나고 정보+감정 포함
+   - 대사 전후에 표정/태도/동작 필수
+
+6. **감정 타이밍**
+   - 사건 → 반응(1줄) → 행동(1줄)
+   - 작가가 울면 독자 안 움. 작가가 참으면 독자가 움.
+
+7. **반복 제거**
+   - 한 문단에 같은 단어 2회 금지
+   - 같은 정보 2번 설명 금지
+
+---
+
+## 집필 프롬프트 강화 + 환님 수정 반영 시스템 (2026-02-10)
+
+### 1. 집필 전 설계 과정
+
+write-episode API에 장면 설계 + 자가 수정 지시 추가:
+
+```
+## 집필 전 설계 과정 (반드시 따를 것)
+
+1. 먼저 이 화의 장면 구성을 설계하세요
+2. 각 장면에서 주인공의 심리 상태를 정리하세요
+3. 그 심리가 행동으로 드러나도록 집필하세요
+
+## 자가 수정 (작성 후 점검)
+
+다음 특징이 보이면 스스로 수정하세요:
+- 너무 균일한 문장 길이 → 짧고 긴 문장 섞기
+- 감정 직접 서술 → 행동과 감각으로 보여주기
+- 정돈된 나열 구조 → 리듬감 있게 재배치
+- 설명적 서술 → 사건 속에서 자연스럽게
+
+약간 거친 초고 느낌을 유지하세요.
+```
+
+### 2. 환님 직접 편집 모드
+
+**Episode 타입 확장:**
+```typescript
+interface Episode {
+  content: string;           // 작가가 쓴 원본
+  editedContent?: string;    // 환님이 수정한 본문
+  // ...
+}
+
+// 헬퍼 함수
+getEpisodeFinalContent(episode): string  // editedContent ?? content
+```
+
+**EpisodeViewer 편집 기능:**
+- 더블클릭 또는 [직접 편집] 버튼 → textarea 모드 전환
+- ESC로 취소, [수정 완료] 버튼으로 저장
+- 수정본은 `editedContent`에 저장
+- 헤더에 "수정됨" 배지 표시
+
+### 3. 이전 화 최종본 반영
+
+다음 화 집필 시 환님 수정본을 프롬프트에 포함:
+
+```
+## 이전 화 최종본 (환님 수정 반영)
+
+아래는 {N}화의 전체 본문입니다.
+환님이 직접 수정한 최종본입니다.
+이 문체, 톤, 리듬을 유지하면서 다음 화를 이어서 작성하세요.
+환님의 수정 방향성을 반영하세요.
+
+{previousEpisodeFinalContent}
+```
+
+### 변경된 파일
+
+1. `lib/types/index.ts`
+   - `Episode.editedContent` 필드 추가
+   - `getEpisodeFinalContent()` 헬퍼 함수 추가
+
+2. `app/api/write-episode/route.ts`
+   - 장면 설계 + 자가 수정 지시 추가
+   - 이전 화 최종본(3000자) 프롬프트에 포함
+   - `getEpisodeFinalContent` 사용
+
+3. `components/episode/EpisodeViewer.tsx`
+   - `editedContent`, `onDirectEdit` props 추가
+   - 편집 모드 (textarea) 구현
+   - "수정됨" 배지 표시
+
+4. `app/projects/[id]/page.tsx`
+   - `handleDirectEdit` 핸들러 추가
+   - EpisodeViewer에 새 props 전달
+
+---
+
+## 4단계 사고 시스템 적용 (instruction-writing-system-final.md, 2026-02-10)
+
+`write-episode` API를 4단계 사고 시스템으로 전면 교체.
+
+### 핵심 변경
+
+**기존 방식:** 에피소드별 미션 + 상업 규칙 나열
+**새 방식:** 3명의 전문가가 협업하는 작가실 모델
+
+### 4단계 사고 시스템
+
+| 단계 | 역할 | 핵심 작업 |
+|------|------|----------|
+| 1단계 | 감정 감독 (Emotion Director) | 감정 시작점/변화점/폭발점 설계. 감정은 행동으로만 드러냄 |
+| 2단계 | 장면 감독 (Scene Director) | 카메라 시점, 공간/소리/움직임, 긴장 곡선 설계 |
+| 3단계 | 초고 집필 (Writer) | 설명 최소, 행동 중심. 문장 리듬 패턴 적용 |
+| 4단계 | 수정 (Editor) | AI 느낌 제거, 거친 초고 느낌 유지 |
+
+**핵심 규칙:**
+- 중간 과정(1~4단계 메모)은 절대 출력하지 않음
+- 최종 소설 본문만 출력
+
+### 새 프롬프트 구조
+
+```
+[작가 페르소나]
+[시점]
+[세계관] - confirmedLayers.world, coreRules, seeds
+[주인공/빌런] - confirmedLayers.heroArc, villainArc
+[궁극의 떡밥] - confirmedLayers.ultimateMystery
+[캐릭터 현재 상태] - characterProfiles
+[이전 화 — 환님 최종본] - previousEpisode.finalContent
+[기억 잔상] - characterMemories (행동에만 반영, 직접 언급 금지)
+[이 화 정보] - episodeNumber, authorDirection
+[초반 5화 가이드라인]
+
+=== 1단계: 감정 감독 ===
+=== 2단계: 장면 감독 ===
+=== 3단계: 초고 집필 ===
+=== 4단계: 수정 ===
+
+=== 출력 규칙 ===
+```
+
+### API 파라미터 확장
+
+```typescript
+// POST /api/write-episode
+{
+  episodeNumber: number;
+  projectConfig: {...};
+  confirmedLayers?: {
+    world?: string;
+    coreRules?: string;
+    seeds?: string;
+    heroArc?: string;
+    villainArc?: string;
+    ultimateMystery?: string;
+  };
+  characterProfiles?: string;   // 캐릭터 현재 상태
+  characterMemories?: string;   // 기억 잔상 (경험 요약)
+  previousEpisodes?: Episode[];
+  authorDirection?: string;     // 이 화 방향
+}
+```
+
+### 문체 규칙 요약
+
+| 규칙 | 설명 |
+|------|------|
+| 감정 표현 | "슬펐다" 금지 → "손이 떨렸다. 이를 깨물었다." |
+| 문장 리듬 | 짧은 3~5개 연속 → 긴 1~2개 → 임팩트 단독행 |
+| 대사 | 짧고 강렬, 전후에 표정/태도/동작 필수 |
+| 왕복 대사 | A 한줄 B 한줄 반복 금지 |
+| 기억 잔상 | 이전 경험을 행동/망설임에만 반영 |
+| 마크다운 | 절대 금지 (볼드, 이탤릭, 제목, 목록 등) |
+| 분량 | 5,000자 이상 7,000자 이하 |
+| 클리프행어 | 매 화 마지막 2줄 (위기/발견/반전/선언) |
+| 보상 | 매 화 1개 이상 (정보/감정/능력/전개) |
+
+### 분량 검증
+
+- 4,000자 미만 시 자동 재생성 (최대 2회)
+- 재생성 프롬프트에 장면 묘사/내면 서술 보강 지시
+
+### 변경된 파일
+
+1. `app/api/write-episode/route.ts` - 4단계 사고 시스템 프롬프트로 전면 교체
+
+### 프로덕션 빌드 성공 (2026-02-10)
+
+---
+
+## 피드백 누적 학습 시스템 (2026-02-11 완료)
+
+환님의 피드백을 자동 분류하여 누적 저장하고, 다음 화 집필 시 반영하는 시스템.
+
+### 핵심 개념
+
+1. **피드백 감지**: 사용자 메시지에서 피드백 키워드 감지
+2. **피드백 분류**: 1회성 vs 누적형 자동 분류
+3. **누적 저장**: `feedbackHistory` 배열에 저장 (localStorage persist)
+4. **집필 반영**: 다음 화 프롬프트에 누적 피드백 포함
+
+### 피드백 유형 (FeedbackType)
+
+| 유형 | 키워드 예시 | 누적 여부 |
+|------|-------------|----------|
+| style | 문체, 톤, 스타일, 말투, 표현, 묘사 | 대부분 누적 |
+| character | 캐릭터, 인물, 성격 | 상황에 따라 |
+| plot | 전개, 스토리, 플롯 | 상황에 따라 |
+| pacing | 속도, 페이스, 빠르다, 느리다 | 대부분 누적 |
+| general | 기타 | 상황에 따라 |
+
+### 누적형 vs 1회성 판단
+
+**누적형 피드백 (isRecurring: true)**
+- 문체/스타일/톤 관련 피드백
+- 페이스 관련 피드백
+- "항상", "계속", "매번", "전반적" 키워드 포함
+- 특정 장면 언급 없음
+
+**1회성 피드백 (isRecurring: false)**
+- "이 장면", "여기서", "이 부분" 등 특정 위치 언급
+- 설정 오류, 모순 지적
+- 특정 대사/행동 수정 요청
+
+### 프롬프트 반영 형식
+
+```
+### 환님 피드백 (누적 - 반드시 반영)
+
+[문체/스타일]
+- 대사가 너무 길어. 더 짧게 써줘.
+- 톤이 너무 밝아. 어두운 분위기 유지해.
+
+[페이스]
+- 전개가 너무 빨라. 여유 있게 써줘.
+
+※ 위 피드백은 환님이 이전 화에서 요청한 수정사항입니다. 이번 화에도 반드시 반영하세요.
+```
+
+### 타입 정의
+
+```typescript
+// lib/types/index.ts
+export type FeedbackType = 'style' | 'character' | 'plot' | 'pacing' | 'general';
+
+export interface Feedback {
+  id: string;
+  episodeNumber: number;
+  type: FeedbackType;
+  content: string;
+  isRecurring: boolean;
+  timestamp: string;
+}
+
+// Project 인터페이스에 추가
+feedbackHistory: Feedback[];
+```
+
+### 스토어 액션
+
+```typescript
+// lib/store/project-store.ts
+addFeedback: (feedback: Omit<Feedback, 'id' | 'timestamp'>) => void;
+getRecurringFeedback: () => Feedback[];
+```
+
+### 수정된 파일
+
+1. `lib/types/index.ts` - Feedback 타입 추가 (이전 세션)
+2. `lib/store/project-store.ts` - addFeedback, getRecurringFeedback 구현
+3. `app/api/author-chat/route.ts`:
+   - `classifyFeedback()` - AI 없이 키워드 기반 분류
+   - `isFeedbackMessage()` - 피드백 메시지 감지
+   - `buildFeedbackSection()` - 누적 피드백을 프롬프트로 변환
+   - 응답에 `feedback` 필드 포함 (분류 정보)
+   - 집필 프롬프트에 `recurringFeedback` 포함
+4. `app/api/write-episode/route.ts`:
+   - `buildFeedbackSection()` - 누적 피드백을 프롬프트로 변환
+   - `buildUserPrompt`에 `recurringFeedback` 파라미터 추가
+   - POST 핸들러에서 `recurringFeedback` 추출 및 전달
+5. `app/projects/[id]/page.tsx`:
+   - `addFeedback`, `getRecurringFeedback` 스토어 훅 추가
+   - API 호출 시 `recurringFeedback` 전달
+   - 응답에서 피드백 감지 시 `addFeedback()` 호출
+   - `handleFullFeedback`에서 문체 피드백 자동 저장
+
+### 데이터 흐름
+
+```
+1. 환님이 피드백 메시지 전송
+   예: "대사가 너무 길어. 짧게 써줘."
+
+2. author-chat API에서 감지 및 분류
+   → isFeedbackMessage() = true
+   → classifyFeedback() = { type: 'style', isRecurring: true }
+
+3. 응답에 feedback 필드 포함
+   → { message: "...", feedback: { type: 'style', isRecurring: true, ... } }
+
+4. 클라이언트에서 저장
+   → addFeedback({ type: 'style', content: '...', isRecurring: true })
+   → localStorage에 persist
+
+5. 다음 화 집필 요청 시
+   → getRecurringFeedback() = [{ type: 'style', content: '대사가 너무 길어...' }]
+   → API 호출에 recurringFeedback 포함
+
+6. write-episode에서 프롬프트에 반영
+   → buildFeedbackSection(recurringFeedback) 호출
+   → "### 환님 피드백 (누적)" 섹션 추가
+```
+
+### 컴파일 성공 확인 (2026-02-11)
