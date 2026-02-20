@@ -1471,6 +1471,9 @@ export interface WorldBible {
   tokenCount?: number;         // 토큰 수 추적 (2,000 이내 목표)
 }
 
+// 클리프행어 타입 (7유형)
+export type CliffhangerType = 'crisis' | 'revelation' | 'choice' | 'reversal' | 'awakening' | 'past_connection' | 'character_entrance';
+
 // Level 2: 에피소드 로그 (Episode Log) — 매 화 자동 생성
 export interface EpisodeLog {
   episodeNumber: number;
@@ -1505,7 +1508,7 @@ export interface EpisodeLog {
   };
 
   // 클리프행어 (7유형 중)
-  cliffhangerType: 'crisis' | 'revelation' | 'choice' | 'reversal' | 'awakening' | 'past_connection' | 'character_entrance';
+  cliffhangerType: CliffhangerType;
   cliffhangerContent: string; // "문이 열렸다. 그 뒤에 서 있는 건—"
 
   // 미해결 긴장

@@ -2409,3 +2409,122 @@ const [showFactCheckModal, setShowFactCheckModal] = useState(false);
 ```
 
 ### 빌드 성공 확인 (2026-02-20)
+
+---
+
+## 일관성 엔진 Phase 3 (2026-02-20 완료)
+
+고급 추적 및 분석 시스템 구현.
+
+### 1. 캐릭터 일관성 추적 (`lib/utils/character-consistency.ts`)
+
+**핵심 기능:**
+- 캐릭터의 core 성격과 에피소드 행동 비교
+- 급격한 성격 변화 감지 (연속 화에서 상반된 변화)
+- 핵심 성격과의 모순 감지
+
+**타입:**
+```typescript
+interface CharacterConsistencyWarning {
+  characterName: string;
+  warningType: 'sudden_change' | 'contradicts_core' | 'out_of_character';
+  severity: 'minor' | 'major' | 'critical';
+  episodeNumber: number;
+  description: string;
+  coreValue: string;
+  episodeValue: string;
+  suggestion: string;
+}
+
+interface CharacterTrajectory {
+  characterName: string;
+  core: string;
+  desire: string;
+  weakness: string;
+  stateHistory: { episodeNumber: number; state: string; change?: string }[];
+  currentState: string;
+  consistencyScore: number;  // 0-100
+  warnings: CharacterConsistencyWarning[];
+}
+```
+
+**함수:**
+- `trackCharacterConsistency()`: 경고 생성
+- `buildCharacterTrajectory()`: 캐릭터별 궤적 생성
+- `getCharacterConsistencyDashboard()`: 대시보드 데이터
+
+### 2. 관계 변화 그래프 (`lib/utils/relationship-tracker.ts`)
+
+**핵심 기능:**
+- EpisodeLog의 relationshipChanges 기반 관계망 구축
+- 관계 수치화 (-100 ~ +100)
+- 트렌드 분석 (improving/declining/stable/volatile)
+
+**타입:**
+```typescript
+interface RelationshipEdge {
+  source: string;
+  target: string;
+  currentValue: number;  // -100 ~ +100
+  history: { episodeNumber: number; change: string; delta: number }[];
+  label?: string;  // 친밀/중립/갈등/적대 등
+}
+
+interface RelationshipTrend {
+  pair: string;
+  trend: 'improving' | 'declining' | 'stable' | 'volatile';
+  recentChanges: number[];
+  prediction: string;
+}
+```
+
+**함수:**
+- `buildRelationshipGraph()`: 관계 그래프 빌드
+- `analyzeRelationshipTrends()`: 트렌드 분석
+- `getRelationshipSummary()`: 요약 데이터
+- `getCharacterRelationships()`: 특정 캐릭터의 관계망
+
+### 3. 감정 로드맵 비교 (`lib/utils/emotion-roadmap.ts`)
+
+**핵심 기능:**
+- 100화 기준 감정 로드맵 템플릿 생성
+- 에피소드 로그에서 실제 감정 추론
+- 계획 vs 실제 비교 및 이탈 감지
+
+**타입:**
+```typescript
+type EmotionType = 'excitement' | 'tension' | 'relief' | 'sadness' | 'anger' | 'joy' | 'fear' | 'curiosity' | 'satisfaction' | 'frustration';
+
+interface EmotionComparison {
+  episodeNumber: number;
+  planned: { emotion: EmotionType; intensity: number } | null;
+  actual: { emotion: EmotionType; intensity: number } | null;
+  deviation: number;
+  status: 'on_track' | 'minor_deviation' | 'major_deviation' | 'off_track';
+  suggestion?: string;
+}
+```
+
+**함수:**
+- `generateDefaultEmotionRoadmap()`: 100화 기본 로드맵 생성
+- `extractActualEmotionProgress()`: 실제 감정 진행 추출
+- `compareEmotionProgress()`: 계획 vs 실제 비교
+- `getEmotionRoadmapDashboard()`: 대시보드 데이터
+- `getEmotionCurveData()`: 시각화용 데이터
+
+### 타입 추가 (`lib/types/index.ts`)
+
+```typescript
+export type CliffhangerType = 'crisis' | 'revelation' | 'choice' | 'reversal' | 'awakening' | 'past_connection' | 'character_entrance';
+```
+
+### 수정된 파일
+
+| 파일 | 변경 내용 |
+|------|----------|
+| `lib/utils/character-consistency.ts` | 신규 - 캐릭터 일관성 추적 |
+| `lib/utils/relationship-tracker.ts` | 신규 - 관계 변화 그래프 |
+| `lib/utils/emotion-roadmap.ts` | 신규 - 감정 로드맵 비교 |
+| `lib/types/index.ts` | CliffhangerType 타입 추가 |
+
+### 일관성 엔진 전체 완료 (Phase 1-3)
