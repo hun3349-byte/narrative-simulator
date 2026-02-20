@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { AUTHOR_PERSONA_PRESETS } from '@/lib/presets/author-personas';
-import type { Episode, Feedback, FeedbackType, MonologueTone } from '@/lib/types';
+import type { Episode, Feedback, FeedbackType, MonologueTone, ActiveContext } from '@/lib/types';
 import { getEpisodeFinalContent } from '@/lib/types';
+import { activeContextToPrompt } from '@/lib/utils/active-context';
 
 // 누적 피드백을 프롬프트용 문자열로 변환
 function buildFeedbackSection(recurringFeedback?: Feedback[]): string {
@@ -240,7 +241,7 @@ JSON으로만 응답:
 }`;
 }
 
-// 유저 프롬프트 (가변 - 세계관 + 캐릭터 + 이전 화 + 방향)
+// 유저 프롬프트 (가변 - 세계관 + 캐릭터 + 이전 화 + 방향 + Active Context)
 function buildUserPrompt(params: {
   episodeNumber: number;
   confirmedLayers?: {
@@ -259,6 +260,7 @@ function buildUserPrompt(params: {
   previousContent?: string;
   previousCharCount?: number;
   recurringFeedback?: Feedback[];
+  activeContext?: ActiveContext;
 }): string {
   const {
     episodeNumber,
@@ -270,7 +272,8 @@ function buildUserPrompt(params: {
     isRetry,
     previousContent,
     previousCharCount,
-    recurringFeedback
+    recurringFeedback,
+    activeContext
   } = params;
 
   const lastEpisode = previousEpisodes?.[previousEpisodes.length - 1];
@@ -289,8 +292,19 @@ function buildUserPrompt(params: {
   // 누적 피드백 섹션
   const feedbackSection = buildFeedbackSection(recurringFeedback);
 
+  // Active Context가 있으면 사용, 없으면 기존 방식
+  const activeContextSection = activeContext
+    ? activeContextToPrompt(activeContext)
+    : '';
+
   return `${retryInstruction}${feedbackSection}
 ## 제${episodeNumber}화 작성 요청
+
+${activeContextSection ? `
+=== 일관성 엔진 (Active Context) ===
+${activeContextSection}
+=== 일관성 엔진 끝 ===
+` : ''}
 
 ### 세계관
 ${confirmedLayers?.world || '(미설정)'}
@@ -451,6 +465,7 @@ export async function POST(req: NextRequest) {
       authorDirection,
       seeds,
       recurringFeedback,
+      activeContext,
     } = body;
 
     const persona = AUTHOR_PERSONA_PRESETS.find(
@@ -474,6 +489,7 @@ export async function POST(req: NextRequest) {
       previousEpisodes,
       authorDirection,
       recurringFeedback,
+      activeContext,
     });
 
     let result = await generateEpisode(systemPrompt, userPrompt, episodeNumber);
@@ -498,6 +514,7 @@ export async function POST(req: NextRequest) {
         previousContent: result.episode.content,
         previousCharCount: result.episode.charCount,
         recurringFeedback,
+        activeContext,
       });
 
       result = await generateEpisode(systemPrompt, userPrompt, episodeNumber);

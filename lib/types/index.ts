@@ -1394,6 +1394,10 @@ export interface Project {
   // 시뮬레이션 상태
   simulationStatus: 'idle' | 'running' | 'paused' | 'complete';
   simulationProgress?: number;
+
+  // 일관성 엔진 (100화 개연성 유지)
+  worldBible?: WorldBible;
+  episodeLogs?: EpisodeLog[];
 }
 
 // 환님 피드백 (누적 학습용)
@@ -1415,4 +1419,194 @@ export interface NewProjectConfig {
   viewpoint: 'first_person' | 'third_person' | string;
   authorPersonaId: string;
   direction?: string;               // 초기 방향 (선택)
+}
+
+// === 일관성 엔진 (100화 개연성 유지 시스템) ===
+
+// Level 1: 세계관 성경 (World Bible) — 절대 불변, 매 집필 프롬프트에 포함
+export interface WorldBible {
+  // 세계 — 100자 이내 요약
+  worldSummary: string;
+
+  // 핵심 규칙 — 변하면 안 되는 것들
+  rules: {
+    powerSystem: string;       // 힘의 체계 요약
+    magicTypes?: string;       // 마법/능력 종류와 상성
+    socialStructure: string;   // 사회 구조
+    keyHistory: string;        // 핵심 역사 3~5줄
+    contradiction?: string;    // 세계의 핵심 모순
+  };
+
+  // 캐릭터 핵심 — 변하면 안 되는 것들
+  characters: {
+    [name: string]: {
+      core: string;            // "태민. 28세. 짐꾼. 울지 못한다."
+      desire: string;          // 표면적 욕망
+      deficiency?: string;     // 내면적 결핍
+      weakness: string;        // 치명적 약점
+      currentState: string;    // 매 화 업데이트
+    }
+  };
+
+  // 세력 관계 — 변하면 안 되는 것들
+  factions: string;
+
+  // 떡밥 목록 — 상태만 업데이트
+  breadcrumbs: {
+    [name: string]: {
+      truth: string;           // 실제 진실
+      status: 'hidden' | 'hinted' | 'suspected' | 'revealed';
+      lastMentionedEp: number;
+      plannedRevealEp?: number; // 예정 공개 시점
+    }
+  };
+
+  // 예언/전설 원문 — 변하면 안 됨
+  prophecy?: string;
+  legends?: string[];
+
+  // 메타
+  generatedAt: string;
+  lastUpdatedAt: string;
+  tokenCount?: number;         // 토큰 수 추적 (2,000 이내 목표)
+}
+
+// Level 2: 에피소드 로그 (Episode Log) — 매 화 자동 생성
+export interface EpisodeLog {
+  episodeNumber: number;
+
+  // 한 줄 요약 (50자 이내)
+  summary: string;
+
+  // 장면 목록
+  scenes: {
+    location: string;
+    characters: string[];
+    event: string;
+  }[];
+
+  // 캐릭터 상태 변화
+  characterChanges: {
+    [name: string]: string;   // "태민: 왼팔 부상, 능력 징후 발견"
+  };
+
+  // 관계 변화
+  relationshipChanges: {
+    who: string;
+    withWhom: string;
+    change: string;           // "영호: 태민에 대한 신뢰 +20"
+  }[];
+
+  // 떡밥 운용
+  breadcrumbActivity: {
+    advanced: string[];       // 진전된 떡밥
+    newlyPlanted: string[];   // 새로 심은 떡밥
+    hintGiven: string[];      // 힌트 준 떡밥
+  };
+
+  // 클리프행어 (7유형 중)
+  cliffhangerType: 'crisis' | 'revelation' | 'choice' | 'reversal' | 'awakening' | 'past_connection' | 'character_entrance';
+  cliffhangerContent: string; // "문이 열렸다. 그 뒤에 서 있는 건—"
+
+  // 미해결 긴장
+  unresolvedTensions: string[];
+
+  // 독백 톤 (돌려쓰기 추적)
+  dominantMonologueTone: MonologueTone;
+
+  // 빌드업 위치
+  miniArcPosition: number;    // 5화 미니아크 중 몇 번째 화인지 (1~5)
+  buildupPhase: 'early' | 'middle' | 'late';
+
+  // 생성 메타
+  generatedAt: string;
+}
+
+// Level 3: 활성 컨텍스트 (Active Context) — 집필 시 자동 조립
+export interface ActiveContext {
+  // Level 1 — 항상 포함 (~2,000토큰)
+  worldBible: WorldBible;
+
+  // 직전 3화 로그 — 항상 포함 (~900토큰)
+  recentLogs: EpisodeLog[];   // [N-3, N-2, N-1]
+
+  // 직전 화 본문 마지막 500자 — 연결성 유지
+  previousEnding: string;
+
+  // 활성 떡밥 — 현재 운용 중인 떡밥만 (~300토큰)
+  activeBreadcrumbs: {
+    name: string;
+    status: 'hidden' | 'hinted' | 'suspected';
+    lastMentioned: number;
+    nextAction?: string;       // "이번 화에서 힌트 줘야 함"
+  }[];
+
+  // 미해결 긴장 목록 (~200토큰)
+  unresolvedTensions: string[];
+
+  // 캐릭터 현재 상태 (~300토큰)
+  characterStates: {
+    [name: string]: string;
+  };
+
+  // 이번 화 메타 지시
+  episodeMeta: {
+    episodeNumber: number;
+    miniArcPosition: number;  // 5화 아크 중 몇 번째
+    buildupPhase: 'early' | 'middle' | 'late';
+    targetEmotion?: string;   // 독자 감정 로드맵에서 이번 화 감정
+    forbiddenCliffhanger?: string; // 직전 화에 쓴 유형 (반복 금지)
+    forbiddenTone?: MonologueTone; // 직전 화 지배 톤 (반복 금지)
+    suggestedCliffhanger?: string; // 추천 유형
+    suggestedTone?: MonologueTone; // 추천 톤
+    breadcrumbInstructions?: string[]; // 떡밥 관련 지시
+  };
+
+  // 환님 피드백 가이드 (~200토큰)
+  feedbackGuide: string[];
+}
+
+// 팩트 체커 결과
+export type FactCheckSeverity = 'minor' | 'major' | 'critical';
+
+export interface FactCheckContradiction {
+  field: string;              // 위반 필드 ("캐릭터: 태민의 나이")
+  worldBibleValue: string;    // World Bible에 기록된 값
+  episodeValue: string;       // 에피소드에서 발견된 값
+  severity: FactCheckSeverity;
+  suggestion: string;         // 수정 제안
+}
+
+export interface FactCheckResult {
+  episodeNumber: number;
+  hasContradictions: boolean;
+  contradictions: FactCheckContradiction[];
+  overallSeverity: FactCheckSeverity | 'none';
+  shouldRewrite: boolean;     // critical이면 true
+  checkedAt: string;
+}
+
+// 떡밥 추적 경고
+export type BreadcrumbWarningType =
+  | 'forgotten'        // 10화 이상 방치
+  | 'too_long_hidden'  // 40화 넘도록 hidden 상태
+  | 'delayed'          // 예정 시점 5화 이상 지연
+  | 'overdue';         // 회수 예정 시점 초과
+
+export interface BreadcrumbWarning {
+  breadcrumbName: string;
+  warningType: BreadcrumbWarningType;
+  lastMentionedEp: number;
+  currentEp: number;
+  plannedRevealEp?: number;
+  message: string;
+  suggestedAction: string;    // "이번 화에서 힌트 줘야 함"
+}
+
+// 일관성 엔진 상태
+export interface ConsistencyEngineState {
+  worldBible: WorldBible | null;
+  episodeLogs: EpisodeLog[];
+  lastFactCheck: FactCheckResult | null;
+  breadcrumbWarnings: BreadcrumbWarning[];
 }

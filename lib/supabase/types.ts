@@ -26,6 +26,8 @@ export interface ProjectRow {
   current_layer: string;
   current_phase: string;
   world_history: WorldHistoryJson | null;
+  world_bible: WorldBibleJson | null;
+  episode_logs: EpisodeLogJson[];
   episodes: EpisodeJson[];
   feedback_history: FeedbackJson[];
   messages: MessageJson[];
@@ -47,6 +49,8 @@ export interface ProjectInsert {
   current_layer: string;
   current_phase: string;
   world_history?: WorldHistoryJson | null;
+  world_bible?: WorldBibleJson | null;
+  episode_logs?: EpisodeLogJson[];
   episodes?: EpisodeJson[];
   feedback_history?: FeedbackJson[];
   messages?: MessageJson[];
@@ -66,6 +70,8 @@ export interface ProjectUpdate {
   current_layer?: string;
   current_phase?: string;
   world_history?: WorldHistoryJson | null;
+  world_bible?: WorldBibleJson | null;
+  episode_logs?: EpisodeLogJson[];
   episodes?: EpisodeJson[];
   feedback_history?: FeedbackJson[];
   messages?: MessageJson[];
@@ -101,6 +107,71 @@ export interface LayerStatusJson {
 export interface WorldHistoryJson {
   eras: unknown[];
   detailedDecades: unknown[];
+}
+
+// 일관성 엔진용 타입
+export interface WorldBibleJson {
+  worldSummary: string;
+  rules: {
+    powerSystem: string;
+    magicTypes?: string;
+    socialStructure: string;
+    keyHistory: string;
+    contradiction?: string;
+  };
+  characters: {
+    [name: string]: {
+      core: string;
+      desire: string;
+      deficiency?: string;
+      weakness: string;
+      currentState: string;
+    }
+  };
+  factions: string;
+  breadcrumbs: {
+    [name: string]: {
+      truth: string;
+      status: 'hidden' | 'hinted' | 'suspected' | 'revealed';
+      lastMentionedEp: number;
+      plannedRevealEp?: number;
+    }
+  };
+  prophecy?: string;
+  legends?: string[];
+  generatedAt: string;
+  lastUpdatedAt: string;
+  tokenCount?: number;
+}
+
+export interface EpisodeLogJson {
+  episodeNumber: number;
+  summary: string;
+  scenes: {
+    location: string;
+    characters: string[];
+    event: string;
+  }[];
+  characterChanges: {
+    [name: string]: string;
+  };
+  relationshipChanges: {
+    who: string;
+    withWhom: string;
+    change: string;
+  }[];
+  breadcrumbActivity: {
+    advanced: string[];
+    newlyPlanted: string[];
+    hintGiven: string[];
+  };
+  cliffhangerType: string;
+  cliffhangerContent: string;
+  unresolvedTensions: string[];
+  dominantMonologueTone: string;
+  miniArcPosition: number;
+  buildupPhase: string;
+  generatedAt: string;
 }
 
 export interface EpisodeJson {

@@ -1,6 +1,6 @@
 import { supabase, isSupabaseEnabled, getBrowserUserId } from './client';
 import type { SharedProjectData } from './types';
-import type { Project } from '../types';
+import type { Project, WorldBible, EpisodeLog } from '../types';
 
 // 프로젝트를 Supabase 형식으로 변환 (사용자 스키마에 맞춤)
 function projectToSupabase(project: Project) {
@@ -64,6 +64,23 @@ function projectToSupabase(project: Project) {
       content: fb.content,
       isRecurring: fb.isRecurring,
       timestamp: fb.timestamp,
+    })) || [],
+    // 일관성 엔진 데이터
+    world_bible: project.worldBible || null,
+    episode_logs: project.episodeLogs?.map(log => ({
+      episodeNumber: log.episodeNumber,
+      summary: log.summary,
+      scenes: log.scenes,
+      characterChanges: log.characterChanges,
+      relationshipChanges: log.relationshipChanges,
+      breadcrumbActivity: log.breadcrumbActivity,
+      cliffhangerType: log.cliffhangerType,
+      cliffhangerContent: log.cliffhangerContent,
+      unresolvedTensions: log.unresolvedTensions,
+      dominantMonologueTone: log.dominantMonologueTone,
+      miniArcPosition: log.miniArcPosition,
+      buildupPhase: log.buildupPhase,
+      generatedAt: log.generatedAt,
     })) || [],
     created_at: project.createdAt,
     updated_at: new Date().toISOString(),
@@ -153,6 +170,9 @@ export async function loadProjectsFromSupabase(): Promise<{ projects: Project[];
         profiles: {},
         npcPool: { npcs: [], maxActive: 30 },
         simulationStatus: 'idle' as const,
+        // 일관성 엔진 데이터
+        worldBible: row.world_bible as WorldBible | undefined,
+        episodeLogs: (row.episode_logs || []) as EpisodeLog[],
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       };

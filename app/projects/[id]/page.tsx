@@ -108,6 +108,8 @@ export default function ProjectConversationPage() {
     setCharacters,
     setSeeds,
     setProfiles,
+    setWorldBible,
+    addEpisodeLog,
   } = useProjectStore();
 
   // Hydration 상태 - 클라이언트에서 localStorage 로드 완료 전까지 로딩 표시
@@ -519,20 +521,53 @@ export default function ProjectConversationPage() {
       });
       generateLayerProposal(project.currentLayer);
     } else if (action === 'start_simulation') {
-      // 세계 역사 생성 시작
+      // 세계 역사 + World Bible 생성 시작
       setIsLoading(true);
       setLastError(null);
 
       addMessage({
         role: 'author',
-        content: '세계 역사를 생성하고 있어...',
+        content: 'World Bible을 생성하고 세계 역사를 준비하고 있어...',
       });
 
-      const generateWorldHistory = async () => {
+      const generateWorldBibleAndHistory = async () => {
         const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 60000); // 60초 타임아웃
+        const timeoutId = setTimeout(() => controller.abort(), 120000); // 120초 타임아웃 (두 API 호출)
 
         try {
+          // 1. World Bible 생성
+          const worldBibleResponse = await fetch('/api/generate-world-bible', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              layers: {
+                world: project.layers.world.data,
+                coreRules: project.layers.coreRules.data,
+                seeds: project.layers.seeds.data,
+                heroArc: project.layers.heroArc.data,
+                villainArc: project.layers.villainArc.data,
+                ultimateMystery: project.layers.ultimateMystery.data,
+              },
+            }),
+            signal: controller.signal,
+          });
+
+          if (!worldBibleResponse.ok) {
+            console.warn('World Bible 생성 실패, 계속 진행');
+          } else {
+            const worldBibleData = await worldBibleResponse.json();
+            if (worldBibleData.worldBible) {
+              setWorldBible(worldBibleData.worldBible);
+              console.log('World Bible 생성 완료:', worldBibleData.worldBible.tokenCount, '토큰');
+            }
+          }
+
+          // 2. 세계 역사 생성
+          addMessage({
+            role: 'author',
+            content: '세계 역사를 생성하고 있어...',
+          });
+
           const response = await fetch('/api/generate-world-history', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -604,7 +639,7 @@ export default function ProjectConversationPage() {
         }
       };
 
-      generateWorldHistory();
+      generateWorldBibleAndHistory();
     } else if (action === 'run_simulation') {
       // 캐릭터 시뮬레이션 시작
       setIsLoading(true);

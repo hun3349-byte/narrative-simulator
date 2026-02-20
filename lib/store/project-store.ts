@@ -24,6 +24,8 @@ import type {
   NPCPool,
   ProjectPhase,
   Feedback,
+  WorldBible,
+  EpisodeLog,
 } from '@/lib/types';
 import { AUTHOR_PERSONA_PRESETS } from '@/lib/presets/author-personas';
 import {
@@ -97,6 +99,12 @@ interface ProjectStore {
 
   // 프로젝트 단계 (UNIFIED2)
   setCurrentPhase: (phase: ProjectPhase) => void;
+
+  // 일관성 엔진 (100화 개연성 유지)
+  setWorldBible: (worldBible: WorldBible) => void;
+  updateWorldBible: (updates: Partial<WorldBible>) => void;
+  addEpisodeLog: (log: EpisodeLog) => void;
+  updateEpisodeLog: (episodeNumber: number, updates: Partial<EpisodeLog>) => void;
 
   // 유틸리티
   reset: () => void;
@@ -531,6 +539,94 @@ export const useProjectStore = create<ProjectStore>()(
               ? { ...p, currentPhase: phase, updatedAt: new Date().toISOString() }
               : p
           ),
+        });
+      },
+
+      // === 일관성 엔진 ===
+
+      setWorldBible: (worldBible) => {
+        const { currentProjectId, projects } = get();
+        if (!currentProjectId) return;
+
+        set({
+          projects: projects.map(p =>
+            p.id === currentProjectId
+              ? { ...p, worldBible, updatedAt: new Date().toISOString() }
+              : p
+          ),
+        });
+        // Supabase 동기화
+        get().syncCurrentProjectToSupabase();
+      },
+
+      updateWorldBible: (updates) => {
+        const { currentProjectId, projects } = get();
+        if (!currentProjectId) return;
+
+        set({
+          projects: projects.map(p => {
+            if (p.id !== currentProjectId || !p.worldBible) return p;
+            return {
+              ...p,
+              worldBible: {
+                ...p.worldBible,
+                ...updates,
+                lastUpdatedAt: new Date().toISOString(),
+              },
+              updatedAt: new Date().toISOString(),
+            };
+          }),
+        });
+        // Supabase 동기화
+        get().syncCurrentProjectToSupabase();
+      },
+
+      addEpisodeLog: (log) => {
+        const { currentProjectId, projects } = get();
+        if (!currentProjectId) return;
+
+        set({
+          projects: projects.map(p => {
+            if (p.id !== currentProjectId) return p;
+            const episodeLogs = p.episodeLogs || [];
+            // 같은 화수의 기존 로그가 있으면 교체
+            const existingIndex = episodeLogs.findIndex(
+              l => l.episodeNumber === log.episodeNumber
+            );
+            if (existingIndex >= 0) {
+              const newLogs = [...episodeLogs];
+              newLogs[existingIndex] = log;
+              return { ...p, episodeLogs: newLogs, updatedAt: new Date().toISOString() };
+            }
+            return {
+              ...p,
+              episodeLogs: [...episodeLogs, log],
+              updatedAt: new Date().toISOString(),
+            };
+          }),
+        });
+        // Supabase 동기화
+        get().syncCurrentProjectToSupabase();
+      },
+
+      updateEpisodeLog: (episodeNumber, updates) => {
+        const { currentProjectId, projects } = get();
+        if (!currentProjectId) return;
+
+        set({
+          projects: projects.map(p => {
+            if (p.id !== currentProjectId) return p;
+            const episodeLogs = p.episodeLogs || [];
+            return {
+              ...p,
+              episodeLogs: episodeLogs.map(log =>
+                log.episodeNumber === episodeNumber
+                  ? { ...log, ...updates }
+                  : log
+              ),
+              updatedAt: new Date().toISOString(),
+            };
+          }),
         });
       },
 

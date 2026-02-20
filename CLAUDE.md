@@ -2067,3 +2067,265 @@ if (codeBlockMatch) {
 ### 커밋
 - `6c66cb1`: write-episode 프롬프트 v2 강화
 - `3f0fda9`: write-episode 마크다운 코드 블록 파싱 수정
+
+---
+
+## 100화 일관성 유지 메모리 시스템 (2026-02-20 완료)
+
+100화 이상의 장편 웹소설에서 설정 일관성을 유지하기 위한 3-tier 메모리 시스템.
+
+### 핵심 구조
+
+#### 3-Tier 메모리 아키텍처
+```
+Tier 1: World Bible (~2,000 토큰)
+  └─ 매 프롬프트에 항상 포함
+  └─ 세계관 요약, 규칙, 캐릭터 핵심, 세력, 떡밥 상태
+
+Tier 2: Episode Log (~300 토큰/화)
+  └─ 매 화 종료 시 자동 생성 (Haiku)
+  └─ 장면, 캐릭터 변화, 관계 변화, 떡밥 활동
+
+Tier 3: Active Context (동적 조합)
+  └─ 집필 시점에 자동 조립
+  └─ World Bible + 최근 3화 Log + 마지막 500자 + 떡밥 경고
+```
+
+### 새 타입 (`lib/types/index.ts`)
+
+```typescript
+// World Bible - 압축된 세계관 (~2,000 토큰)
+interface WorldBible {
+  worldSummary: string;           // 한 줄 세계관
+  rules: {
+    powerSystem: string;          // 힘의 체계
+    magicTypes?: string;          // 마법 유형
+    socialStructure: string;      // 사회 구조
+    keyHistory: string;           // 핵심 역사
+    contradiction?: string;       // 세계 모순
+  };
+  characters: {
+    [name: string]: {
+      core: string;               // 핵심 정체성
+      desire: string;             // 욕망
+      deficiency?: string;        // 결핍
+      weakness: string;           // 약점
+      currentState: string;       // 현재 상태
+    };
+  };
+  factions: string;               // 세력 관계
+  breadcrumbs: {
+    [name: string]: {
+      truth: string;              // 떡밥의 진실
+      status: 'hidden' | 'hinted' | 'suspected' | 'revealed';
+      lastMentionedEp: number;
+      plannedRevealEp?: number;
+    };
+  };
+  prophecy?: string;              // 예언
+  legends?: string[];             // 전설
+  generatedAt: string;
+  lastUpdatedAt: string;
+  tokenCount?: number;
+}
+
+// Episode Log - 화별 요약 (~300 토큰)
+interface EpisodeLog {
+  episodeNumber: number;
+  summary: string;                // 핵심 요약
+  scenes: {
+    location: string;
+    characters: string[];
+    event: string;
+  }[];
+  characterChanges: { [name: string]: string };
+  relationshipChanges: {
+    who: string;
+    withWhom: string;
+    change: string;
+  }[];
+  breadcrumbActivity: {
+    advanced: string[];           // 진전된 떡밥
+    newlyPlanted: string[];       // 새로 심은 떡밥
+    hintGiven: string[];          // 힌트 준 떡밥
+  };
+  cliffhangerType: CliffhangerType;
+  cliffhangerContent: string;
+  unresolvedTensions: string[];
+  dominantMonologueTone: MonologueTone;
+  miniArcPosition: number;        // 5화 미니아크 내 위치
+  buildupPhase: 'early' | 'middle' | 'late';
+  generatedAt: string;
+}
+
+// Active Context - 집필 시 조립
+interface ActiveContext {
+  worldBible: WorldBible;
+  recentLogs: EpisodeLog[];       // 최근 3화
+  previousEnding: string;         // 마지막 500자
+  activeBreadcrumbs: {
+    name: string;
+    status: 'hidden' | 'hinted' | 'suspected';
+    lastMentioned: number;
+    nextAction?: string;
+  }[];
+  unresolvedTensions: string[];
+  characterStates: { [name: string]: string };
+  episodeMeta: { ... };
+  feedbackGuide: string[];
+}
+
+// Fact Check Result - 모순 검출
+interface FactCheckResult {
+  episodeNumber: number;
+  hasContradictions: boolean;
+  contradictions: FactCheckContradiction[];
+  overallSeverity: 'none' | 'minor' | 'major' | 'critical';
+  shouldRewrite: boolean;
+  checkedAt: string;
+}
+
+// Breadcrumb Warning - 떡밥 경고
+interface BreadcrumbWarning {
+  breadcrumbName: string;
+  warningType: 'forgotten' | 'too_long_hidden' | 'delayed' | 'overdue';
+  lastMentionedEp: number;
+  currentEp: number;
+  plannedRevealEp?: number;
+  message: string;
+  suggestedAction: string;
+}
+```
+
+### 새 API
+
+#### `/api/generate-world-bible` (POST)
+- 레이어 1~6을 World Bible로 압축
+- Haiku 사용, ~2,000 토큰 목표
+- 프로젝트 시작 시 1회 생성
+
+#### `/api/generate-episode-log` (POST)
+- 에피소드 완료 후 자동 생성
+- Haiku 사용, ~300 토큰
+- 장면, 변화, 떡밥 활동 추출
+
+#### `/api/fact-check` (POST)
+- World Bible vs 새 에피소드 비교
+- 5가지 검출 대상:
+  1. 캐릭터 설정 오류
+  2. 세계관 설정 오류
+  3. 떡밥 누설 오류
+  4. 사망자 부활
+  5. 시간축 오류
+- 심각도: minor / major / critical
+
+### 유틸리티 함수
+
+#### `lib/utils/active-context.ts`
+```typescript
+// Active Context 조립
+buildActiveContext(params): ActiveContext
+
+// 프롬프트 문자열로 변환
+activeContextToPrompt(context): string
+
+// 최근 N화 로그 가져오기
+getRecentLogs(logs, currentEp, count): EpisodeLog[]
+
+// 이전 화 마지막 500자
+getPreviousEnding(episodes, currentEp): string
+
+// 활성 떡밥 (revealed 제외)
+getActiveBreadcrumbs(worldBible, currentEp): ActiveBreadcrumb[]
+```
+
+#### `lib/utils/breadcrumb-tracker.ts`
+```typescript
+// 떡밥 경고 생성
+trackBreadcrumbs(breadcrumbs, currentEp): BreadcrumbWarning[]
+
+// 경고 기준:
+// - forgotten: 10화 이상 방치
+// - too_long_hidden: 40화 넘도록 hidden
+// - delayed: 예정 시점 5화 이상 초과
+// - overdue: 예정 시점 초과 (delayed 미만)
+
+// 경고 → 지시문 변환
+generateBreadcrumbInstructions(warnings): string[]
+
+// 떡밥 상태 요약
+summarizeBreadcrumbStatus(breadcrumbs): Summary
+
+// Episode Log로 World Bible 업데이트
+updateBreadcrumbsFromLog(worldBible, activity, currentEp): WorldBible
+
+// 대시보드 데이터
+getBreadcrumbDashboardData(worldBible, currentEp): DashboardData
+```
+
+### 스토어 확장 (`lib/store/project-store.ts`)
+
+```typescript
+// 새 액션
+setWorldBible: (worldBible: WorldBible) => void;
+updateWorldBible: (updates: Partial<WorldBible>) => void;
+addEpisodeLog: (log: EpisodeLog) => void;
+updateEpisodeLog: (episodeNumber: number, updates: Partial<EpisodeLog>) => void;
+```
+
+### Supabase 스키마 변경
+
+```sql
+ALTER TABLE projects ADD COLUMN world_bible jsonb;
+ALTER TABLE projects ADD COLUMN episode_logs jsonb DEFAULT '[]';
+```
+
+### 집필 API 통합 (`app/api/write-episode/route.ts`)
+
+- `activeContext` 파라미터 추가
+- `activeContextToPrompt()` 호출하여 프롬프트에 포함
+- World Bible + 최근 3화 + 떡밥 경고가 자동 주입
+
+### 프로젝트 페이지 통합 (`app/projects/[id]/page.tsx`)
+
+- 시뮬레이션 시작 시 World Bible 자동 생성
+- `generateWorldBibleAndHistory()` 함수로 통합
+
+### 데이터 흐름
+
+```
+1. 프로젝트 시작 → World Bible 생성 (1회)
+   └─ layers 1-6 → Haiku 압축 → ~2,000 토큰
+
+2. 매 화 집필
+   └─ buildActiveContext() 호출
+   └─ World Bible + 최근 3화 Log + 떡밥 경고 조립
+   └─ activeContextToPrompt() → 프롬프트에 주입
+
+3. 매 화 완료
+   └─ /api/generate-episode-log 호출
+   └─ Episode Log 저장 (Supabase + localStorage)
+   └─ 떡밥 상태 업데이트
+
+4. Fact Check (선택)
+   └─ /api/fact-check 호출
+   └─ 모순 발견 시 경고 표시
+```
+
+### 수정된 파일 목록
+
+| 파일 | 변경 내용 |
+|------|----------|
+| `lib/types/index.ts` | WorldBible, EpisodeLog, ActiveContext, FactCheck 타입 추가 |
+| `lib/supabase/types.ts` | world_bible, episode_logs 필드 추가 |
+| `lib/supabase/db.ts` | 새 필드 저장/로드 로직 |
+| `lib/store/project-store.ts` | setWorldBible, addEpisodeLog 등 액션 |
+| `lib/utils/active-context.ts` | 신규 - Active Context 조립 |
+| `lib/utils/breadcrumb-tracker.ts` | 신규 - 떡밥 추적/경고 |
+| `app/api/generate-world-bible/route.ts` | 신규 - World Bible 생성 |
+| `app/api/generate-episode-log/route.ts` | 신규 - Episode Log 생성 |
+| `app/api/fact-check/route.ts` | 신규 - 모순 검출 |
+| `app/api/write-episode/route.ts` | Active Context 주입 |
+| `app/projects/[id]/page.tsx` | World Bible 자동 생성 |
+
+### 빌드 성공 확인 (2026-02-20)
