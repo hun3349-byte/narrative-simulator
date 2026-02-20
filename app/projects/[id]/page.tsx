@@ -472,17 +472,27 @@ export default function ProjectConversationPage() {
             ],
           });
         } else if (data.message) {
+          // 레이어 데이터 유효성 확인: 객체이고 내용이 있어야 함
+          const hasValidLayer = data.layer &&
+            typeof data.layer === 'object' &&
+            Object.keys(data.layer).length > 0;
+
+          // novel 단계가 아니고 레이어 관련 대화중이면 항상 확정 버튼 표시
+          const showLayerButtons = project.currentLayer !== 'novel' &&
+            project.currentPhase !== 'writing' &&
+            (hasValidLayer || project.layers[project.currentLayer as keyof typeof project.layers]?.status === 'drafting');
+
           addMessage({
             role: 'author',
             content: data.message,
-            layerData: data.layer,
-            choices: data.layer ? [
+            layerData: hasValidLayer ? data.layer : undefined,
+            choices: showLayerButtons ? [
               { label: '확정', action: 'confirm_layer' },
               { label: '다시 제안해줘', action: 'regenerate' },
             ] : undefined,
           });
 
-          if (data.layer && project.currentLayer !== 'novel') {
+          if (hasValidLayer && project.currentLayer !== 'novel') {
             updateLayer(project.currentLayer as Exclude<LayerName, 'novel'>, data.layer);
           }
 

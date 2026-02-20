@@ -1211,20 +1211,56 @@ export async function POST(req: NextRequest) {
       const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
-        return NextResponse.json({ ...parsed, isEpisode: false });
+
+        // message 정제: JSON 키 이름이나 구조가 포함되어 있으면 제거
+        let cleanMessage = parsed.message || '';
+        // JSON 형태의 문자열 제거 (중괄호로 시작하거나, key: value 패턴)
+        if (cleanMessage.includes('{') || /"\w+":\s*["{[]/.test(cleanMessage)) {
+          // message 안에 JSON이 섞여 있으면 첫 줄이나 마지막 자연어 부분만 추출
+          const lines = cleanMessage.split('\n').filter((line: string) => {
+            const trimmed = line.trim();
+            // JSON 시작/끝 또는 key-value 패턴이 아닌 줄만 유지
+            return trimmed &&
+                   !trimmed.startsWith('{') &&
+                   !trimmed.startsWith('}') &&
+                   !trimmed.startsWith('"') &&
+                   !/^\w+:/.test(trimmed) &&
+                   !/^"?\w+"?\s*:/.test(trimmed);
+          });
+          cleanMessage = lines.join('\n').trim() || '제안을 확인해봐.';
+        }
+
+        // layer가 있고 의미 있는 데이터가 있는지 확인
+        const hasValidLayer = parsed.layer &&
+          typeof parsed.layer === 'object' &&
+          Object.keys(parsed.layer).length > 0;
+
+        return NextResponse.json({
+          message: cleanMessage,
+          layer: hasValidLayer ? parsed.layer : null,
+          isEpisode: false
+        });
       }
     } catch (parseError) {
       console.error('Layer JSON parsing error:', parseError);
-      // 파싱 실패 시 텍스트에서 최대한 정보 추출
-      return NextResponse.json({
-        message: text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim(),
-        layer: null,
-        isEpisode: false,
-      });
+    }
+
+    // 파싱 실패 시 텍스트에서 message만 추출 시도
+    // JSON 구조 제거하고 자연어만 남김
+    let fallbackMessage = text
+      .replace(/```json\s*/g, '')
+      .replace(/```\s*/g, '')
+      .replace(/\{[\s\S]*\}/g, '')  // JSON 객체 전체 제거
+      .replace(/"message"\s*:\s*"([^"]+)"/g, '$1')  // "message": "..." 에서 내용만 추출
+      .trim();
+
+    // 빈 문자열이면 기본 메시지
+    if (!fallbackMessage) {
+      fallbackMessage = '피드백을 반영해서 다시 제안할게. 잠깐만.';
     }
 
     return NextResponse.json({
-      message: text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim(),
+      message: fallbackMessage,
       layer: null,
       isEpisode: false,
     });
