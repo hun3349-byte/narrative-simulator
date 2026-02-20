@@ -1898,3 +1898,68 @@ mergeSupabaseProjects: (projects: Project[]) => void; // 로컬과 병합
 - Supabase 연결 실패해도 localStorage 사용 가능
 - `isSupabaseEnabled` 플래그로 조건부 동기화
 - 에러는 console.warn으로 기록 (사용자 차단 없음)
+
+---
+
+## 레이어 제안 표시 방식 수정 (2026-02-20 완료)
+
+### 문제
+- 작가가 레이어를 제안할 때 JSON 데이터가 대화창에 그대로 노출됨
+- 복사한 것처럼 보이는 불자연스러운 UX
+
+### 해결
+
+#### 1. message 필드 자연어 규칙 강화 (`app/api/author-chat/route.ts`)
+모든 레이어 프롬프트의 JSON 응답 형식에 자연어 예시 추가:
+
+```json
+{
+  "message": "자연어로만 2-3문장. 예: '황폐한 대륙이야. 북쪽엔 얼어붙은 산맥이...'",
+  "layer": { ... }
+}
+```
+
+적용된 레이어:
+- world: "황폐한 대륙이야. 북쪽엔 얼어붙은 산맥이..."
+- coreRules: "이 세계의 힘은 마나야. 쓸수록 수명이 깎여..."
+- seeds: "이 세계엔 세 세력이 있어. 서로 견제하면서..."
+- heroArc: "주인공은 버림받은 아이야. 복수가 아니라 인정받고 싶은 거지..."
+- villainArc: "빌런은 비극적인 인물이야. 세계가 그를 괴물로 만들었어..."
+- ultimateMystery: "이 이야기의 진짜 비밀은 말이야... 독자들 소름 끼칠 거야..."
+
+각 JSON 블록 아래에 경고 추가:
+```
+※ message에는 JSON 구조나 데이터 나열 절대 금지. 친구에게 말하듯 자연스럽게.
+```
+
+#### 2. 마크다운 코드 블록 파싱 개선
+Claude가 응답을 ` ```json ... ``` `로 감싸는 경우 처리:
+
+```typescript
+// 마크다운 코드 블록 제거
+let cleanText = text;
+const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+if (codeBlockMatch) {
+  cleanText = codeBlockMatch[1].trim();
+}
+
+const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+if (jsonMatch) {
+  const parsed = JSON.parse(jsonMatch[0]);
+  return NextResponse.json({ ...parsed, isEpisode: false });
+}
+```
+
+### 결과
+- **대화창**: 작가의 자연스러운 말만 표시 ("이 세계의 진짜 비밀은 말이야...")
+- **사이드 패널**: JSON 레이어 데이터 표시 (세계관, 캐릭터 정보 등)
+- **하단 버튼**: [확정] [다시 제안해줘]
+
+### 수정된 파일
+1. `app/api/author-chat/route.ts`
+   - 모든 레이어 프롬프트에 message 자연어 예시 추가
+   - JSON 파싱 로직에 마크다운 코드 블록 제거 추가
+
+### 커밋
+- `e12e46d`: 레이어 제안 시 message 필드 자연어 규칙 강화
+- `8be2ea1`: 마크다운 코드 블록 JSON 파싱 개선
