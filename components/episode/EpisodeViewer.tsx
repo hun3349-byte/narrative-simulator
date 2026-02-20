@@ -2,6 +2,20 @@
 
 import { useState, useRef, useEffect } from 'react';
 
+// 모바일 감지 훅
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  return isMobile;
+}
+
 interface EpisodeViewerProps {
   episodeNumber: number;
   title: string;
@@ -42,6 +56,9 @@ export default function EpisodeViewer({
 
   const contentRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  // 모바일 감지
+  const isMobile = useIsMobile();
 
   // 표시할 본문 (수정본 우선)
   const displayContent = editedContent ?? content;
@@ -220,12 +237,16 @@ export default function EpisodeViewer({
           {/* 선택 팝업 */}
           {selectionPosition && !showPartialEditInput && !isFinal && (
             <div
-              className="absolute z-10 -translate-x-1/2 animate-fade-in"
-              style={{ top: selectionPosition.top, left: selectionPosition.left }}
+              className={`z-10 animate-fade-in ${
+                isMobile
+                  ? 'fixed bottom-24 left-4 right-4 flex justify-center'
+                  : 'absolute -translate-x-1/2'
+              }`}
+              style={isMobile ? {} : { top: selectionPosition.top, left: selectionPosition.left }}
             >
               <button
                 onClick={() => setShowPartialEditInput(true)}
-                className="rounded-lg bg-seojin px-3 py-1.5 text-sm font-medium text-white shadow-lg hover:bg-seojin/90"
+                className="rounded-lg bg-seojin px-4 py-2 text-sm font-medium text-white shadow-lg hover:bg-seojin/90 min-h-[44px]"
               >
                 이 부분 수정
               </button>
@@ -235,12 +256,16 @@ export default function EpisodeViewer({
           {/* 부분 수정 입력창 */}
           {showPartialEditInput && (
             <div
-              className="absolute z-20 w-80 -translate-x-1/2 rounded-lg border border-seojin/30 bg-base-card p-3 shadow-xl"
-              style={{ top: (selectionPosition?.top || 0) + 50, left: selectionPosition?.left || 0 }}
+              className={`z-20 rounded-lg border border-seojin/30 bg-base-card p-3 shadow-xl ${
+                isMobile
+                  ? 'fixed bottom-24 left-4 right-4'
+                  : 'absolute w-80 -translate-x-1/2'
+              }`}
+              style={isMobile ? {} : { top: (selectionPosition?.top || 0) + 50, left: selectionPosition?.left || 0 }}
             >
               <div className="mb-2 text-xs text-text-muted">선택한 부분:</div>
               <div className="mb-3 max-h-20 overflow-y-auto rounded bg-base-tertiary p-2 text-sm text-text-secondary">
-                "{selectedText.length > 100 ? selectedText.slice(0, 100) + '...' : selectedText}"
+                &ldquo;{selectedText.length > 100 ? selectedText.slice(0, 100) + '...' : selectedText}&rdquo;
               </div>
               <input
                 type="text"
@@ -249,7 +274,7 @@ export default function EpisodeViewer({
                 onKeyDown={(e) => e.key === 'Enter' && handlePartialEditSubmit()}
                 placeholder="수정 방향 입력 (예: 더 짧게, 삭제, 감정 추가)"
                 autoFocus
-                className="w-full rounded-lg border border-base-border bg-base-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-seojin focus:outline-none"
+                className="w-full rounded-lg border border-base-border bg-base-primary px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:border-seojin focus:outline-none min-h-[44px]"
               />
               <div className="mt-2 flex justify-end gap-2">
                 <button
@@ -258,14 +283,14 @@ export default function EpisodeViewer({
                     setSelectedText('');
                     setSelectionPosition(null);
                   }}
-                  className="rounded px-3 py-1 text-sm text-text-muted hover:text-text-primary"
+                  className="rounded px-3 py-2 text-sm text-text-muted hover:text-text-primary min-h-[44px]"
                 >
                   취소
                 </button>
                 <button
                   onClick={handlePartialEditSubmit}
                   disabled={!partialEditFeedback.trim()}
-                  className="rounded bg-seojin px-3 py-1 text-sm text-white hover:bg-seojin/90 disabled:opacity-50"
+                  className="rounded bg-seojin px-4 py-2 text-sm text-white hover:bg-seojin/90 disabled:opacity-50 min-h-[44px]"
                 >
                   수정 요청
                 </button>
@@ -301,14 +326,14 @@ export default function EpisodeViewer({
               <div className="mt-2 flex justify-end gap-2">
                 <button
                   onClick={() => setShowFullFeedbackInput(false)}
-                  className="rounded px-3 py-1 text-sm text-text-muted hover:text-text-primary"
+                  className="rounded px-3 py-2 text-sm text-text-muted hover:text-text-primary min-h-[44px]"
                 >
                   취소
                 </button>
                 <button
                   onClick={handleFullFeedbackSubmit}
                   disabled={!fullFeedback.trim() || isLoading}
-                  className="rounded bg-seojin px-3 py-1 text-sm text-white hover:bg-seojin/90 disabled:opacity-50"
+                  className="rounded bg-seojin px-4 py-2 text-sm text-white hover:bg-seojin/90 disabled:opacity-50 min-h-[44px]"
                 >
                   피드백 전송
                 </button>
@@ -317,29 +342,31 @@ export default function EpisodeViewer({
           )}
 
           {/* 버튼들 */}
-          <div className="flex items-center justify-between">
-            <div className="text-xs text-text-muted">
+          <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+            <div className="hidden md:block text-xs text-text-muted">
               더블클릭하면 직접 편집 | 드래그하면 부분 수정
             </div>
-            <div className="flex gap-2">
-              <button
-                onClick={enterEditMode}
-                disabled={isLoading}
-                className="rounded-lg border border-base-border px-4 py-2 text-sm text-text-secondary hover:bg-base-tertiary disabled:opacity-50"
-              >
-                직접 편집
-              </button>
-              <button
-                onClick={() => setShowFullFeedbackInput(true)}
-                disabled={isLoading || showFullFeedbackInput}
-                className="rounded-lg border border-base-border px-4 py-2 text-sm text-text-secondary hover:bg-base-tertiary disabled:opacity-50"
-              >
-                전체 피드백
-              </button>
+            <div className="flex flex-col md:flex-row gap-2 w-full md:w-auto">
+              <div className="flex gap-2">
+                <button
+                  onClick={enterEditMode}
+                  disabled={isLoading}
+                  className="flex-1 md:flex-none rounded-lg border border-base-border px-4 py-2 text-sm text-text-secondary hover:bg-base-tertiary disabled:opacity-50 min-h-[44px]"
+                >
+                  직접 편집
+                </button>
+                <button
+                  onClick={() => setShowFullFeedbackInput(true)}
+                  disabled={isLoading || showFullFeedbackInput}
+                  className="flex-1 md:flex-none rounded-lg border border-base-border px-4 py-2 text-sm text-text-secondary hover:bg-base-tertiary disabled:opacity-50 min-h-[44px]"
+                >
+                  전체 피드백
+                </button>
+              </div>
               <button
                 onClick={onAdopt}
                 disabled={isLoading}
-                className="rounded-lg bg-seojin px-4 py-2 text-sm font-medium text-white hover:bg-seojin/90 disabled:opacity-50"
+                className="rounded-lg bg-seojin px-4 py-2 text-sm font-medium text-white hover:bg-seojin/90 disabled:opacity-50 min-h-[44px]"
               >
                 {isLoading ? '처리 중...' : '채택 → 다음 화'}
               </button>

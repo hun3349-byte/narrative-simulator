@@ -245,3 +245,168 @@ main {
 .animate-fade-in {
   animation: fade-in 0.3s ease-out;
 }
+
+/* ========== 모바일 최적화 ========== */
+
+/* iOS 자동 확대 방지 */
+@media (max-width: 768px) {
+  input, textarea, select {
+    font-size: 16px !important;
+  }
+}
+
+/* 버튼 최소 터치 영역 */
+@media (max-width: 768px) {
+  button, a, [role="button"] {
+    min-height: 44px;
+  }
+}
+
+/* 바텀 시트 기본 스타일 */
+.bottom-sheet {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--color-base-secondary);
+  border-top-left-radius: 16px;
+  border-top-right-radius: 16px;
+  transform: translateY(100%);
+  transition: transform 0.3s ease-out;
+  z-index: 50;
+  max-height: 85vh;
+  overflow-y: auto;
+}
+
+.bottom-sheet.open {
+  transform: translateY(0);
+}
+
+.bottom-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 40;
+  opacity: 0;
+  transition: opacity 0.3s ease-out;
+  pointer-events: none;
+}
+
+.bottom-sheet-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* 바텀 탭 바 */
+.bottom-tab-bar {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: var(--color-base-secondary);
+  border-top: 1px solid var(--color-base-border);
+  z-index: 30;
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+/* 레이어 바 모바일 스크롤 */
+.layer-bar-scroll {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+  scroll-snap-type: x mandatory;
+}
+
+.layer-bar-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.layer-bar-scroll > * {
+  scroll-snap-align: center;
+  flex-shrink: 0;
+}
+
+/* 모바일 컨테이너 패딩 */
+@media (max-width: 768px) {
+  .mobile-container {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
+/* 모바일 헤더 */
+@media (max-width: 768px) {
+  .mobile-header {
+    padding-left: 12px;
+    padding-right: 12px;
+  }
+}
+
+/* 모바일 드롭다운 메뉴 */
+.mobile-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background: var(--color-base-secondary);
+  border: 1px solid var(--color-base-border);
+  border-radius: 8px;
+  padding: 8px;
+  min-width: 160px;
+  z-index: 50;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+/* 모바일 고정 팝업 (하단) */
+.mobile-fixed-popup {
+  position: fixed;
+  bottom: 80px;
+  left: 16px;
+  right: 16px;
+  z-index: 45;
+}
+
+/* 모바일용 에피소드 뷰어 높이 */
+@media (max-width: 768px) {
+  .novel-preview-area {
+    max-height: calc(100vh - 280px) !important;
+  }
+}
+
+/* 모바일 입력창 고정 시 배경 그라데이션 */
+@media (max-width: 768px) {
+  .mobile-input-fixed {
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.3);
+  }
+}
+
+/* 레이어 바 모바일 애니메이션 */
+@media (max-width: 768px) {
+  .layer-bar-scroll {
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+}
+
+/* 바텀 시트 드래그 핸들 */
+.bottom-sheet-handle {
+  width: 40px;
+  height: 4px;
+  background: var(--color-base-border);
+  border-radius: 2px;
+  margin: 0 auto;
+}
+
+/* 모바일 말풍선 최대 너비 */
+@media (max-width: 768px) {
+  .mobile-bubble {
+    max-width: calc(100% - 32px);
+  }
+}
+
+/* iOS 키보드 대응 */
+@supports (-webkit-touch-callout: none) {
+  .bottom-tab-bar {
+    padding-bottom: max(8px, env(safe-area-inset-bottom));
+  }
+}

@@ -6,6 +6,20 @@ import { useProjectStore } from '@/lib/store/project-store';
 import { PERSONA_ICONS } from '@/lib/presets/author-personas';
 import type { Project } from '@/lib/types';
 
+// 모바일 감지 훅
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  return isMobile;
+}
+
 export default function ProjectsPage() {
   const router = useRouter();
   const { projects, selectProject, deleteProject } = useProjectStore();
@@ -13,6 +27,10 @@ export default function ProjectsPage() {
 
   // Hydration 상태 - localStorage 로드 완료 전까지 로딩 표시
   const [isHydrated, setIsHydrated] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
+
+  // 모바일 감지
+  const isMobile = useIsMobile();
 
   useEffect(() => {
     setIsHydrated(true);
@@ -171,9 +189,9 @@ export default function ProjectsPage() {
     <div className="min-h-screen bg-base-primary p-8">
       <div className="mx-auto max-w-4xl">
         {/* 헤더 */}
-        <div className="mb-8 flex items-center justify-between">
-          <h1 className="font-serif text-3xl text-text-primary">내 프로젝트</h1>
-          <div className="flex gap-3">
+        <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <h1 className="font-serif text-2xl md:text-3xl text-text-primary">내 프로젝트</h1>
+          <div className="flex gap-2 md:gap-3">
             {/* 숨겨진 파일 입력 */}
             <input
               ref={fileInputRef}
@@ -182,26 +200,65 @@ export default function ProjectsPage() {
               onChange={handleImport}
               className="hidden"
             />
-            {/* 불러오기 버튼 */}
-            <button
-              onClick={() => fileInputRef.current?.click()}
-              className="rounded-lg border border-base-border px-4 py-2.5 text-sm text-text-secondary transition-colors hover:bg-base-tertiary hover:text-text-primary"
-            >
-              불러오기
-            </button>
-            {/* 전체 내보내기 버튼 */}
-            {projects.length > 0 && (
+
+            {/* 데스크톱: 모든 버튼 표시 */}
+            <div className="hidden md:flex gap-3">
               <button
-                onClick={handleExportAll}
+                onClick={() => fileInputRef.current?.click()}
                 className="rounded-lg border border-base-border px-4 py-2.5 text-sm text-text-secondary transition-colors hover:bg-base-tertiary hover:text-text-primary"
               >
-                전체 내보내기
+                불러오기
               </button>
-            )}
-            {/* 새 프로젝트 버튼 */}
+              {projects.length > 0 && (
+                <button
+                  onClick={handleExportAll}
+                  className="rounded-lg border border-base-border px-4 py-2.5 text-sm text-text-secondary transition-colors hover:bg-base-tertiary hover:text-text-primary"
+                >
+                  전체 내보내기
+                </button>
+              )}
+            </div>
+
+            {/* 모바일: 메뉴 버튼 */}
+            <div className="relative md:hidden">
+              <button
+                onClick={() => setShowMobileMenu(!showMobileMenu)}
+                className="rounded-lg border border-base-border p-2.5 text-text-secondary hover:bg-base-tertiary min-h-[44px] min-w-[44px] flex items-center justify-center"
+              >
+                ⋯
+              </button>
+
+              {/* 모바일 드롭다운 메뉴 */}
+              {showMobileMenu && (
+                <div className="mobile-menu">
+                  <button
+                    onClick={() => {
+                      fileInputRef.current?.click();
+                      setShowMobileMenu(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm text-text-secondary hover:bg-base-tertiary rounded min-h-[44px]"
+                  >
+                    불러오기
+                  </button>
+                  {projects.length > 0 && (
+                    <button
+                      onClick={() => {
+                        handleExportAll();
+                        setShowMobileMenu(false);
+                      }}
+                      className="w-full text-left px-3 py-2 text-sm text-text-secondary hover:bg-base-tertiary rounded min-h-[44px]"
+                    >
+                      전체 내보내기
+                    </button>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* 새 프로젝트 버튼 - 항상 표시 */}
             <button
               onClick={handleNewProject}
-              className="rounded-lg bg-seojin px-6 py-2.5 font-medium text-white transition-colors hover:bg-seojin/90"
+              className="rounded-lg bg-seojin px-4 md:px-6 py-2.5 font-medium text-white transition-colors hover:bg-seojin/90 min-h-[44px]"
             >
               + 새 프로젝트
             </button>
@@ -241,17 +298,17 @@ export default function ProjectsPage() {
                       {project.authorPersona.name}
                     </span>
                   </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex gap-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
                     <button
                       onClick={(e) => { e.stopPropagation(); handleExport(project); }}
-                      className="rounded p-1 text-text-muted hover:bg-base-tertiary hover:text-seojin"
+                      className="rounded p-2 text-text-muted hover:bg-base-tertiary hover:text-seojin min-h-[44px] min-w-[44px] flex items-center justify-center"
                       title="내보내기"
                     >
                       ↓
                     </button>
                     <button
                       onClick={(e) => handleDelete(e, project.id)}
-                      className="rounded p-1 text-text-muted hover:bg-base-tertiary hover:text-red-400"
+                      className="rounded p-2 text-text-muted hover:bg-base-tertiary hover:text-red-400 min-h-[44px] min-w-[44px] flex items-center justify-center"
                       title="삭제"
                     >
                       ✕

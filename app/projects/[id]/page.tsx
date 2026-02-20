@@ -8,6 +8,20 @@ import { WorldTimelinePanel } from '@/components/world-timeline';
 import EpisodeViewer from '@/components/episode/EpisodeViewer';
 import type { LayerName, Episode, Character, SimulationConfig, WorldEvent, CharacterSeed } from '@/lib/types';
 
+// 모바일 감지 훅
+function useIsMobile() {
+  const [isMobile, setIsMobile] = useState(false);
+
+  useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth < 768);
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+  return isMobile;
+}
+
 const LAYER_LABELS: Record<LayerName, string> = {
   world: '세계',
   coreRules: '규칙',
@@ -108,8 +122,13 @@ export default function ProjectConversationPage() {
   const [sideTab, setSideTab] = useState<'world' | 'timeline' | 'character' | 'manuscript'>('world');
   const [editingEpisodeId, setEditingEpisodeId] = useState<string | null>(null);
   const [isRevising, setIsRevising] = useState(false);
+  const [showMobilePanel, setShowMobilePanel] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const layerBarRef = useRef<HTMLDivElement>(null);
   const loadingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 모바일 감지
+  const isMobile = useIsMobile();
 
   // Hydration 완료 체크 - 클라이언트 마운트 후에만 프로젝트 데이터 접근
   useEffect(() => {
@@ -137,6 +156,21 @@ export default function ProjectConversationPage() {
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [project?.messages.length]);
+
+  // 모바일 레이어바 자동 스크롤
+  useEffect(() => {
+    if (isMobile && layerBarRef.current && project) {
+      const currentIndex = LAYER_ORDER.indexOf(project.currentLayer);
+      const buttons = layerBarRef.current.querySelectorAll('button');
+      if (buttons[currentIndex]) {
+        buttons[currentIndex].scrollIntoView({
+          behavior: 'smooth',
+          inline: 'center',
+          block: 'nearest'
+        });
+      }
+    }
+  }, [project?.currentLayer, isMobile]);
 
   // 로딩 타이머 관리
   useEffect(() => {
@@ -1206,44 +1240,51 @@ export default function ProjectConversationPage() {
 
   return (
     <div className="flex h-screen flex-col bg-base-primary">
-      {/* 헤더 */}
-      <header className="flex items-center justify-between border-b border-base-border bg-base-secondary px-6 py-4">
-        <div className="flex items-center gap-4">
+      {/* 헤더 - 모바일 최적화 */}
+      <header className="flex items-center justify-between border-b border-base-border bg-base-secondary px-3 md:px-6 py-3 md:py-4">
+        <div className="flex items-center gap-2 md:gap-4 min-w-0 flex-1">
           <button
             onClick={() => router.push('/projects')}
-            className="text-text-muted hover:text-text-primary"
+            className="text-text-muted hover:text-text-primary min-w-[44px] min-h-[44px] flex items-center justify-center"
           >
             ←
           </button>
-          <div className="flex items-center gap-2">
-            <span className="text-xl">{PERSONA_ICONS[project.authorPersona.id]}</span>
-            <span className="font-medium text-text-primary">{project.authorPersona.name}</span>
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <span className="text-lg md:text-xl flex-shrink-0">{PERSONA_ICONS[project.authorPersona.id]}</span>
+            <span className="font-medium text-text-primary text-sm md:text-base truncate">
+              {isMobile ? `${project.genre}` : project.authorPersona.name}
+            </span>
+            {!isMobile && (
+              <span className="rounded-full bg-base-tertiary px-3 py-1 text-sm text-text-muted flex-shrink-0">
+                {project.genre} / {project.tone}
+              </span>
+            )}
           </div>
-          <span className="rounded-full bg-base-tertiary px-3 py-1 text-sm text-text-muted">
-            {project.genre} / {project.tone}
-          </span>
         </div>
         <button
           onClick={() => router.push(`/projects/${projectId}/result`)}
-          className="rounded-lg bg-base-tertiary px-4 py-2 text-sm text-text-secondary hover:bg-base-border"
+          className="rounded-lg bg-base-tertiary min-w-[44px] min-h-[44px] px-3 md:px-4 py-2 text-sm text-text-secondary hover:bg-base-border flex items-center justify-center flex-shrink-0"
         >
-          결과물 →
+          {isMobile ? '📄' : '결과물 →'}
         </button>
       </header>
 
-      {/* 레이어 진행 바 - 클릭 가능 */}
-      <div className="flex items-center justify-center gap-2 border-b border-base-border bg-base-secondary px-6 py-3">
+      {/* 레이어 진행 바 - 모바일: 아이콘만, 현재 단계만 텍스트 */}
+      <div
+        ref={layerBarRef}
+        className="flex items-center justify-start md:justify-center gap-1 md:gap-2 border-b border-base-border bg-base-secondary px-2 md:px-6 py-2 md:py-3 layer-bar-scroll"
+      >
         {LAYER_ORDER.slice(0, -1).map((layer, index) => {
           const status = project.layers[layer as keyof typeof project.layers]?.status || 'pending';
           const isCurrent = project.currentLayer === layer;
           const isClickable = status === 'confirmed' || status === 'drafting';
 
           return (
-            <div key={layer} className="flex items-center gap-2">
+            <div key={layer} className="flex items-center gap-1 md:gap-2">
               <button
                 onClick={() => handleLayerClick(layer)}
                 disabled={isLoading || (!isClickable && !isCurrent)}
-                className={`flex items-center gap-1 rounded-lg px-2 py-1 transition-all ${
+                className={`flex items-center gap-1 rounded-lg px-2 py-1.5 md:py-1 min-h-[36px] md:min-h-0 transition-all ${
                   isClickable
                     ? 'cursor-pointer hover:bg-base-tertiary'
                     : isCurrent
@@ -1253,7 +1294,7 @@ export default function ProjectConversationPage() {
                 title={status === 'confirmed' ? '클릭하여 수정' : undefined}
               >
                 <span
-                  className={`text-lg ${
+                  className={`text-base md:text-lg ${
                     status === 'confirmed'
                       ? 'text-seojin'
                       : isCurrent
@@ -1263,16 +1304,17 @@ export default function ProjectConversationPage() {
                 >
                   {status === 'confirmed' ? '●' : isCurrent ? '◐' : '○'}
                 </span>
+                {/* 모바일: 현재 단계만 텍스트, 데스크톱: 모두 텍스트 */}
                 <span
                   className={`text-sm ${
                     isCurrent ? 'font-medium text-text-primary' : 'text-text-muted'
-                  }`}
+                  } ${isMobile && !isCurrent ? 'hidden' : ''}`}
                 >
                   {LAYER_LABELS[layer]}
                 </span>
               </button>
               {index < LAYER_ORDER.length - 2 && (
-                <span className="text-text-muted">→</span>
+                <span className="text-text-muted text-xs md:text-base">→</span>
               )}
             </div>
           );
@@ -1281,26 +1323,26 @@ export default function ProjectConversationPage() {
 
       {/* 메인 컨텐츠 */}
       <div className="flex flex-1 overflow-hidden">
-        {/* 대화 영역 */}
-        <div className="flex flex-1 flex-col">
-          {/* 메시지 목록 */}
-          <div className="flex-1 overflow-y-auto p-6">
-            <div className="mx-auto max-w-2xl space-y-4">
+        {/* 대화 영역 - 모바일에서 하단 여백 추가 (고정 입력창 + 탭바) */}
+        <div className={`flex flex-1 flex-col ${isMobile ? 'pb-[140px]' : ''}`}>
+          {/* 메시지 목록 - 모바일 패딩 최적화 */}
+          <div className="flex-1 overflow-y-auto p-3 md:p-6">
+            <div className="mx-auto max-w-2xl space-y-3 md:space-y-4">
               {project.messages.map((message) => (
                 <div
                   key={message.id}
                   className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
                 >
                   <div
-                    className={`max-w-[80%] rounded-lg px-4 py-3 ${
+                    className={`max-w-[85%] md:max-w-[80%] rounded-lg px-3 md:px-4 py-2.5 md:py-3 ${
                       message.role === 'user'
                         ? 'bg-seojin text-white'
                         : 'bg-base-secondary text-text-primary'
                     }`}
                   >
-                    <div className="whitespace-pre-wrap">{message.content}</div>
+                    <div className="whitespace-pre-wrap text-[15px] md:text-base">{message.content}</div>
 
-                    {/* 선택지 */}
+                    {/* 선택지 - 모바일 터치 영역 확대 */}
                     {message.choices && message.choices.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-2">
                         {message.choices.map((choice, idx) => (
@@ -1308,7 +1350,7 @@ export default function ProjectConversationPage() {
                             key={idx}
                             onClick={() => handleChoiceClick(choice.action)}
                             disabled={isLoading}
-                            className="rounded-lg bg-base-tertiary px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-base-border disabled:opacity-50"
+                            className="rounded-lg bg-base-tertiary px-4 py-2.5 md:px-3 md:py-1.5 text-sm text-text-secondary transition-colors hover:bg-base-border disabled:opacity-50 min-h-[44px] md:min-h-0"
                           >
                             {choice.label}
                           </button>
@@ -1361,33 +1403,205 @@ export default function ProjectConversationPage() {
             </div>
           </div>
 
-          {/* 입력 영역 */}
-          <div className="border-t border-base-border bg-base-secondary p-4">
+          {/* 입력 영역 - 하단 고정, 모바일 최적화 */}
+          <div className={`border-t border-base-border bg-base-secondary p-3 md:p-4 ${isMobile ? 'fixed bottom-[60px] left-0 right-0 z-20' : ''}`} style={isMobile ? { paddingBottom: 'env(safe-area-inset-bottom)' } : undefined}>
             <div className="mx-auto flex max-w-2xl gap-2">
               <input
                 type="text"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
-                placeholder={isLoading ? '작가가 응답 중...' : '메시지를 입력하세요... (예: 떡밥 다시 수정해줘)'}
+                placeholder={isLoading ? '응답 중...' : (isMobile ? '메시지 입력...' : '메시지를 입력하세요... (예: 떡밥 다시 수정해줘)')}
                 disabled={isLoading}
-                className="flex-1 rounded-lg border border-base-border bg-base-primary px-4 py-3 text-text-primary placeholder:text-text-muted focus:border-seojin focus:outline-none disabled:opacity-50"
+                className="flex-1 rounded-lg border border-base-border bg-base-primary px-3 md:px-4 py-3 text-text-primary placeholder:text-text-muted focus:border-seojin focus:outline-none disabled:opacity-50"
               />
               <button
                 onClick={handleSendMessage}
                 disabled={isLoading || !inputValue.trim()}
-                className="rounded-lg bg-seojin px-6 py-3 font-medium text-white transition-colors hover:bg-seojin/90 disabled:opacity-50"
+                className="rounded-lg bg-seojin px-4 md:px-6 py-3 font-medium text-white transition-colors hover:bg-seojin/90 disabled:opacity-50 min-w-[56px] md:min-w-[80px] min-h-[48px]"
               >
-                {isLoading ? '...' : '전송'}
+                {isLoading ? '...' : (isMobile ? '↑' : '전송')}
               </button>
             </div>
           </div>
         </div>
 
-        {/* 사이드 패널 */}
-        <div className="w-96 border-l border-base-border bg-base-secondary">
-          {/* 탭 */}
-          <div className="flex border-b border-base-border">
+        {/* 사이드 패널 - 데스크톱 */}
+        {!isMobile && (
+          <div className="w-80 lg:w-96 border-l border-base-border bg-base-secondary">
+            {/* 탭 */}
+            <div className="flex border-b border-base-border">
+              {(['world', 'timeline', 'character', 'manuscript'] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setSideTab(tab)}
+                  className={`flex-1 py-3 text-sm transition-colors ${
+                    sideTab === tab
+                      ? 'border-b-2 border-seojin text-text-primary'
+                      : 'text-text-muted hover:text-text-secondary'
+                  }`}
+                >
+                  {tab === 'world' ? '세계' : tab === 'timeline' ? '역사' : tab === 'character' ? '캐릭터' : '원고'}
+                </button>
+              ))}
+            </div>
+
+            {/* 탭 내용 */}
+            <div className="overflow-y-auto p-4" style={{ height: 'calc(100% - 45px)' }}>
+              {sideTab === 'world' && (
+                <div className="space-y-4">
+                  {project.layers.world.data ? (
+                    <>
+                      <div>
+                        <h3 className="mb-1 text-sm font-medium text-text-primary">대륙</h3>
+                        <p className="text-sm text-text-muted">{project.layers.world.data.continentName}</p>
+                      </div>
+                      <div>
+                        <h3 className="mb-1 text-sm font-medium text-text-primary">지형</h3>
+                        <p className="text-sm text-text-muted">{project.layers.world.data.geography}</p>
+                      </div>
+                      {project.layers.world.data.cities?.length > 0 && (
+                        <div>
+                          <h3 className="mb-1 text-sm font-medium text-text-primary">도시</h3>
+                          <ul className="space-y-1">
+                            {project.layers.world.data.cities.map((city, idx) => (
+                              <li key={idx} className="text-sm text-text-muted">
+                                • {city.name}: {city.description}
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-sm text-text-muted">아직 세계가 구축되지 않았습니다</div>
+                  )}
+
+                  {project.layers.coreRules.data && (
+                    <>
+                      <hr className="border-base-border" />
+                      <div>
+                        <h3 className="mb-1 text-sm font-medium text-text-primary">힘의 체계</h3>
+                        <p className="text-sm text-text-muted">{project.layers.coreRules.data.powerSystem}</p>
+                      </div>
+                    </>
+                  )}
+                </div>
+              )}
+
+              {sideTab === 'timeline' && (
+                <WorldTimelinePanel
+                  eras={project.worldHistory.eras}
+                  decades={project.worldHistory.detailedDecades}
+                  heroSeed={project.seeds?.[0]}
+                />
+              )}
+
+              {sideTab === 'character' && (
+                <div className="space-y-4">
+                  {project.layers.heroArc.data ? (
+                    <div className="rounded-lg bg-base-primary p-3">
+                      <div className="mb-1 text-xs text-seojin">주인공</div>
+                      <div className="font-medium text-text-primary">{project.layers.heroArc.data.name}</div>
+                      <p className="mt-1 text-sm text-text-muted">{project.layers.heroArc.data.coreNarrative}</p>
+                    </div>
+                  ) : (
+                    <div className="text-sm text-text-muted">아직 주인공이 설정되지 않았습니다</div>
+                  )}
+
+                  {project.layers.villainArc.data && (
+                    <div className="rounded-lg bg-base-primary p-3">
+                      <div className="mb-1 text-xs text-red-400">빌런</div>
+                      <div className="font-medium text-text-primary">{project.layers.villainArc.data.name}</div>
+                      <p className="mt-1 text-sm text-text-muted">{project.layers.villainArc.data.motivation}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {sideTab === 'manuscript' && (
+                <div className="space-y-2">
+                  {project.episodes.length > 0 ? (
+                    project.episodes.map((ep) => (
+                      <button
+                        key={ep.id}
+                        onClick={() => {
+                          if (ep.status !== 'final') {
+                            setEditingEpisodeId(ep.id);
+                          }
+                        }}
+                        className={`w-full rounded-lg p-3 text-left transition-colors ${
+                          editingEpisodeId === ep.id
+                            ? 'bg-seojin/20 border border-seojin'
+                            : 'bg-base-primary hover:bg-base-tertiary'
+                        } ${ep.status === 'final' ? 'opacity-60' : ''}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-text-primary">
+                              {ep.number}화: {ep.title}
+                            </span>
+                            {ep.status === 'final' && (
+                              <span className="text-xs text-seojin">✓</span>
+                            )}
+                          </div>
+                          <span className="text-xs text-text-muted">{ep.charCount}자</span>
+                        </div>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="text-sm text-text-muted">아직 작성된 원고가 없습니다</div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 모바일 바텀 탭 바 */}
+      {isMobile && (
+        <div className="bottom-tab-bar flex justify-around py-2">
+          {(['world', 'timeline', 'character', 'manuscript'] as const).map((tab) => (
+            <button
+              key={tab}
+              onClick={() => {
+                setSideTab(tab);
+                setShowMobilePanel(true);
+              }}
+              className={`flex flex-col items-center gap-1 px-4 py-2 min-h-[44px] ${
+                sideTab === tab && showMobilePanel ? 'text-seojin' : 'text-text-muted'
+              }`}
+            >
+              <span className="text-lg">
+                {tab === 'world' ? '🌍' : tab === 'timeline' ? '📅' : tab === 'character' ? '👤' : '📝'}
+              </span>
+              <span className="text-xs">
+                {tab === 'world' ? '세계' : tab === 'timeline' ? '역사' : tab === 'character' ? '캐릭터' : '원고'}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* 모바일 바텀 시트 오버레이 */}
+      {isMobile && (
+        <div
+          className={`bottom-sheet-overlay ${showMobilePanel ? 'open' : ''}`}
+          onClick={() => setShowMobilePanel(false)}
+        />
+      )}
+
+      {/* 모바일 바텀 시트 */}
+      {isMobile && (
+        <div className={`bottom-sheet ${showMobilePanel ? 'open' : ''}`} style={{ height: '75vh' }}>
+          {/* 드래그 핸들 */}
+          <div className="flex justify-center py-3" onClick={() => setShowMobilePanel(false)}>
+            <div className="w-10 h-1 bg-base-border rounded-full" />
+          </div>
+
+          {/* 탭 헤더 */}
+          <div className="flex border-b border-base-border px-4">
             {(['world', 'timeline', 'character', 'manuscript'] as const).map((tab) => (
               <button
                 key={tab}
@@ -1395,7 +1609,7 @@ export default function ProjectConversationPage() {
                 className={`flex-1 py-3 text-sm transition-colors ${
                   sideTab === tab
                     ? 'border-b-2 border-seojin text-text-primary'
-                    : 'text-text-muted hover:text-text-secondary'
+                    : 'text-text-muted'
                 }`}
               >
                 {tab === 'world' ? '세계' : tab === 'timeline' ? '역사' : tab === 'character' ? '캐릭터' : '원고'}
@@ -1403,8 +1617,8 @@ export default function ProjectConversationPage() {
             ))}
           </div>
 
-          {/* 탭 내용 */}
-          <div className="overflow-y-auto p-4" style={{ height: 'calc(100% - 45px)' }}>
+          {/* 바텀 시트 내용 */}
+          <div className="overflow-y-auto p-4" style={{ height: 'calc(100% - 100px)' }}>
             {sideTab === 'world' && (
               <div className="space-y-4">
                 {project.layers.world.data ? (
@@ -1485,6 +1699,7 @@ export default function ProjectConversationPage() {
                       onClick={() => {
                         if (ep.status !== 'final') {
                           setEditingEpisodeId(ep.id);
+                          setShowMobilePanel(false);
                         }
                       }}
                       className={`w-full rounded-lg p-3 text-left transition-colors ${
@@ -1513,7 +1728,7 @@ export default function ProjectConversationPage() {
             )}
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 }
