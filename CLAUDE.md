@@ -2329,3 +2329,83 @@ ALTER TABLE projects ADD COLUMN episode_logs jsonb DEFAULT '[]';
 | `app/projects/[id]/page.tsx` | World Bible 자동 생성 |
 
 ### 빌드 성공 확인 (2026-02-20)
+
+---
+
+## 일관성 엔진 Phase 2 (2026-02-20 완료)
+
+Phase 1의 기반 위에 UI 통합 및 자동화 기능 추가.
+
+### 구현 내용
+
+#### 1. Episode Log 자동 생성 통합
+- 에피소드 작성 완료 시 자동으로 `/api/generate-episode-log` 호출
+- `handlePostEpisodeCreation()` 함수로 통합 관리
+- 로그 생성 후 `addEpisodeLog()` 호출하여 스토어에 저장
+
+#### 2. 팩트 체커 UI 통합
+- 에피소드 작성 완료 시 자동으로 `/api/fact-check` 호출
+- `critical` 또는 `major` 모순 발견 시 모달 표시
+- 모순 상세 정보 (필드, 세계관 값, 에피소드 값, 수정 제안)
+- [수정 요청] / [무시하고 진행] 버튼
+
+#### 3. 떡밥 경고 UI 통합
+- `trackBreadcrumbs()` 호출하여 경고 생성
+- 화면 우하단에 떡밥 경고 토스트 표시
+- 경고 유형: 잊힌 떡밥(10화+), 너무 오래 숨김(40화+), 지연됨(예정+5화)
+
+#### 4. 메타 지시 자동 계산
+- `calculateEpisodeMeta()` 함수 (active-context.ts에 구현됨)
+- 계산 항목:
+  - `miniArcPosition`: 5화 미니아크 내 위치 (1~5)
+  - `buildupPhase`: 빌드업 페이즈 (early/middle/late)
+  - `forbiddenCliffhanger/Tone`: 직전 화에서 사용한 유형 (반복 금지)
+  - `suggestedCliffhanger/Tone`: 추천 유형
+  - `breadcrumbInstructions`: 떡밥 관련 지시
+
+#### 5. Active Context 프롬프트 주입
+- write-episode 호출 시 `buildActiveContext()` 호출
+- World Bible + 최근 3화 로그 + 메타 지시가 프롬프트에 포함
+- `activeContextToPrompt()` 로 문자열 변환
+
+### 수정된 파일
+
+| 파일 | 변경 내용 |
+|------|----------|
+| `app/projects/[id]/page.tsx` | `handlePostEpisodeCreation()` 추가, 팩트체크 모달, 떡밥 경고 토스트, Active Context 전달 |
+| `lib/utils/active-context.ts` | `calculateEpisodeMeta()` 구현 (Phase 1에서 완료) |
+| `lib/utils/breadcrumb-tracker.ts` | 떡밥 추적/경고 유틸리티 (Phase 1에서 완료) |
+
+### 자동화 흐름
+
+```
+에피소드 N화 집필 요청
+  ↓
+Active Context 조립 (buildActiveContext)
+  - World Bible 로드
+  - 직전 3화 로그
+  - 메타 지시 계산 (클리프행어/톤 추천, 금지 유형)
+  - 떡밥 경고 지시
+  ↓
+write-episode API 호출 (activeContext 포함)
+  ↓
+집필 완료
+  ↓
+handlePostEpisodeCreation() 호출:
+  1. Episode Log 자동 생성 → addEpisodeLog()
+  2. Fact Check 실행 → 모순 있으면 모달 표시
+  3. 떡밥 경고 업데이트 → 토스트 표시
+  ↓
+다음 화 준비 완료
+```
+
+### 상태 변수 추가
+
+```typescript
+// app/projects/[id]/page.tsx
+const [factCheckResult, setFactCheckResult] = useState<FactCheckResult | null>(null);
+const [breadcrumbWarnings, setBreadcrumbWarnings] = useState<BreadcrumbWarning[]>([]);
+const [showFactCheckModal, setShowFactCheckModal] = useState(false);
+```
+
+### 빌드 성공 확인 (2026-02-20)

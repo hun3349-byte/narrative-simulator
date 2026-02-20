@@ -6,7 +6,9 @@ import { useProjectStore } from '@/lib/store/project-store';
 import { PERSONA_ICONS } from '@/lib/presets/author-personas';
 import { WorldTimelinePanel } from '@/components/world-timeline';
 import EpisodeViewer from '@/components/episode/EpisodeViewer';
-import type { LayerName, Episode, Character, SimulationConfig, WorldEvent, CharacterSeed } from '@/lib/types';
+import type { LayerName, Episode, Character, SimulationConfig, WorldEvent, CharacterSeed, FactCheckResult, BreadcrumbWarning, EpisodeLog } from '@/lib/types';
+import { trackBreadcrumbs, generateBreadcrumbInstructions } from '@/lib/utils/breadcrumb-tracker';
+import { buildActiveContext } from '@/lib/utils/active-context';
 
 // 모바일 감지 훅
 function useIsMobile() {
@@ -125,6 +127,9 @@ export default function ProjectConversationPage() {
   const [editingEpisodeId, setEditingEpisodeId] = useState<string | null>(null);
   const [isRevising, setIsRevising] = useState(false);
   const [showMobilePanel, setShowMobilePanel] = useState(false);
+  const [factCheckResult, setFactCheckResult] = useState<FactCheckResult | null>(null);
+  const [breadcrumbWarnings, setBreadcrumbWarnings] = useState<BreadcrumbWarning[]>([]);
+  const [showFactCheckModal, setShowFactCheckModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const layerBarRef = useRef<HTMLDivElement>(null);
   const loadingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -207,6 +212,69 @@ export default function ProjectConversationPage() {
       }
     };
   }, [isLoading]);
+
+  // 에피소드 작성 후 처리: Episode Log 생성 + Fact Check + 떡밥 경고
+  const handlePostEpisodeCreation = useCallback(async (episode: Episode) => {
+    if (!project) return;
+
+    // 1. Episode Log 자동 생성
+    try {
+      const logResponse = await fetch('/api/generate-episode-log', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          episode,
+          worldBible: project.worldBible,
+          previousLogs: project.episodeLogs?.slice(-3) || [],
+        }),
+      });
+
+      if (logResponse.ok) {
+        const logData = await logResponse.json();
+        if (logData.log) {
+          addEpisodeLog(logData.log);
+          console.log(`Episode ${episode.number} log generated`);
+        }
+      }
+    } catch (error) {
+      console.error('Episode log generation failed:', error);
+    }
+
+    // 2. Fact Check 실행
+    if (project.worldBible) {
+      try {
+        const factCheckResponse = await fetch('/api/fact-check', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            worldBible: project.worldBible,
+            episode,
+          }),
+        });
+
+        if (factCheckResponse.ok) {
+          const factCheckData = await factCheckResponse.json();
+          if (factCheckData.result) {
+            setFactCheckResult(factCheckData.result);
+            // critical 또는 major 모순이 있으면 모달 표시
+            if (factCheckData.result.hasContradictions &&
+                (factCheckData.result.overallSeverity === 'critical' ||
+                 factCheckData.result.overallSeverity === 'major')) {
+              setShowFactCheckModal(true);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('Fact check failed:', error);
+      }
+    }
+
+    // 3. 떡밥 경고 업데이트
+    if (project.worldBible?.breadcrumbs) {
+      const warnings = trackBreadcrumbs(project.worldBible.breadcrumbs, episode.number);
+      setBreadcrumbWarnings(warnings);
+    }
+  }, [project, addEpisodeLog]);
 
   // 레이어 제안 생성
   const generateLayerProposal = useCallback(async (layer: LayerName) => {
@@ -391,6 +459,7 @@ export default function ProjectConversationPage() {
         // 에피소드 응답 처리
         if (data.isEpisode && data.episode) {
           addEpisode(data.episode);
+          handlePostEpisodeCreation(data.episode); // Episode Log + Fact Check
           setEditingEpisodeId(data.episode.id);
           addMessage({
             role: 'author',
@@ -894,6 +963,15 @@ export default function ProjectConversationPage() {
           return JSON.stringify(data, null, 2);
         };
 
+        // Active Context 조립 (World Bible이 있을 때만)
+        const activeContext = project.worldBible ? buildActiveContext({
+          worldBible: project.worldBible,
+          episodeLogs: project.episodeLogs || [],
+          episodes: project.episodes,
+          feedbackHistory: project.feedbackHistory || [],
+          currentEpisodeNumber: nextNumber,
+        }) : undefined;
+
         const response = await fetch('/api/write-episode', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -919,6 +997,8 @@ export default function ProjectConversationPage() {
             previousEpisodes: project.episodes.slice(-3),
             // 누적 피드백
             recurringFeedback,
+            // Active Context (메타 지시 포함)
+            activeContext,
           }),
         });
 
@@ -926,6 +1006,7 @@ export default function ProjectConversationPage() {
 
         if (data.episode) {
           addEpisode(data.episode);
+          handlePostEpisodeCreation(data.episode); // Episode Log + Fact Check
           setEditingEpisodeId(data.episode.id);
           addMessage({
             role: 'author',
@@ -1011,6 +1092,7 @@ export default function ProjectConversationPage() {
 
         if (data.isEpisode && data.episode) {
           addEpisode(data.episode);
+          handlePostEpisodeCreation(data.episode); // Episode Log + Fact Check
           setEditingEpisodeId(data.episode.id);
           addMessage({
             role: 'author',
@@ -1761,6 +1843,114 @@ export default function ProjectConversationPage() {
                 )}
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 팩트 체크 모달 */}
+      {showFactCheckModal && factCheckResult && factCheckResult.hasContradictions && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-w-lg w-full bg-base-secondary rounded-xl shadow-xl border border-base-border">
+            <div className="flex items-center justify-between border-b border-base-border px-4 py-3">
+              <h3 className="font-medium text-text-primary flex items-center gap-2">
+                {factCheckResult.overallSeverity === 'critical' ? '🚨' : '⚠️'}
+                설정 모순 발견
+              </h3>
+              <button
+                onClick={() => setShowFactCheckModal(false)}
+                className="text-text-muted hover:text-text-primary"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-4 max-h-80 overflow-y-auto">
+              <div className="space-y-3">
+                {factCheckResult.contradictions.map((c, i) => (
+                  <div
+                    key={i}
+                    className={`p-3 rounded-lg ${
+                      c.severity === 'critical'
+                        ? 'bg-red-500/10 border border-red-500/30'
+                        : c.severity === 'major'
+                        ? 'bg-yellow-500/10 border border-yellow-500/30'
+                        : 'bg-blue-500/10 border border-blue-500/30'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={`text-xs px-2 py-0.5 rounded ${
+                        c.severity === 'critical'
+                          ? 'bg-red-500/20 text-red-400'
+                          : c.severity === 'major'
+                          ? 'bg-yellow-500/20 text-yellow-400'
+                          : 'bg-blue-500/20 text-blue-400'
+                      }`}>
+                        {c.severity}
+                      </span>
+                      <span className="text-sm font-medium text-text-primary">{c.field}</span>
+                    </div>
+                    <div className="text-sm space-y-1">
+                      <div className="text-text-muted">
+                        <span className="text-text-secondary">세계관:</span> {c.worldBibleValue}
+                      </div>
+                      <div className="text-text-muted">
+                        <span className="text-text-secondary">에피소드:</span> {c.episodeValue}
+                      </div>
+                      <div className="text-accent-primary mt-2">
+                        💡 {c.suggestion}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2 border-t border-base-border px-4 py-3">
+              <button
+                onClick={() => {
+                  setShowFactCheckModal(false);
+                  // TODO: 수정 요청 로직
+                }}
+                className="flex-1 rounded-lg bg-accent-primary px-4 py-2 text-sm text-white hover:bg-accent-primary/90"
+              >
+                수정 요청
+              </button>
+              <button
+                onClick={() => setShowFactCheckModal(false)}
+                className="flex-1 rounded-lg bg-base-tertiary px-4 py-2 text-sm text-text-secondary hover:bg-base-border"
+              >
+                무시하고 진행
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 떡밥 경고 토스트 */}
+      {breadcrumbWarnings.length > 0 && !showFactCheckModal && (
+        <div className="fixed bottom-4 right-4 z-40 max-w-sm w-full">
+          <div className="bg-base-secondary rounded-lg shadow-xl border border-yellow-500/30 p-4">
+            <div className="flex items-center justify-between mb-3">
+              <span className="text-sm font-medium text-yellow-400 flex items-center gap-2">
+                📌 떡밥 경고 ({breadcrumbWarnings.length}개)
+              </span>
+              <button
+                onClick={() => setBreadcrumbWarnings([])}
+                className="text-text-muted hover:text-text-primary text-sm"
+              >
+                닫기
+              </button>
+            </div>
+            <div className="space-y-2 max-h-40 overflow-y-auto">
+              {breadcrumbWarnings.slice(0, 3).map((w, i) => (
+                <div key={i} className="text-sm text-text-muted">
+                  <span className="text-text-secondary">{w.breadcrumbName}:</span> {w.message}
+                </div>
+              ))}
+              {breadcrumbWarnings.length > 3 && (
+                <div className="text-xs text-text-muted">
+                  +{breadcrumbWarnings.length - 3}개 더...
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
