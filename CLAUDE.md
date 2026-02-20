@@ -2046,10 +2046,24 @@ type MonologueTone = '자조' | '관찰' | '냉정' | '감각' | '메타';
    - 시스템 프롬프트에 6가지 시스템 추가
    - 화수 기반 동적 가이드 (속도/톤/클리프행어)
    - monologueTone 파싱 및 반환
+   - 마크다운 코드 블록 제거 로직 추가
 
 2. `lib/types/index.ts`
    - `MonologueTone` 타입 추가
    - `Episode.monologueTone` 필드 추가
 
+### 마크다운 코드 블록 파싱 수정
+Claude가 응답을 ` ```json ... ``` `로 감싸는 경우 처리:
+```typescript
+// 마크다운 코드 블록 제거
+let cleanText = text;
+const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+if (codeBlockMatch) {
+  cleanText = codeBlockMatch[1].trim();
+}
+```
+이 로직은 `author-chat`과 `write-episode` 두 API에 모두 적용됨.
+
 ### 커밋
 - `6c66cb1`: write-episode 프롬프트 v2 강화
+- `3f0fda9`: write-episode 마크다운 코드 블록 파싱 수정
