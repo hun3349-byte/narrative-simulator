@@ -26,6 +26,7 @@ import type {
   Feedback,
   WorldBible,
   EpisodeLog,
+  WritingMemory,
 } from '@/lib/types';
 import { AUTHOR_PERSONA_PRESETS } from '@/lib/presets/author-personas';
 import {
@@ -105,6 +106,11 @@ interface ProjectStore {
   updateWorldBible: (updates: Partial<WorldBible>) => void;
   addEpisodeLog: (log: EpisodeLog) => void;
   updateEpisodeLog: (episodeNumber: number, updates: Partial<EpisodeLog>) => void;
+
+  // 자가진화 피드백 루프 (Writing Memory)
+  setWritingMemory: (memory: WritingMemory) => void;
+  updateWritingMemory: (updates: Partial<WritingMemory>) => void;
+  getWritingMemory: () => WritingMemory | undefined;
 
   // 유틸리티
   reset: () => void;
@@ -628,6 +634,60 @@ export const useProjectStore = create<ProjectStore>()(
             };
           }),
         });
+      },
+
+      // === 자가진화 피드백 루프 (Writing Memory) ===
+
+      setWritingMemory: (memory) => {
+        const { currentProjectId, projects } = get();
+        if (!currentProjectId) return;
+
+        set({
+          projects: projects.map(p =>
+            p.id === currentProjectId
+              ? { ...p, writingMemory: memory, updatedAt: new Date().toISOString() }
+              : p
+          ),
+        });
+        // Supabase 동기화
+        get().syncCurrentProjectToSupabase();
+      },
+
+      updateWritingMemory: (updates) => {
+        const { currentProjectId, projects } = get();
+        if (!currentProjectId) return;
+
+        set({
+          projects: projects.map(p => {
+            if (p.id !== currentProjectId) return p;
+            const currentMemory = p.writingMemory || {
+              styleRules: [],
+              editPatterns: [],
+              qualityTracker: [],
+              commonMistakes: [],
+              lastUpdatedAt: new Date().toISOString(),
+              totalEpisodes: 0,
+              averageEditAmount: 0,
+              directAdoptionRate: 0,
+            };
+            return {
+              ...p,
+              writingMemory: {
+                ...currentMemory,
+                ...updates,
+                lastUpdatedAt: new Date().toISOString(),
+              },
+              updatedAt: new Date().toISOString(),
+            };
+          }),
+        });
+        // Supabase 동기화
+        get().syncCurrentProjectToSupabase();
+      },
+
+      getWritingMemory: () => {
+        const project = get().getCurrentProject();
+        return project?.writingMemory;
       },
 
       // Supabase 동기화: 현재 프로젝트를 Supabase에 저장

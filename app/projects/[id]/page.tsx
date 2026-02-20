@@ -6,9 +6,10 @@ import { useProjectStore } from '@/lib/store/project-store';
 import { PERSONA_ICONS } from '@/lib/presets/author-personas';
 import { WorldTimelinePanel } from '@/components/world-timeline';
 import EpisodeViewer from '@/components/episode/EpisodeViewer';
-import type { LayerName, Episode, Character, SimulationConfig, WorldEvent, CharacterSeed, FactCheckResult, BreadcrumbWarning, EpisodeLog } from '@/lib/types';
+import type { LayerName, Episode, Character, SimulationConfig, WorldEvent, CharacterSeed, FactCheckResult, BreadcrumbWarning, EpisodeLog, WritingMemory } from '@/lib/types';
 import { trackBreadcrumbs, generateBreadcrumbInstructions } from '@/lib/utils/breadcrumb-tracker';
 import { buildActiveContext } from '@/lib/utils/active-context';
+import { createEmptyWritingMemory, updateQualityTracker, processFeedback, analyzeEdit, integrateEditPatterns, getWritingMemoryStats } from '@/lib/utils/writing-memory';
 
 // 모바일 감지 훅
 function useIsMobile() {
@@ -112,6 +113,8 @@ export default function ProjectConversationPage() {
     setProfiles,
     setWorldBible,
     addEpisodeLog,
+    getWritingMemory,
+    updateWritingMemory,
   } = useProjectStore();
 
   // Hydration 상태 - 클라이언트에서 localStorage 로드 완료 전까지 로딩 표시
@@ -1009,6 +1012,8 @@ export default function ProjectConversationPage() {
             recurringFeedback,
             // Active Context (메타 지시 포함)
             activeContext,
+            // 자가진화 피드백 루프 (Writing Memory)
+            writingMemory: getWritingMemory(),
           }),
         });
 
@@ -1250,6 +1255,11 @@ export default function ProjectConversationPage() {
       console.log('Style feedback saved as recurring:', feedback);
     }
 
+    // Writing Memory에 피드백 저장 (자가진화 시스템)
+    const currentMemory = getWritingMemory() || createEmptyWritingMemory();
+    const updatedMemory = processFeedback(currentMemory, feedback, episode.number);
+    updateWritingMemory(updatedMemory);
+
     try {
       const response = await fetch('/api/revise-episode', {
         method: 'POST',
@@ -1296,7 +1306,7 @@ export default function ProjectConversationPage() {
     }
   };
 
-  // 에피소드 채택 → 다음 화
+  // 에피소드 채택 → 다음 화 + 품질 추적
   const handleAdopt = async () => {
     if (!project || isRevising) return;
 
@@ -1305,6 +1315,38 @@ export default function ProjectConversationPage() {
 
     // 에피소드 상태를 'final'로 변경
     updateEpisode(episode.id, { status: 'final' });
+
+    // 품질 추적 업데이트 (Writing Memory)
+    const currentMemory = getWritingMemory() || createEmptyWritingMemory();
+    const originalCharCount = episode.content.length;
+    const finalCharCount = episode.editedContent?.length || originalCharCount;
+    const editAmount = episode.editedContent
+      ? Math.round(Math.abs(finalCharCount - originalCharCount) / originalCharCount * 100)
+      : 0;
+
+    const updatedMemory = updateQualityTracker(currentMemory, {
+      episodeNumber: episode.number,
+      originalCharCount,
+      finalCharCount,
+      editAmount,
+      adoptedDirectly: !episode.editedContent, // 편집 없이 직접 채택
+      feedbackCount: 0, // 피드백 수는 별도 추적 필요
+      revisionCount: 0, // 수정 횟수도 별도 추적 필요
+      status: 'final',
+    });
+
+    // 편집이 있었다면 편집 패턴 분석
+    if (episode.editedContent && episode.editedContent !== episode.content) {
+      const { patterns } = analyzeEdit(episode.content, episode.editedContent, episode.number);
+      if (patterns.length > 0) {
+        const memoryWithPatterns = integrateEditPatterns(updatedMemory, patterns);
+        updateWritingMemory(memoryWithPatterns);
+      } else {
+        updateWritingMemory(updatedMemory);
+      }
+    } else {
+      updateWritingMemory(updatedMemory);
+    }
 
     addMessage({
       role: 'author',
@@ -1647,38 +1689,83 @@ export default function ProjectConversationPage() {
               )}
 
               {sideTab === 'manuscript' && (
-                <div className="space-y-2">
-                  {project.episodes.length > 0 ? (
-                    project.episodes.map((ep) => (
-                      <button
-                        key={ep.id}
-                        onClick={() => {
-                          if (ep.status !== 'final') {
-                            setEditingEpisodeId(ep.id);
-                          }
-                        }}
-                        className={`w-full rounded-lg p-3 text-left transition-colors ${
-                          editingEpisodeId === ep.id
-                            ? 'bg-seojin/20 border border-seojin'
-                            : 'bg-base-primary hover:bg-base-tertiary'
-                        } ${ep.status === 'final' ? 'opacity-60' : ''}`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2">
-                            <span className="text-sm font-medium text-text-primary">
-                              {ep.number}화: {ep.title}
-                            </span>
-                            {ep.status === 'final' && (
-                              <span className="text-xs text-seojin">✓</span>
-                            )}
+                <div className="space-y-4">
+                  {/* 품질 추적 통계 */}
+                  {(() => {
+                    const writingMemory = getWritingMemory();
+                    if (writingMemory && writingMemory.totalEpisodes > 0) {
+                      const stats = getWritingMemoryStats(writingMemory);
+                      return (
+                        <div className="rounded-lg bg-base-primary p-3 border border-base-border">
+                          <div className="text-xs text-text-muted mb-2">품질 추적</div>
+                          <div className="grid grid-cols-2 gap-2 text-sm">
+                            <div>
+                              <span className="text-text-muted">직접 채택률:</span>
+                              <span className={`ml-1 font-medium ${stats.directAdoptionRate >= 70 ? 'text-seojin' : 'text-text-primary'}`}>
+                                {stats.directAdoptionRate}%
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-text-muted">평균 편집량:</span>
+                              <span className={`ml-1 font-medium ${stats.averageEditAmount <= 20 ? 'text-seojin' : 'text-text-primary'}`}>
+                                {stats.averageEditAmount}%
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-text-muted">학습된 규칙:</span>
+                              <span className="ml-1 font-medium text-text-primary">{stats.highConfidenceRules}개</span>
+                            </div>
+                            <div>
+                              <span className="text-text-muted">추세:</span>
+                              <span className={`ml-1 font-medium ${
+                                stats.recentTrend === 'improving' ? 'text-seojin' :
+                                stats.recentTrend === 'declining' ? 'text-red-400' : 'text-text-primary'
+                              }`}>
+                                {stats.recentTrend === 'improving' ? '↑ 개선 중' :
+                                 stats.recentTrend === 'declining' ? '↓ 주의' : '→ 안정'}
+                              </span>
+                            </div>
                           </div>
-                          <span className="text-xs text-text-muted">{ep.charCount}자</span>
                         </div>
-                      </button>
-                    ))
-                  ) : (
-                    <div className="text-sm text-text-muted">아직 작성된 원고가 없습니다</div>
-                  )}
+                      );
+                    }
+                    return null;
+                  })()}
+
+                  {/* 에피소드 목록 */}
+                  <div className="space-y-2">
+                    {project.episodes.length > 0 ? (
+                      project.episodes.map((ep) => (
+                        <button
+                          key={ep.id}
+                          onClick={() => {
+                            if (ep.status !== 'final') {
+                              setEditingEpisodeId(ep.id);
+                            }
+                          }}
+                          className={`w-full rounded-lg p-3 text-left transition-colors ${
+                            editingEpisodeId === ep.id
+                              ? 'bg-seojin/20 border border-seojin'
+                              : 'bg-base-primary hover:bg-base-tertiary'
+                          } ${ep.status === 'final' ? 'opacity-60' : ''}`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium text-text-primary">
+                                {ep.number}화: {ep.title}
+                              </span>
+                              {ep.status === 'final' && (
+                                <span className="text-xs text-seojin">✓</span>
+                              )}
+                            </div>
+                            <span className="text-xs text-text-muted">{ep.charCount}자</span>
+                          </div>
+                        </button>
+                      ))
+                    ) : (
+                      <div className="text-sm text-text-muted">아직 작성된 원고가 없습니다</div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -1818,39 +1905,70 @@ export default function ProjectConversationPage() {
             )}
 
             {sideTab === 'manuscript' && (
-              <div className="space-y-2">
-                {project.episodes.length > 0 ? (
-                  project.episodes.map((ep) => (
-                    <button
-                      key={ep.id}
-                      onClick={() => {
-                        if (ep.status !== 'final') {
-                          setEditingEpisodeId(ep.id);
-                          setShowMobilePanel(false);
-                        }
-                      }}
-                      className={`w-full rounded-lg p-3 text-left transition-colors ${
-                        editingEpisodeId === ep.id
-                          ? 'bg-seojin/20 border border-seojin'
-                          : 'bg-base-primary hover:bg-base-tertiary'
-                      } ${ep.status === 'final' ? 'opacity-60' : ''}`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-text-primary">
-                            {ep.number}화: {ep.title}
-                          </span>
-                          {ep.status === 'final' && (
-                            <span className="text-xs text-seojin">✓</span>
-                          )}
+              <div className="space-y-4">
+                {/* 품질 추적 통계 (모바일) */}
+                {(() => {
+                  const writingMemory = getWritingMemory();
+                  if (writingMemory && writingMemory.totalEpisodes > 0) {
+                    const stats = getWritingMemoryStats(writingMemory);
+                    return (
+                      <div className="rounded-lg bg-base-primary p-3 border border-base-border">
+                        <div className="text-xs text-text-muted mb-2">품질 추적</div>
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                          <div>
+                            <span className="text-text-muted">채택률:</span>
+                            <span className={`ml-1 font-medium ${stats.directAdoptionRate >= 70 ? 'text-seojin' : 'text-text-primary'}`}>
+                              {stats.directAdoptionRate}%
+                            </span>
+                          </div>
+                          <div>
+                            <span className="text-text-muted">편집량:</span>
+                            <span className={`ml-1 font-medium ${stats.averageEditAmount <= 20 ? 'text-seojin' : 'text-text-primary'}`}>
+                              {stats.averageEditAmount}%
+                            </span>
+                          </div>
                         </div>
-                        <span className="text-xs text-text-muted">{ep.charCount}자</span>
                       </div>
-                    </button>
-                  ))
-                ) : (
-                  <div className="text-sm text-text-muted">아직 작성된 원고가 없습니다</div>
-                )}
+                    );
+                  }
+                  return null;
+                })()}
+
+                {/* 에피소드 목록 (모바일) */}
+                <div className="space-y-2">
+                  {project.episodes.length > 0 ? (
+                    project.episodes.map((ep) => (
+                      <button
+                        key={ep.id}
+                        onClick={() => {
+                          if (ep.status !== 'final') {
+                            setEditingEpisodeId(ep.id);
+                            setShowMobilePanel(false);
+                          }
+                        }}
+                        className={`w-full rounded-lg p-3 text-left transition-colors ${
+                          editingEpisodeId === ep.id
+                            ? 'bg-seojin/20 border border-seojin'
+                            : 'bg-base-primary hover:bg-base-tertiary'
+                        } ${ep.status === 'final' ? 'opacity-60' : ''}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            <span className="text-sm font-medium text-text-primary">
+                              {ep.number}화: {ep.title}
+                            </span>
+                            {ep.status === 'final' && (
+                              <span className="text-xs text-seojin">✓</span>
+                            )}
+                          </div>
+                          <span className="text-xs text-text-muted">{ep.charCount}자</span>
+                        </div>
+                      </button>
+                    ))
+                  ) : (
+                    <div className="text-sm text-text-muted">아직 작성된 원고가 없습니다</div>
+                  )}
+                </div>
               </div>
             )}
           </div>

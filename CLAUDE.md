@@ -2528,3 +2528,237 @@ export type CliffhangerType = 'crisis' | 'revelation' | 'choice' | 'reversal' | 
 | `lib/types/index.ts` | CliffhangerType 타입 추가 |
 
 ### 일관성 엔진 전체 완료 (Phase 1-3)
+
+---
+
+## 자가진화 피드백 루프 시스템 (2026-02-20 완료)
+
+환님의 피드백과 직접 편집을 분석하여 문체 규칙을 학습하고, 다음 화 집필 시 자동으로 프롬프트에 반영하는 시스템.
+
+### 핵심 구조
+
+#### 5가지 핵심 컴포넌트
+
+| 컴포넌트 | 역할 |
+|---------|------|
+| 피드백 분석 엔진 | 피드백 자동 분류 (style/character/pacing/tone/structure/dialogue/description) |
+| 직접 편집 비교 분석 | AI 원본 vs 환님 수정본 diff → 패턴 추출 |
+| Writing Memory | 스타일 규칙, 편집 패턴, 품질 추적, 공통 실수 저장 |
+| 프롬프트 자동 주입 | 학습된 규칙을 집필 프롬프트에 포함 (500 토큰 제한) |
+| 품질 추적 | 에피소드별 채택률, 수정량 표시 |
+
+### 타입 정의 (`lib/types/index.ts`)
+
+```typescript
+export type FeedbackCategory = 'style' | 'character' | 'pacing' | 'tone' | 'structure' | 'dialogue' | 'description';
+
+export interface StyleRule {
+  id: string;
+  category: FeedbackCategory;
+  rule: string;
+  source: 'feedback' | 'edit_analysis';
+  confidence: number;  // 0-100 (반복될수록 증가)
+  examples?: string[];
+  counterExamples?: string[];
+  createdAt: string;
+  lastAppliedAt?: string;
+}
+
+export interface EditPattern {
+  id: string;
+  patternType: 'shorten' | 'expand' | 'replace' | 'delete' | 'restructure';
+  description: string;
+  originalPattern: string;
+  correctedPattern: string;
+  frequency: number;
+  examples: { original: string; edited: string; episodeNumber: number }[];
+  createdAt: string;
+}
+
+export interface EpisodeQuality {
+  episodeNumber: number;
+  originalCharCount: number;
+  finalCharCount: number;
+  editAmount: number;  // 0-100 (레벤슈타인 거리 기반)
+  adoptedDirectly: boolean;  // 수정 없이 채택
+  feedbackCount: number;
+  revisionCount: number;
+  status: 'draft' | 'revised' | 'final';
+  createdAt: string;
+}
+
+export interface CommonMistake {
+  id: string;
+  category: FeedbackCategory;
+  description: string;
+  frequency: number;
+  lastOccurred: number;  // 에피소드 번호
+  severity: 'minor' | 'major' | 'critical';
+  avoidanceRule: string;
+  createdAt: string;
+}
+
+export interface WritingMemory {
+  styleRules: StyleRule[];
+  editPatterns: EditPattern[];
+  qualityTracker: EpisodeQuality[];
+  commonMistakes: CommonMistake[];
+  lastUpdatedAt: string;
+  totalEpisodes: number;
+  averageEditAmount: number;  // 0-100
+  directAdoptionRate: number;  // 0-100
+}
+```
+
+### 유틸리티 함수 (`lib/utils/writing-memory.ts`)
+
+```typescript
+// 빈 Writing Memory 생성
+createEmptyWritingMemory(): WritingMemory
+
+// 피드백 처리 → 스타일 규칙 추출
+processFeedback(memory, feedback): WritingMemory
+
+// 피드백 카테고리 분류 (키워드 기반)
+classifyFeedbackCategory(content): FeedbackCategory
+
+// 직접 편집 분석 → 패턴 추출
+analyzeEdit(original, edited, episodeNumber): { patterns: EditPattern[], similarity: number }
+
+// 편집 패턴을 Writing Memory에 통합
+integrateEditPatterns(memory, patterns): WritingMemory
+
+// 품질 추적 업데이트
+updateQualityTracker(memory, quality): WritingMemory
+
+// 집필 프롬프트 생성 (500토큰 제한)
+buildWritingMemoryPrompt(memory): string
+
+// 통계 요약
+getWritingMemoryStats(memory): Stats
+```
+
+### 피드백 분류 규칙
+
+| 카테고리 | 키워드 예시 |
+|---------|------------|
+| style | 문체, 표현, 묘사, 서술, 문장 |
+| tone | 톤, 분위기, 무드, 밝다, 어둡다 |
+| pacing | 속도, 빠르다, 느리다, 페이스, 템포 |
+| character | 캐릭터, 인물, 성격, 행동, 말투 |
+| dialogue | 대사, 대화, 말, 반말, 존댓말 |
+| structure | 구조, 전개, 흐름, 순서, 배치 |
+| description | 설명, 지문, 배경, 장면 |
+
+### 신뢰도 시스템
+
+- **초기 신뢰도**: 25%
+- **2회 반복**: 50%
+- **3회 반복**: 75%
+- **4회 이상**: 100%
+- **프롬프트 포함 기준**: 신뢰도 50% 이상
+
+### 프롬프트 주입 형식
+
+```
+=== 학습된 문체 규칙 ===
+
+[필수 규칙 - 반드시 지킬 것]
+- (style) 대사를 더 짧게 쓸 것 [신뢰도: 75%]
+- (tone) 어두운 분위기 유지 [신뢰도: 100%]
+
+[권장 규칙]
+- (pacing) 장면 전환을 더 빠르게 [신뢰도: 50%]
+
+[피해야 할 실수]
+- (dialogue) 핑퐁 대화 패턴: "A 한줄 B 한줄 반복"은 피하세요
+
+[편집 패턴 학습]
+- 긴 설명 → 짧은 감각 묘사로 교체하는 경향 (빈도: 5회)
+
+[품질 통계]
+- 직접 채택률: 60%
+- 평균 수정량: 15%
+- 최근 추세: 개선 중
+
+=== 학습된 문체 규칙 끝 ===
+```
+
+### 스토어 확장 (`lib/store/project-store.ts`)
+
+```typescript
+// 새 액션
+setWritingMemory: (memory: WritingMemory) => void;
+updateWritingMemory: (updates: Partial<WritingMemory>) => void;
+getWritingMemory: () => WritingMemory | undefined;
+```
+
+### 집필 API 통합 (`app/api/write-episode/route.ts`)
+
+- `writingMemory` 파라미터 추가
+- `buildWritingMemoryPrompt()` 호출
+- 결과를 시스템 프롬프트에 주입
+
+### 프로젝트 페이지 통합 (`app/projects/[id]/page.tsx`)
+
+- **에피소드 채택 시 (`handleAdopt`)**:
+  - 품질 추적 데이터 저장
+  - 직접 편집이 있으면 패턴 분석
+  - Writing Memory 업데이트
+
+- **전체 피드백 시 (`handleFullFeedback`)**:
+  - 피드백 분석 및 분류
+  - 스타일 규칙 추출
+  - Writing Memory 업데이트
+
+### 품질 추적 UI (사이드 패널 원고 탭)
+
+```
+[품질 통계]
+━━━━━━━━━━━━━━━━━━━━━
+직접 채택률    ████████░░ 60%
+평균 수정량    ██░░░░░░░░ 15%
+학습된 규칙    5개 (3개 고신뢰도)
+최근 추세      📈 개선 중
+```
+
+### Supabase 스키마 변경
+
+```sql
+ALTER TABLE projects ADD COLUMN writing_memory jsonb;
+```
+
+### 데이터 흐름
+
+```
+1. 에피소드 집필
+   └─ writingMemory를 write-episode API에 전달
+   └─ buildWritingMemoryPrompt() → 프롬프트에 주입
+
+2. 환님 피드백/편집
+   └─ processFeedback() → 스타일 규칙 추출
+   └─ analyzeEdit() → 편집 패턴 추출
+   └─ updateWritingMemory() → 스토어 + Supabase 저장
+
+3. 에피소드 채택
+   └─ updateQualityTracker() → 품질 데이터 기록
+   └─ 직접 채택 / 수정 후 채택 구분
+
+4. 다음 화 집필
+   └─ 업데이트된 Writing Memory 자동 반영
+   └─ 고신뢰도 규칙 우선 적용
+```
+
+### 수정된 파일 목록
+
+| 파일 | 변경 내용 |
+|------|----------|
+| `lib/types/index.ts` | WritingMemory 관련 타입 추가 |
+| `lib/utils/writing-memory.ts` | 신규 - 핵심 유틸리티 |
+| `lib/supabase/types.ts` | writing_memory 필드 추가 |
+| `lib/supabase/db.ts` | writing_memory 저장/로드 |
+| `lib/store/project-store.ts` | WritingMemory 액션 추가 |
+| `app/api/write-episode/route.ts` | 프롬프트 주입 통합 |
+| `app/projects/[id]/page.tsx` | handleAdopt, handleFullFeedback 수정 |
+
+### 빌드 성공 확인 (2026-02-20)

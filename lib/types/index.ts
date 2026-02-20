@@ -1398,6 +1398,9 @@ export interface Project {
   // 일관성 엔진 (100화 개연성 유지)
   worldBible?: WorldBible;
   episodeLogs?: EpisodeLog[];
+
+  // 자가진화 피드백 루프 (Writing Memory)
+  writingMemory?: WritingMemory;
 }
 
 // 환님 피드백 (누적 학습용)
@@ -1612,4 +1615,75 @@ export interface ConsistencyEngineState {
   episodeLogs: EpisodeLog[];
   lastFactCheck: FactCheckResult | null;
   breadcrumbWarnings: BreadcrumbWarning[];
+}
+
+// === 자가진화 피드백 루프 시스템 (Writing Memory) ===
+
+// 피드백 카테고리 (확장된 FeedbackType)
+export type FeedbackCategory = 'style' | 'character' | 'pacing' | 'tone' | 'structure' | 'dialogue' | 'description';
+
+// 스타일 규칙
+export interface StyleRule {
+  id: string;
+  category: FeedbackCategory;
+  rule: string;               // "대사는 3줄 이내로"
+  source: 'feedback' | 'edit_analysis';  // 어디서 추출했는지
+  confidence: number;         // 0-100 (2회 반복 시 50, 3회 시 75, 4회+ 시 100)
+  examples?: string[];        // 좋은 예시
+  counterExamples?: string[]; // 나쁜 예시
+  createdAt: string;
+  lastAppliedAt?: string;
+}
+
+// 편집 패턴
+export interface EditPattern {
+  id: string;
+  patternType: 'deletion' | 'replacement' | 'addition' | 'restructure';
+  description: string;        // "감정 직접 서술 삭제"
+  originalPattern: string;    // 원본에서 자주 보이는 패턴
+  correctedPattern: string;   // 수정 후 패턴
+  frequency: number;          // 발생 횟수
+  examples: {
+    original: string;
+    edited: string;
+    episodeNumber: number;
+  }[];
+  createdAt: string;
+}
+
+// 에피소드 품질 지표
+export interface EpisodeQuality {
+  episodeNumber: number;
+  originalCharCount: number;
+  finalCharCount: number;
+  editAmount: number;         // 편집량 (%)
+  adoptedDirectly: boolean;   // 직접 채택 여부
+  feedbackCount: number;      // 피드백 횟수
+  revisionCount: number;      // 수정 횟수
+  status: 'drafted' | 'reviewed' | 'final';
+  createdAt: string;
+}
+
+// 자주 하는 실수
+export interface CommonMistake {
+  id: string;
+  category: FeedbackCategory;
+  description: string;        // "긴 대화 핑퐁"
+  frequency: number;          // 발생 횟수
+  lastOccurred: number;       // 마지막 발생 에피소드
+  severity: 'minor' | 'major';
+  avoidanceRule: string;      // 회피 규칙
+  createdAt: string;
+}
+
+// Writing Memory 전체 구조
+export interface WritingMemory {
+  styleRules: StyleRule[];
+  editPatterns: EditPattern[];
+  qualityTracker: EpisodeQuality[];
+  commonMistakes: CommonMistake[];
+  lastUpdatedAt: string;
+  totalEpisodes: number;
+  averageEditAmount: number;  // 평균 편집량 (%)
+  directAdoptionRate: number; // 직접 채택률 (%)
 }

@@ -31,6 +31,7 @@ export interface ProjectRow {
   episodes: EpisodeJson[];
   feedback_history: FeedbackJson[];
   messages: MessageJson[];
+  writing_memory: WritingMemoryJson | null;
   created_at: string;
   updated_at: string;
 }
@@ -54,6 +55,7 @@ export interface ProjectInsert {
   episodes?: EpisodeJson[];
   feedback_history?: FeedbackJson[];
   messages?: MessageJson[];
+  writing_memory?: WritingMemoryJson | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -75,6 +77,7 @@ export interface ProjectUpdate {
   episodes?: EpisodeJson[];
   feedback_history?: FeedbackJson[];
   messages?: MessageJson[];
+  writing_memory?: WritingMemoryJson | null;
   updated_at?: string;
 }
 
@@ -207,6 +210,56 @@ export interface MessageJson {
   choices?: unknown[];
   episode?: unknown;
   timestamp: string;
+}
+
+// Writing Memory (자가진화 피드백 루프)
+export interface WritingMemoryJson {
+  styleRules: {
+    id: string;
+    category: string;
+    rule: string;
+    source: string;
+    confidence: number;
+    examples?: string[];
+    counterExamples?: string[];
+    createdAt: string;
+    lastAppliedAt?: string;
+  }[];
+  editPatterns: {
+    id: string;
+    patternType: string;
+    description: string;
+    originalPattern: string;
+    correctedPattern: string;
+    frequency: number;
+    examples: { original: string; edited: string; episodeNumber: number }[];
+    createdAt: string;
+  }[];
+  qualityTracker: {
+    episodeNumber: number;
+    originalCharCount: number;
+    finalCharCount: number;
+    editAmount: number;
+    adoptedDirectly: boolean;
+    feedbackCount: number;
+    revisionCount: number;
+    status: string;
+    createdAt: string;
+  }[];
+  commonMistakes: {
+    id: string;
+    category: string;
+    description: string;
+    frequency: number;
+    lastOccurred: number;
+    severity: string;
+    avoidanceRule: string;
+    createdAt: string;
+  }[];
+  lastUpdatedAt: string;
+  totalEpisodes: number;
+  averageEditAmount: number;
+  directAdoptionRate: number;
 }
 
 // 공유용 프로젝트 데이터 (스포일러 제외)

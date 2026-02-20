@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { AUTHOR_PERSONA_PRESETS } from '@/lib/presets/author-personas';
-import type { Episode, Feedback, FeedbackType, MonologueTone, ActiveContext } from '@/lib/types';
+import type { Episode, Feedback, FeedbackType, MonologueTone, ActiveContext, WritingMemory } from '@/lib/types';
 import { getEpisodeFinalContent } from '@/lib/types';
 import { activeContextToPrompt } from '@/lib/utils/active-context';
+import { buildWritingMemoryPrompt } from '@/lib/utils/writing-memory';
 
 // 누적 피드백을 프롬프트용 문자열로 변환
 function buildFeedbackSection(recurringFeedback?: Feedback[]): string {
@@ -241,7 +242,7 @@ JSON으로만 응답:
 }`;
 }
 
-// 유저 프롬프트 (가변 - 세계관 + 캐릭터 + 이전 화 + 방향 + Active Context)
+// 유저 프롬프트 (가변 - 세계관 + 캐릭터 + 이전 화 + 방향 + Active Context + Writing Memory)
 function buildUserPrompt(params: {
   episodeNumber: number;
   confirmedLayers?: {
@@ -261,6 +262,7 @@ function buildUserPrompt(params: {
   previousCharCount?: number;
   recurringFeedback?: Feedback[];
   activeContext?: ActiveContext;
+  writingMemory?: WritingMemory;
 }): string {
   const {
     episodeNumber,
@@ -273,7 +275,8 @@ function buildUserPrompt(params: {
     previousContent,
     previousCharCount,
     recurringFeedback,
-    activeContext
+    activeContext,
+    writingMemory
   } = params;
 
   const lastEpisode = previousEpisodes?.[previousEpisodes.length - 1];
@@ -292,12 +295,17 @@ function buildUserPrompt(params: {
   // 누적 피드백 섹션
   const feedbackSection = buildFeedbackSection(recurringFeedback);
 
+  // Writing Memory 섹션 (자가진화 피드백 루프)
+  const writingMemorySection = writingMemory
+    ? `\n=== 학습된 문체 규칙 ===\n${buildWritingMemoryPrompt(writingMemory)}\n=== 학습된 문체 규칙 끝 ===\n`
+    : '';
+
   // Active Context가 있으면 사용, 없으면 기존 방식
   const activeContextSection = activeContext
     ? activeContextToPrompt(activeContext)
     : '';
 
-  return `${retryInstruction}${feedbackSection}
+  return `${retryInstruction}${feedbackSection}${writingMemorySection}
 ## 제${episodeNumber}화 작성 요청
 
 ${activeContextSection ? `
@@ -466,6 +474,7 @@ export async function POST(req: NextRequest) {
       seeds,
       recurringFeedback,
       activeContext,
+      writingMemory,
     } = body;
 
     const persona = AUTHOR_PERSONA_PRESETS.find(
@@ -490,6 +499,7 @@ export async function POST(req: NextRequest) {
       authorDirection,
       recurringFeedback,
       activeContext,
+      writingMemory,
     });
 
     let result = await generateEpisode(systemPrompt, userPrompt, episodeNumber);
@@ -515,6 +525,7 @@ export async function POST(req: NextRequest) {
         previousCharCount: result.episode.charCount,
         recurringFeedback,
         activeContext,
+        writingMemory,
       });
 
       result = await generateEpisode(systemPrompt, userPrompt, episodeNumber);

@@ -1,6 +1,6 @@
 import { supabase, isSupabaseEnabled, getBrowserUserId } from './client';
 import type { SharedProjectData } from './types';
-import type { Project, WorldBible, EpisodeLog } from '../types';
+import type { Project, WorldBible, EpisodeLog, WritingMemory } from '../types';
 
 // 프로젝트를 Supabase 형식으로 변환 (사용자 스키마에 맞춤)
 function projectToSupabase(project: Project) {
@@ -82,6 +82,8 @@ function projectToSupabase(project: Project) {
       buildupPhase: log.buildupPhase,
       generatedAt: log.generatedAt,
     })) || [],
+    // 자가진화 피드백 루프
+    writing_memory: project.writingMemory || null,
     created_at: project.createdAt,
     updated_at: new Date().toISOString(),
   };
@@ -173,6 +175,8 @@ export async function loadProjectsFromSupabase(): Promise<{ projects: Project[];
         // 일관성 엔진 데이터
         worldBible: row.world_bible as WorldBible | undefined,
         episodeLogs: (row.episode_logs || []) as EpisodeLog[],
+        // 자가진화 피드백 루프
+        writingMemory: row.writing_memory as WritingMemory | undefined,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       };
