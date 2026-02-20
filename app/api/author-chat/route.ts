@@ -1201,21 +1201,30 @@ export async function POST(req: NextRequest) {
     const text = response.content[0].type === 'text' ? response.content[0].text : '';
 
     try {
-      const jsonMatch = text.match(/\{[\s\S]*\}/);
+      // 마크다운 코드 블록 제거
+      let cleanText = text;
+      const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+      if (codeBlockMatch) {
+        cleanText = codeBlockMatch[1].trim();
+      }
+
+      const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
         return NextResponse.json({ ...parsed, isEpisode: false });
       }
-    } catch {
+    } catch (parseError) {
+      console.error('Layer JSON parsing error:', parseError);
+      // 파싱 실패 시 텍스트에서 최대한 정보 추출
       return NextResponse.json({
-        message: text,
+        message: text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim(),
         layer: null,
         isEpisode: false,
       });
     }
 
     return NextResponse.json({
-      message: text,
+      message: text.replace(/```json\s*/g, '').replace(/```\s*/g, '').trim(),
       layer: null,
       isEpisode: false,
     });
