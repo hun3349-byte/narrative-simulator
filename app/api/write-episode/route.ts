@@ -391,7 +391,14 @@ async function generateEpisode(
   console.log('=== END ===\n');
 
   try {
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
+    // 마크다운 코드 블록 제거
+    let cleanText = text;
+    const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+    if (codeBlockMatch) {
+      cleanText = codeBlockMatch[1].trim();
+    }
+
+    const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
       const parsed = JSON.parse(jsonMatch[0]);
 
