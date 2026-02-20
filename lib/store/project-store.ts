@@ -26,6 +26,12 @@ import type {
   Feedback,
 } from '@/lib/types';
 import { AUTHOR_PERSONA_PRESETS } from '@/lib/presets/author-personas';
+import {
+  saveProjectToSupabase,
+  loadProjectsFromSupabase,
+  deleteProjectFromSupabase,
+  isSupabaseEnabled
+} from '@/lib/supabase';
 
 // 레이어 순서
 const LAYER_ORDER: LayerName[] = [
@@ -50,6 +56,11 @@ interface ProjectStore {
   createProject: (config: NewProjectConfig) => string;
   selectProject: (id: string) => void;
   deleteProject: (id: string) => void;
+
+  // Supabase 동기화
+  syncCurrentProjectToSupabase: () => Promise<void>;
+  loadFromSupabase: () => Promise<void>;
+  mergeSupabaseProjects: (supabaseProjects: Project[]) => void;
 
   // 레이어 관리
   updateLayer: <T>(layerName: Exclude<LayerName, 'novel'>, data: T) => void;
@@ -155,6 +166,10 @@ export const useProjectStore = create<ProjectStore>()(
           projects: [...state.projects, newProject],
           currentProjectId: newProject.id,
         }));
+        // Supabase 동기화 (비동기, 실패해도 계속 진행)
+        if (isSupabaseEnabled) {
+          saveProjectToSupabase(newProject).catch(console.warn);
+        }
         return newProject.id;
       },
 
@@ -167,6 +182,10 @@ export const useProjectStore = create<ProjectStore>()(
           projects: state.projects.filter(p => p.id !== id),
           currentProjectId: state.currentProjectId === id ? null : state.currentProjectId,
         }));
+        // Supabase에서도 삭제
+        if (isSupabaseEnabled) {
+          deleteProjectFromSupabase(id).catch(console.warn);
+        }
       },
 
       updateLayer: (layerName, data) => {
@@ -187,6 +206,8 @@ export const useProjectStore = create<ProjectStore>()(
               : p
           ),
         });
+        // Supabase 동기화
+        get().syncCurrentProjectToSupabase();
       },
 
       confirmLayer: (layerName) => {
@@ -225,6 +246,8 @@ export const useProjectStore = create<ProjectStore>()(
             };
           }),
         });
+        // Supabase 동기화
+        get().syncCurrentProjectToSupabase();
       },
 
       setCurrentLayer: (layerName) => {
@@ -400,6 +423,8 @@ export const useProjectStore = create<ProjectStore>()(
               : p
           ),
         });
+        // Supabase 동기화
+        get().syncCurrentProjectToSupabase();
       },
 
       updateEpisode: (id, updates) => {
@@ -419,6 +444,8 @@ export const useProjectStore = create<ProjectStore>()(
               : p
           ),
         });
+        // Supabase 동기화
+        get().syncCurrentProjectToSupabase();
       },
 
       deleteEpisode: (id) => {
@@ -456,6 +483,8 @@ export const useProjectStore = create<ProjectStore>()(
               : p
           ),
         });
+        // Supabase 동기화
+        get().syncCurrentProjectToSupabase();
       },
 
       getRecurringFeedback: () => {
@@ -503,6 +532,57 @@ export const useProjectStore = create<ProjectStore>()(
               : p
           ),
         });
+      },
+
+      // Supabase 동기화: 현재 프로젝트를 Supabase에 저장
+      syncCurrentProjectToSupabase: async () => {
+        if (!isSupabaseEnabled) return;
+
+        const project = get().getCurrentProject();
+        if (!project) return;
+
+        const result = await saveProjectToSupabase(project);
+        if (!result.success) {
+          console.warn('Supabase sync failed:', result.error);
+        }
+      },
+
+      // Supabase에서 프로젝트 불러오기
+      loadFromSupabase: async () => {
+        if (!isSupabaseEnabled) return;
+
+        const result = await loadProjectsFromSupabase();
+        if (result.error) {
+          console.warn('Supabase load failed:', result.error);
+          return;
+        }
+
+        if (result.projects.length > 0) {
+          get().mergeSupabaseProjects(result.projects);
+        }
+      },
+
+      // Supabase 프로젝트를 로컬과 병합
+      mergeSupabaseProjects: (supabaseProjects: Project[]) => {
+        const { projects: localProjects } = get();
+        const mergedProjects: Project[] = [...localProjects];
+
+        for (const supaProject of supabaseProjects) {
+          const localIndex = mergedProjects.findIndex(p => p.id === supaProject.id);
+          if (localIndex === -1) {
+            // 로컬에 없는 프로젝트 추가
+            mergedProjects.push(supaProject);
+          } else {
+            // 더 최근에 업데이트된 것으로 교체
+            const localUpdated = new Date(mergedProjects[localIndex].updatedAt || 0);
+            const supaUpdated = new Date(supaProject.updatedAt || 0);
+            if (supaUpdated > localUpdated) {
+              mergedProjects[localIndex] = supaProject;
+            }
+          }
+        }
+
+        set({ projects: mergedProjects });
       },
 
       reset: () => {

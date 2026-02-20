@@ -1803,7 +1803,98 @@ lg: 1024px  /* 데스크톱 */
 | 피드백 누적 학습 | ✅ 작동 | 문체/페이스 피드백 자동 분류 |
 | 에피소드 편집 | ✅ 작동 | 부분 수정/전체 피드백/직접 편집 |
 | 내보내기 | ✅ 작동 | TXT/HTML/DOCX |
-| 프로젝트 저장 | ✅ 작동 | localStorage 자동 저장 |
+| 프로젝트 저장 | ✅ 작동 | localStorage + Supabase 동시 저장 |
 | 데스크톱 UI | ✅ 작동 | - |
-| 모바일 UI | ⚠️ 미최적화 | 내일 작업 예정 |
-| 배포 | ⏳ 대기 | 내일 작업 예정 |
+| 모바일 UI | ✅ 작동 | 반응형 개선 완료 |
+| 배포 | ✅ 완료 | Vercel 배포됨 |
+| Supabase DB | ✅ 작동 | 프로젝트 자동 동기화 |
+
+---
+
+## Supabase DB 통합 (2026-02-20 완료)
+
+### 핵심 기능
+- **듀얼 저장**: localStorage + Supabase 동시 저장
+- **자동 동기화**: 프로젝트 변경 시 자동으로 Supabase에 저장
+- **병합 로드**: 앱 시작 시 로컬과 Supabase 데이터 병합 (최신 버전 우선)
+- **공유 페이지**: `/shared/[projectId]` - 스포일러 제외한 공개 뷰
+
+### 환경 변수
+```env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_anon_key
+```
+
+### Supabase 테이블 스키마 (projects)
+```sql
+CREATE TABLE projects (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id TEXT NOT NULL,
+  title TEXT NOT NULL,
+  genre TEXT NOT NULL,
+  tone TEXT NOT NULL,
+  viewpoint TEXT NOT NULL,
+  direction TEXT,
+  author_persona JSONB NOT NULL,
+  layers JSONB NOT NULL,
+  layer_status JSONB NOT NULL,
+  current_layer TEXT NOT NULL,
+  current_phase TEXT NOT NULL,
+  world_history JSONB,
+  episodes JSONB DEFAULT '[]',
+  feedback_history JSONB DEFAULT '[]',
+  messages JSONB DEFAULT '[]',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 사용자별 프로젝트 조회 인덱스
+CREATE INDEX idx_projects_user_id ON projects(user_id);
+
+-- RLS 정책 (선택)
+ALTER TABLE projects ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Users can CRUD own projects" ON projects
+  FOR ALL USING (auth.uid()::text = user_id);
+```
+
+### 파일 구조
+```
+lib/supabase/
+├── index.ts          # 모든 export
+├── client.ts         # Supabase 클라이언트 + getBrowserUserId()
+├── db.ts             # CRUD 함수 (save/load/delete/getShared)
+└── types.ts          # Database 타입 정의
+```
+
+### 스토어 확장 (`lib/store/project-store.ts`)
+```typescript
+// 새 함수들
+syncCurrentProjectToSupabase: () => Promise<void>;  // 현재 프로젝트 저장
+loadFromSupabase: () => Promise<void>;              // 프로젝트 불러오기
+mergeSupabaseProjects: (projects: Project[]) => void; // 로컬과 병합
+```
+
+### 동기화 시점
+- `createProject()` → 새 프로젝트 생성 시
+- `deleteProject()` → 프로젝트 삭제 시
+- `updateLayer()` → 레이어 수정 시
+- `confirmLayer()` → 레이어 확정 시
+- `addEpisode()` → 에피소드 추가 시
+- `updateEpisode()` → 에피소드 수정 시
+- `addFeedback()` → 피드백 추가 시
+
+### 공유 페이지 (`/shared/[projectId]`)
+- `final` 상태 에피소드만 표시
+- 빌런 서사, 떡밥 정보 제외 (스포일러 방지)
+- 세계관, 주인공 기본 정보만 공개
+- 별도 인증 불필요
+
+### 사용자 식별
+- `getBrowserUserId()`: localStorage에 고유 ID 저장
+- 형식: `user_{timestamp}_{random}`
+- 브라우저별 독립 (다른 기기에서 접근 불가)
+
+### 오프라인 지원
+- Supabase 연결 실패해도 localStorage 사용 가능
+- `isSupabaseEnabled` 플래그로 조건부 동기화
+- 에러는 console.warn으로 기록 (사용자 차단 없음)
