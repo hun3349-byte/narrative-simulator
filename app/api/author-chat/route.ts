@@ -429,7 +429,8 @@ ${req.direction ? `- 초기 아이디어: ${req.direction}` : ''}
 3. 존댓말 금지 - 반말로 말해 (동등한 창작 파트너)
 4. 기술 용어 금지 - "시뮬레이션", "서사 아크", "캐릭터 씨앗" 같은 말 쓰지 마
 5. 확신 있게 말해 - "이렇게 할게", "이건 이래" 같은 톤으로
-6. 허락 구하지 마 - "어떻게 생각해?"가 아니라 제안을 먼저 해`;
+6. 허락 구하지 마 - "어떻게 생각해?"가 아니라 제안을 먼저 해
+7. message 필드는 자연어만 - JSON 구조, 중괄호, 키-값 쌍 절대 금지. 친구에게 설명하듯 말해`;
 
   const layerPrompts: Record<string, string> = {
     world: `${baseContext}
@@ -447,7 +448,7 @@ ${req.currentDraft ? `\n현재 초안:\n${JSON.stringify(req.currentDraft, null,
 
 JSON으로 응답:
 {
-  "message": "작가의 설명 (자연스러운 말투)",
+  "message": "자연어로만 2-3문장. 예: '황폐한 대륙이야. 북쪽엔 얼어붙은 산맥이, 남쪽엔 독기 가득한 늪이 있어.'",
   "layer": {
     "continentName": "대륙 이름",
     "geography": "지형 설명",
@@ -457,7 +458,8 @@ JSON으로 응답:
     "landmarks": ["지형지물1", "지형지물2"],
     "mapDescription": "텍스트 지도 묘사"
   }
-}`,
+}
+※ message에는 JSON 구조나 데이터 나열 절대 금지. 친구에게 말하듯 자연스럽게.`,
 
     coreRules: `${baseContext}
 
@@ -519,7 +521,7 @@ ${req.currentDraft ? `\n현재 초안:\n${JSON.stringify(req.currentDraft, null,
 
 JSON으로 응답:
 {
-  "message": "작가의 설명 (인과관계 포함)",
+  "message": "자연어로만 2-3문장. 예: '이 세계에선 감정이 힘이 돼. 슬픔이 강할수록 강한 마법을 쓸 수 있어.'",
   "layer": {
     "powerSystem": "힘/마법 체계",
     "powerSource": "힘의 원천",
@@ -559,7 +561,8 @@ JSON으로 응답:
     "currentState": "현재 세계 상태",
     "rules": ["규칙1", "규칙2", "규칙3"]
   }
-}`,
+}
+※ message에는 JSON 구조나 데이터 나열 절대 금지. 친구에게 말하듯 자연스럽게.`,
 
     seeds: `${baseContext}
 
@@ -620,7 +623,7 @@ ${req.currentDraft ? `\n현재 초안:\n${JSON.stringify(req.currentDraft, null,
 
 JSON으로 응답:
 {
-  "message": "작가의 설명",
+  "message": "자연어로만 2-3문장. 예: '세 개의 대세력이 있어. 황가, 검성문, 그리고 어둠의 상단.'",
   "layer": {
     "factions": [{ "name": "", "nature": "", "base": "", "goal": "", "relationship": "" }],
     "races": [{ "name": "", "traits": "", "territory": "", "culture": "" }],
@@ -637,7 +640,8 @@ JSON으로 응답:
       "religion": "종교/신앙"
     }
   }
-}`,
+}
+※ message에는 JSON 구조나 데이터 나열 절대 금지. 친구에게 말하듯 자연스럽게.`,
 
     heroArc: `${baseContext}
 
@@ -696,7 +700,7 @@ ${req.currentDraft ? `\n현재 초안:\n${JSON.stringify(req.currentDraft, null,
 
 JSON으로 응답:
 {
-  "message": "작가의 설명",
+  "message": "자연어로만 2-3문장. 예: '주인공은 버려진 아이야. 쓰레기 더미에서 자랐지만, 눈빛만은 꺾이지 않았어.'",
   "layer": {
     "name": "이름",
     "age": 18,
@@ -797,7 +801,7 @@ ${req.currentDraft ? `\n현재 초안:\n${JSON.stringify(req.currentDraft, null,
 
 JSON으로 응답:
 {
-  "message": "작가의 설명",
+  "message": "자연어로만 2-3문장. 예: '빌런은 비극적인 인물이야. 세계가 그를 괴물로 만들었어. 복수가 아니라 인정받고 싶었던 거야.'",
   "layer": {
     "name": "빌런 이름",
     "age": 35,
@@ -837,7 +841,8 @@ JSON으로 응답:
       "phase86_100": "최종 결말"
     }
   }
-}`,
+}
+※ message에는 JSON 구조나 데이터 나열 절대 금지. 친구에게 말하듯 자연스럽게.`,
 
     ultimateMystery: `${baseContext}
 
@@ -929,7 +934,7 @@ ${req.currentDraft ? `\n현재 초안:\n${JSON.stringify(req.currentDraft, null,
 
 JSON으로 응답:
 {
-  "message": "작가의 설명",
+  "message": "자연어로만 2-3문장. 예: '이 이야기의 진짜 비밀은 말이야... 독자들 소름 끼칠 거야. 처음부터 다 연결되어 있었어.'",
   "layer": {
     "surface": "표면적으로 보이는 것",
     "truth": "실제 진실",
@@ -959,7 +964,8 @@ JSON으로 응답:
       "phase86_100": "전율 + 카타르시스"
     }
   }
-}`
+}
+※ message에는 JSON 구조나 데이터 나열 절대 금지. 친구에게 말하듯 자연스럽게.`
   };
 
   return layerPrompts[req.layer] || layerPrompts.world;
