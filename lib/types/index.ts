@@ -799,6 +799,9 @@ export interface EpisodeHooks {
   closing: string;                // 클로징 훅 (다음 화 예고)
 }
 
+// 독백 톤 5가지 (같은 톤 2화 연속 금지)
+export type MonologueTone = '자조' | '관찰' | '냉정' | '감각' | '메타';
+
 export interface Episode {
   id: string;
   number: number;
@@ -814,6 +817,7 @@ export interface Episode {
   authorNote: string;             // 작가 메모
   endHook: string;                // 화 끝 훅 (레거시)
   hooks?: EpisodeHooks;           // 오프닝/클로징 훅
+  monologueTone?: MonologueTone;  // 이 화에 사용한 독백 톤
   createdAt: string;
   updatedAt: string;
 }
