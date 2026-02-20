@@ -945,21 +945,83 @@ export interface CityInfo {
   significance: string;           // 이야기에서의 의미
 }
 
-// Layer 2: 핵심 규칙 (Core Rules)
+// Layer 2: 핵심 규칙 (Core Rules) — V2 강화
 export interface CoreRulesLayer {
   powerSystem: string;            // 힘/마법 체계
+  powerSource: string;            // 힘의 원천
+  powerLimits: string;            // 힘의 한계/대가
+  magicSystem?: {                 // 마법/능력 체계 (하위 시스템)
+    types: string;                // 종류와 분류
+    activation: string;           // 발동 조건
+    counters: string;             // 상성 관계
+    forbidden?: string;           // 금기/금지된 마법
+  };
+  socialHierarchy?: {             // 계급 사회
+    structure: string;            // 누가 위/아래인가
+    determinedBy: string;         // 계급 결정 요소
+    mobility: string;             // 계급 이동 가능성
+    coreConflict: string;         // 계급 간 갈등 핵심
+    underclass: string;           // 피지배층의 삶
+  };
+  legends?: {                     // 전설과 신화
+    creationMyth: string;         // 창세 신화
+    keyLegends: string[];         // 핵심 전설 1~2개
+    legendVsHistory: string;      // 전설과 실제 역사의 차이
+    prophecy?: string;            // 예언 (있으면)
+  };
+  folklore?: {                    // 설화와 전승
+    tales: string[];              // 민간 설화들
+    regionalVariants?: string;    // 지역별 다른 버전
+    hiddenTruths?: string;        // 설화 속 숨겨진 진실
+    socialImpact: string;         // 현재 사회에 미치는 영향
+  };
+  historyEvents?: HistoryEvent[]; // 핵심 역사 사건 3~5개 (시간축)
+  worldContradiction?: {          // 세계의 의도적 모순 1~2개
+    contradiction: string;        // 모순 내용
+    reason: string;               // 해결되지 않는 이유
+    connectionToHero: string;     // 주인공 여정과의 연결
+  }[];
   races: string;                  // 종족 설명
   history: string;                // 핵심 역사
   currentState: string;           // 현재 세계 상태
   rules: string[];                // 핵심 규칙들 (자유 서술)
 }
 
-// Layer 3: 씨앗 (Seeds)
+// 핵심 역사 사건
+export interface HistoryEvent {
+  when: string;                   // 언제 (예: "800년 전")
+  name: string;                   // 사건 이름
+  what: string;                   // 무엇이 일어났는가
+  why: string;                    // 왜 일어났는가
+  trace: string;                  // 현재 세계에 남긴 흔적
+  causedBy?: string;              // 이전 사건과의 인과관계
+}
+
+// Layer 3: 씨앗 (Seeds) — V2 강화
 export interface SeedsLayer {
-  factions: FactionSeedInfo[];    // 세력
+  factions: FactionSeedInfo[];    // 세력 3~5개
   races: RaceInfo[];              // 종족 상세
   threats: ThreatInfo[];          // 몬스터/위협
   npcs: NPCSeedInfo[];            // 주요 NPC 씨앗
+  legendStories?: LegendStory[];  // 전설/설화를 구체적 이야기로 확장
+  dailyLife?: {                   // 일상의 뼈대
+    economy: string;              // 사람들은 뭘 먹고 사는가
+    jobs: string;                 // 돈은 어떻게 버는가 (직업)
+    education: string;            // 아이들은 어떻게 자라는가
+    crime: string;                // 범죄와 치안
+    religion?: string;            // 종교/신앙
+  };
+}
+
+// 전설/설화 스토리
+export interface LegendStory {
+  name: string;                   // 전설/설화 이름
+  story: string;                  // 구체적 이야기
+  heroName?: string;              // 전설 속 영웅 이름
+  artifact?: string;              // 전설 속 유물
+  location?: string;              // 관련 실제 장소
+  usedBy?: string;                // 현재 어떤 세력이 이용하는가
+  variants?: string;              // 지역별 다른 버전
 }
 
 export interface FactionSeedInfo {
@@ -992,30 +1054,161 @@ export interface NPCSeedInfo {
   hiddenMotivation?: string;      // 숨겨진 동기 (있으면)
 }
 
-// Layer 4: 주인공 서사 (Hero Arc)
+// Layer 4: 주인공 서사 (Hero Arc) — V2 강화
 export interface HeroArcLayer {
   name: string;
+  age: number;
   origin: string;                 // 태생
+  faction?: string;               // 속한 세력/계층
+  environment?: string;           // 자란 환경
+  currentStatus?: string;         // 현재 상태 (직업, 능력, 관계)
   coreNarrative: string;          // 핵심 서사
   initialState: string;           // 시작 시점의 상태
   ultimateGoal: string;           // 궁극적 목표
+
+  // 서사의 엔진 — 욕망과 결핍
+  desire?: string;                // 표면적 욕망 (가장 원하는 것)
+  deficiency?: string;            // 내면적 결핍 (진짜 필요한 것)
+
+  // 무기와 약점
+  abilities?: string[];           // 능력/재능
+  strengths?: string[];           // 성격적 강점
+  fatalWeakness?: string;         // 치명적 약점
+
+  // 배경 인물 (자연 발생) 3~5명
+  supportingCharacters?: SupportingCharacter[];
+
+  // 100화 서사 아크
+  narrativeArc100?: NarrativeArc100;
 }
 
-// Layer 5: 빌런 서사 (Villain Arc)
-export interface VillainArcLayer {
+// 배경 인물
+export interface SupportingCharacter {
   name: string;
+  relation: string;               // 가족/동료/스승/라이벌/첫사랑 등
+  faction?: string;               // 소속 세력
+  influence: string;              // 주인공에게 어떤 영향을 주는가
+  ownDesire?: string;             // 이 인물 자신의 욕망/사정
+  potentialBetrayal?: boolean;    // 배신/이탈 가능성
+}
+
+// 100화 서사 아크 구간별 설계
+export interface NarrativeArc100 {
+  phase1_5: string;               // 1~5화: 어디서 시작하는가 (바닥)
+  phase6_20: string;              // 6~20화: 첫 번째 변화
+  phase21_50: string;             // 21~50화: 성장과 시련
+  phase51_80: string;             // 51~80화: 진짜 갈등 (세계와 충돌)
+  phase81_100: string;            // 81~100화: 최종 대결과 변화
+}
+
+// Layer 5: 대립 구도 (Conflict Structure) — V2 확장 (삼각 구도)
+export interface VillainArcLayer {
+  // 메인 빌런
+  name: string;
+  age?: number;
   origin: string;                 // 태생
-  motivation: string;             // 동기
+  faction?: string;               // 소속 세력
+  surfaceGoal?: string;           // 표면적 목표
+  motivation: string;             // 동기 (이렇게 된 이유)
+  selfJustification?: string;     // 빌런 관점에서의 정당성
+  worldMadeMe?: string;           // "이 세계의 이 규칙이 나를 이렇게 만들었다"
   coreNarrative: string;          // 핵심 서사
   relationship: string;           // 주인공과의 관계
+  supportingCharacters?: VillainSupport[]; // 빌런 측 인물 2~3명
+
+  // 제3세력 (삼각 구도)
+  thirdForce?: ThirdForce;
+
+  // 대립 구도 관계
+  vsHero?: string;                // 주인공 vs 빌런: 어디서 충돌하나
+  whyNoReconcile?: string;        // 왜 화해할 수 없는가
+  commonGround?: string;          // 공통점 (같은 세계의 피해자?)
+
+  // 대립 구도 변화 로드맵 (100화)
+  conflictRoadmap?: ConflictRoadmap;
 }
 
-// Layer 6: 궁극의 떡밥 (Ultimate Mystery)
+// 빌런 측 배경 인물
+export interface VillainSupport {
+  name: string;
+  role: string;                   // 충성하는 부하/배신할 동료/과거의 은인
+  ownDesire?: string;             // 자신의 욕망
+}
+
+// 제3세력
+export interface ThirdForce {
+  name: string;                   // 세력 이름
+  leader?: string;                // 리더
+  goal: string;                   // 목적
+  logic: string;                  // 이들만의 논리 (자기 관점에서 정당)
+  vsHero: string;                 // 주인공과의 관계 (동맹? 이용? 감시?)
+  vsVillain: string;              // 빌런과의 관계 (적대? 경쟁? 공생?)
+  entryPoint?: string;            // 이야기에 개입하는 시점
+  supportingCharacters?: ThirdForceSupport[]; // 제3세력 측 인물 2~3명
+}
+
+// 제3세력 측 인물
+export interface ThirdForceSupport {
+  name: string;
+  role: string;                   // 리더/내부 분열 인물/주인공과 개인적 연결
+  ownDesire?: string;
+}
+
+// 대립 구도 변화 로드맵 (100화)
+export interface ConflictRoadmap {
+  phase1_10: string;              // 주인공 vs 세계
+  phase11_25: string;             // 주인공 vs 빌런 (메인 갈등 시작)
+  phase26_40: string;             // 제3세력 등장 (구도 변화)
+  phase41_55: string;             // 임시 동맹
+  phase56_70: string;             // 동맹 붕괴 + 삼파전
+  phase71_85: string;             // 최악의 위기
+  phase86_100: string;            // 최종 구도 재편 + 결말
+}
+
+// Layer 6: 떡밥 + 독자 감정 설계 (Ultimate Mystery) — V2 강화
 export interface UltimateMysteryLayer {
+  // 궁극의 떡밥 (최종 반전)
   surface: string;                // 표면적으로 보이는 것
   truth: string;                  // 실제 진실
-  hints: string[];                // 세계 곳곳에 깔릴 힌트들
+  hints: string[];                // 세계 곳곳에 깔릴 힌트들 3~5개
   revealTiming: string;           // 언제 밝혀지는가
+  rereadValue?: string;           // 다시 읽으면 "아, 그래서" 포인트
+
+  // 중간 떡밥 (세부 반전) 3~5개
+  middleTwists?: MiddleTwist[];
+
+  // 떡밥 연결망
+  twistConnections?: string;      // 떡밥 A→B→C→궁극 연결 설명
+
+  // 독자 감정 로드맵 (100화 기준)
+  emotionRoadmap?: EmotionRoadmap;
+}
+
+// 중간 떡밥 (세부 반전)
+export interface MiddleTwist {
+  name: string;                   // 떡밥 이름
+  truth: string;                  // 실제로 무엇인가
+  disguise: string;               // 어떻게 숨기는가 (위장)
+  revealEpisode: number;          // 터지는 시점 (화)
+  readerEmotion: string;          // 터졌을 때 독자 감정
+  connectionToUltimate: string;   // 궁극의 떡밥과의 연결
+  hintPlacement?: {               // 힌트 배치
+    early?: string;               // 1~10화: 사소한 단서
+    middle?: string;              // 30~50화: 미스디렉션
+    late?: string;                // 70~90화: 진짜 단서
+  };
+}
+
+// 독자 감정 로드맵
+export interface EmotionRoadmap {
+  phase1_5: string;               // 호기심 + 동정
+  phase6_15: string;              // 응원 + 기대
+  phase16_25: string;             // 통쾌 + 첫 번째 의문
+  phase26_40: string;             // 불안 + 의심
+  phase41_55: string;             // 충격 + 분노 (배신)
+  phase56_70: string;             // 혼란 + 공감 (빌런 이해)
+  phase71_85: string;             // 절망 + 희망
+  phase86_100: string;            // 전율 + 카타르시스
 }
 
 // 전체 프로젝트 (7 레이어 통합)
