@@ -5,6 +5,7 @@ export {
   loadProjectsFromSupabase,
   deleteProjectFromSupabase,
   getSharedProject,
+  testSupabaseConnection,
 } from './db';
 export type {
   Database,

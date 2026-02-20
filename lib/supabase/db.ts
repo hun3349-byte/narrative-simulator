@@ -1,9 +1,9 @@
 import { supabase, isSupabaseEnabled, getBrowserUserId } from './client';
-import type { ProjectInsert, ProjectUpdate, SharedProjectData } from './types';
+import type { SharedProjectData } from './types';
 import type { Project } from '../types';
 
-// 프로젝트를 Supabase 형식으로 변환
-function projectToSupabase(project: Project): ProjectInsert {
+// 프로젝트를 Supabase 형식으로 변환 (사용자 스키마에 맞춤)
+function projectToSupabase(project: Project) {
   return {
     id: project.id,
     user_id: getBrowserUserId(),
@@ -11,12 +11,12 @@ function projectToSupabase(project: Project): ProjectInsert {
     genre: project.genre,
     tone: project.tone,
     viewpoint: project.viewpoint,
-    direction: project.direction || null,
     author_persona: {
       id: project.authorPersona.id,
       name: project.authorPersona.name,
       style: project.authorPersona.style,
     },
+    // layers에 추가 정보 포함
     layers: {
       world: project.layers.world.data,
       coreRules: project.layers.coreRules.data,
@@ -24,6 +24,14 @@ function projectToSupabase(project: Project): ProjectInsert {
       heroArc: project.layers.heroArc.data,
       villainArc: project.layers.villainArc.data,
       ultimateMystery: project.layers.ultimateMystery.data,
+      // 추가 메타 정보
+      _meta: {
+        direction: project.direction,
+        currentLayer: project.currentLayer,
+        currentPhase: project.currentPhase,
+        worldHistory: project.worldHistory,
+        messages: project.messages,
+      },
     },
     layer_status: {
       world: project.layers.world.status,
@@ -34,12 +42,6 @@ function projectToSupabase(project: Project): ProjectInsert {
       ultimateMystery: project.layers.ultimateMystery.status,
       novel: 'pending',
     },
-    current_layer: project.currentLayer,
-    current_phase: project.currentPhase,
-    world_history: project.worldHistory ? {
-      eras: project.worldHistory.eras,
-      detailedDecades: project.worldHistory.detailedDecades,
-    } : null,
     episodes: project.episodes.map(ep => ({
       id: ep.id,
       number: ep.number,
@@ -55,23 +57,14 @@ function projectToSupabase(project: Project): ProjectInsert {
       createdAt: ep.createdAt,
       updatedAt: ep.updatedAt,
     })),
-    feedback_history: project.feedbackHistory.map(fb => ({
+    feedback_history: project.feedbackHistory?.map(fb => ({
       id: fb.id,
       episodeNumber: fb.episodeNumber,
       type: fb.type,
       content: fb.content,
       isRecurring: fb.isRecurring,
       timestamp: fb.timestamp,
-    })),
-    messages: project.messages.map(msg => ({
-      id: msg.id,
-      role: msg.role,
-      content: msg.content,
-      layerData: msg.layerData,
-      choices: msg.choices,
-      episode: msg.episode,
-      timestamp: msg.timestamp,
-    })),
+    })) || [],
     created_at: project.createdAt,
     updated_at: new Date().toISOString(),
   };
@@ -129,40 +122,41 @@ export async function loadProjectsFromSupabase(): Promise<{ projects: Project[];
 
     // Supabase 데이터를 Project 형식으로 변환
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const projects: Project[] = data.map((row: any) => ({
-      id: row.id,
-      genre: row.genre,
-      tone: row.tone,
-      viewpoint: row.viewpoint,
-      direction: row.direction || '',
-      authorPersona: row.author_persona as Project['authorPersona'],
-      currentLayer: row.current_layer as Project['currentLayer'],
-      currentPhase: row.current_phase as Project['currentPhase'],
-      layers: {
-        world: { status: row.layer_status?.world as 'pending' | 'drafting' | 'confirmed' || 'pending', data: row.layers?.world || null },
-        coreRules: { status: row.layer_status?.coreRules as 'pending' | 'drafting' | 'confirmed' || 'pending', data: row.layers?.coreRules || null },
-        seeds: { status: row.layer_status?.seeds as 'pending' | 'drafting' | 'confirmed' || 'pending', data: row.layers?.seeds || null },
-        heroArc: { status: row.layer_status?.heroArc as 'pending' | 'drafting' | 'confirmed' || 'pending', data: row.layers?.heroArc || null },
-        villainArc: { status: row.layer_status?.villainArc as 'pending' | 'drafting' | 'confirmed' || 'pending', data: row.layers?.villainArc || null },
-        ultimateMystery: { status: row.layer_status?.ultimateMystery as 'pending' | 'drafting' | 'confirmed' || 'pending', data: row.layers?.ultimateMystery || null },
-      },
-      worldHistory: row.world_history ? {
-        eras: row.world_history.eras as Project['worldHistory']['eras'],
-        detailedDecades: row.world_history.detailedDecades as Project['worldHistory']['detailedDecades'],
-      } : { eras: [], detailedDecades: [] },
-      episodes: (row.episodes || []) as Project['episodes'],
-      messages: (row.messages || []) as Project['messages'],
-      feedbackHistory: (row.feedback_history || []) as Project['feedbackHistory'],
-      // 로컬 전용 필드 - 기본값
-      characters: [],
-      seeds: [],
-      memoryStacks: {},
-      profiles: {},
-      npcPool: { npcs: [], maxActive: 30 },
-      simulationStatus: 'idle' as const,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-    }));
+    const projects: Project[] = data.map((row: any) => {
+      const meta = row.layers?._meta || {};
+
+      return {
+        id: row.id,
+        genre: row.genre || '',
+        tone: row.tone || '',
+        viewpoint: row.viewpoint || '',
+        direction: meta.direction || '',
+        authorPersona: row.author_persona as Project['authorPersona'],
+        currentLayer: (meta.currentLayer || 'world') as Project['currentLayer'],
+        currentPhase: (meta.currentPhase || 'setup') as Project['currentPhase'],
+        layers: {
+          world: { status: row.layer_status?.world as 'pending' | 'drafting' | 'confirmed' || 'pending', data: row.layers?.world || null },
+          coreRules: { status: row.layer_status?.coreRules as 'pending' | 'drafting' | 'confirmed' || 'pending', data: row.layers?.coreRules || null },
+          seeds: { status: row.layer_status?.seeds as 'pending' | 'drafting' | 'confirmed' || 'pending', data: row.layers?.seeds || null },
+          heroArc: { status: row.layer_status?.heroArc as 'pending' | 'drafting' | 'confirmed' || 'pending', data: row.layers?.heroArc || null },
+          villainArc: { status: row.layer_status?.villainArc as 'pending' | 'drafting' | 'confirmed' || 'pending', data: row.layers?.villainArc || null },
+          ultimateMystery: { status: row.layer_status?.ultimateMystery as 'pending' | 'drafting' | 'confirmed' || 'pending', data: row.layers?.ultimateMystery || null },
+        },
+        worldHistory: meta.worldHistory || { eras: [], detailedDecades: [] },
+        episodes: (row.episodes || []) as Project['episodes'],
+        messages: (meta.messages || []) as Project['messages'],
+        feedbackHistory: (row.feedback_history || []) as Project['feedbackHistory'],
+        // 로컬 전용 필드 - 기본값
+        characters: [],
+        seeds: [],
+        memoryStacks: {},
+        profiles: {},
+        npcPool: { npcs: [], maxActive: 30 },
+        simulationStatus: 'idle' as const,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+    });
 
     return { projects };
   } catch (err) {
@@ -218,6 +212,8 @@ export async function getSharedProject(projectId: string): Promise<{ data: Share
     }
 
     // 스포일러 제외한 공개 데이터만 반환
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const layers = data.layers as any;
     const sharedData: SharedProjectData = {
       id: data.id,
       title: data.title,
@@ -225,17 +221,17 @@ export async function getSharedProject(projectId: string): Promise<{ data: Share
       tone: data.tone,
       viewpoint: data.viewpoint,
       authorPersona: {
-        name: (data.author_persona as { name: string }).name,
+        name: (data.author_persona as { name: string })?.name || '작가',
       },
-      world: data.layers.world ? {
-        continentName: (data.layers.world as { continentName?: string }).continentName,
-        geography: (data.layers.world as { geography?: string }).geography,
-        cities: (data.layers.world as { cities?: Array<{ name: string; description: string }> }).cities,
+      world: layers?.world ? {
+        continentName: layers.world.continentName,
+        geography: layers.world.geography,
+        cities: layers.world.cities,
       } : null,
-      hero: data.layers.heroArc ? {
-        name: (data.layers.heroArc as { name?: string }).name,
-        origin: (data.layers.heroArc as { origin?: string }).origin,
-        coreNarrative: (data.layers.heroArc as { coreNarrative?: string }).coreNarrative,
+      hero: layers?.heroArc ? {
+        name: layers.heroArc.name,
+        origin: layers.heroArc.origin,
+        coreNarrative: layers.heroArc.coreNarrative,
       } : null,
       // final 상태 에피소드만
       episodes: ((data.episodes || []) as Array<{ number: number; title: string; content: string; charCount: number; status: string }>)
@@ -252,5 +248,22 @@ export async function getSharedProject(projectId: string): Promise<{ data: Share
   } catch (err) {
     console.error('Supabase shared fetch exception:', err);
     return { data: null, error: err instanceof Error ? err.message : 'Unknown error' };
+  }
+}
+
+// Supabase 연결 테스트
+export async function testSupabaseConnection(): Promise<{ success: boolean; error?: string }> {
+  if (!isSupabaseEnabled || !supabase) {
+    return { success: false, error: 'Supabase not configured' };
+  }
+
+  try {
+    const { error } = await supabase.from('projects').select('id').limit(1);
+    if (error) {
+      return { success: false, error: error.message };
+    }
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
   }
 }
