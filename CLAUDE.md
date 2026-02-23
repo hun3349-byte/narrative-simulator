@@ -2,9 +2,17 @@
 
 ## 작업 규칙 (필수)
 - **모든 작업이 완료되면 반드시 이 CLAUDE.md 파일을 업데이트할 것.** 새로운 기능, 아키텍처 변경, 파일 추가/수정 내역을 반영하여 다음 세션에서 즉시 이어서 작업할 수 있도록 한다.
+- **작업 완료 후 자동 배포**: 코드 변경 완료 시 `git add` → `git commit` → `git push` 자동 실행. 사용자가 별도로 요청하지 않아도 기본으로 수행한다.
 - 프로젝트 정체서(`project-identity.md`)와 최상위 원칙(`supreme-principles.md`)을 모든 설계/구현 판단의 기준으로 삼는다.
 
 ### 최근 업데이트
+- **2026-02-23**: SSE 스트리밍 전환 + 레이어 진행 방식 변경
+  - `author-chat`, `write-episode`, `generate-world-bible` API를 SSE 스트리밍으로 전환
+  - `maxDuration = 60` 추가 (Vercel Fluid Compute 활성화)
+  - Vercel Hobby 플랜 10초 타임아웃 문제 해결
+  - 레이어 진행: AI 제안 우선 → 사용자 입력 우선으로 변경
+  - 새 레이어 시작 시 가이드 메시지 표시 (`waitingForUserInput` 플래그)
+  - 프론트엔드에 `streamingFetch` 헬퍼 함수 추가
 - **2026-02-23**: 세계관 데이터 불러오기 기능 추가
   - 대시보드에 "📚 세계관 불러오기" 버튼 추가
   - `data/` 폴더의 JSON 파일들을 불러와 새 프로젝트 자동 생성
