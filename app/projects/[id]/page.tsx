@@ -1603,7 +1603,12 @@ export default function ProjectConversationPage() {
                 type="text"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSendMessage()}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
+                    e.preventDefault();
+                    handleSendMessage();
+                  }
+                }}
                 placeholder={isLoading ? '응답 중...' : (isMobile ? '메시지 입력...' : '메시지를 입력하세요... (예: 떡밥 다시 수정해줘)')}
                 disabled={isLoading}
                 className="flex-1 rounded-lg border border-base-border bg-base-primary px-3 md:px-4 py-3 text-text-primary placeholder:text-text-muted focus:border-seojin focus:outline-none disabled:opacity-50"
