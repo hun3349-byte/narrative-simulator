@@ -51,10 +51,9 @@ function buildFeedbackSection(recurringFeedback?: Feedback[]): string {
 const client = new Anthropic();
 
 // 설정 상수
-// Vercel Hobby 플랜 10초 제한 대응 - Haiku 모델 사용
-// Sonnet은 응답이 너무 느려서 타임아웃 발생
-const MODEL = 'claude-haiku-4-5-20251001';
-const MAX_TOKENS = 8000;  // Haiku에 맞게 조정
+// Railway 배포 - Sonnet 모델 사용 (타임아웃 300초)
+const MODEL = 'claude-sonnet-4-20250514';
+const MAX_TOKENS = 12000;
 const TEMPERATURE = 0.8;   // 창작용 온도
 
 const MIN_CHAR_COUNT = 4000;
