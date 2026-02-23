@@ -58,8 +58,9 @@ async function classifyFeedback(
 }
 
 // 집필용 설정 (write-episode와 동일)
-const WRITING_MODEL = 'claude-sonnet-4-20250514';
-const WRITING_MAX_TOKENS = 12000;
+// Vercel Hobby 플랜 10초 제한 대응 - Haiku 모델 사용
+const WRITING_MODEL = 'claude-haiku-4-5-20251001';
+const WRITING_MAX_TOKENS = 8000;
 const WRITING_TEMPERATURE = 0.8;
 const TARGET_MIN_CHAR = 5000;
 const TARGET_MAX_CHAR = 7000;
@@ -1226,7 +1227,7 @@ export async function POST(req: NextRequest) {
               let fullText = '';
 
               const streamResponse = client.messages.stream({
-                model: 'claude-sonnet-4-5-20250929',
+                model: 'claude-haiku-4-5-20251001',  // Vercel Hobby 10초 제한 대응
                 max_tokens: 2000,
                 messages: [{ role: 'user', content: prompt }],
               });
@@ -1356,7 +1357,7 @@ export async function POST(req: NextRequest) {
           let fullText = '';
 
           const streamResponse = client.messages.stream({
-            model: 'claude-sonnet-4-5-20250929',
+            model: 'claude-haiku-4-5-20251001',  // Vercel Hobby 10초 제한 대응
             max_tokens: 4000,
             messages: [{ role: 'user', content: prompt }],
           });

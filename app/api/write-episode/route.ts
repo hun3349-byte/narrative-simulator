@@ -51,8 +51,10 @@ function buildFeedbackSection(recurringFeedback?: Feedback[]): string {
 const client = new Anthropic();
 
 // 설정 상수
-const MODEL = 'claude-sonnet-4-20250514';  // 최신 Sonnet 모델
-const MAX_TOKENS = 12000;  // 충분한 토큰 (한글 5000~7000자 = 약 5000~7000 토큰)
+// Vercel Hobby 플랜 10초 제한 대응 - Haiku 모델 사용
+// Sonnet은 응답이 너무 느려서 타임아웃 발생
+const MODEL = 'claude-haiku-4-5-20251001';
+const MAX_TOKENS = 8000;  // Haiku에 맞게 조정
 const TEMPERATURE = 0.8;   // 창작용 온도
 
 const MIN_CHAR_COUNT = 4000;
