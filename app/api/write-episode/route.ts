@@ -1,10 +1,12 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { AUTHOR_PERSONA_PRESETS } from '@/lib/presets/author-personas';
 import type { Episode, Feedback, FeedbackType, MonologueTone, ActiveContext, WritingMemory } from '@/lib/types';
 import { getEpisodeFinalContent } from '@/lib/types';
 import { activeContextToPrompt } from '@/lib/utils/active-context';
 import { buildWritingMemoryPrompt } from '@/lib/utils/writing-memory';
+
+export const maxDuration = 60; // Vercel Fluid Compute 활성화
 
 // 누적 피드백을 프롬프트용 문자열로 변환
 function buildFeedbackSection(recurringFeedback?: Feedback[]): string {
@@ -461,6 +463,8 @@ async function generateEpisode(
 }
 
 export async function POST(req: NextRequest) {
+  const encoder = new TextEncoder();
+
   try {
     const body = await req.json();
     const {
@@ -490,7 +494,7 @@ export async function POST(req: NextRequest) {
     const systemPrompt = buildSystemPrompt(persona, viewpoint, episodeNumber, previousMonologueTone);
 
     // 유저 프롬프트 (가변)
-    let userPrompt = buildUserPrompt({
+    const userPrompt = buildUserPrompt({
       episodeNumber,
       confirmedLayers,
       characterProfiles,
@@ -502,76 +506,180 @@ export async function POST(req: NextRequest) {
       writingMemory,
     });
 
-    let result = await generateEpisode(systemPrompt, userPrompt, episodeNumber);
-    let retryCount = 0;
+    // 스트리밍 응답 생성
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          let fullText = '';
 
-    // 분량 검증 및 재시도
-    while (
-      result.episode &&
-      result.episode.charCount < MIN_CHAR_COUNT &&
-      retryCount < MAX_RETRY
-    ) {
-      console.log(`Episode too short: ${result.episode.charCount} chars. Retry ${retryCount + 1}/${MAX_RETRY}`);
+          const streamResponse = client.messages.stream({
+            model: MODEL,
+            max_tokens: MAX_TOKENS,
+            temperature: TEMPERATURE,
+            system: systemPrompt,
+            messages: [{ role: 'user', content: userPrompt }],
+          });
 
-      userPrompt = buildUserPrompt({
-        episodeNumber,
-        confirmedLayers,
-        characterProfiles,
-        characterMemories,
-        previousEpisodes,
-        authorDirection,
-        isRetry: true,
-        previousContent: result.episode.content,
-        previousCharCount: result.episode.charCount,
-        recurringFeedback,
-        activeContext,
-        writingMemory,
-      });
+          for await (const event of streamResponse) {
+            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+              fullText += event.delta.text;
+              // 실시간 텍스트 전송
+              const chunk = JSON.stringify({ type: 'text', content: event.delta.text });
+              controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+            }
+          }
 
-      result = await generateEpisode(systemPrompt, userPrompt, episodeNumber);
-      retryCount++;
-    }
+          // 파싱
+          let cleanText = fullText;
+          const codeBlockMatch = fullText.match(/```(?:json)?\s*([\s\S]*?)```/);
+          if (codeBlockMatch) {
+            cleanText = codeBlockMatch[1].trim();
+          }
 
-    // 결과 반환
-    if (result.episode) {
-      result.episode.pov = seeds?.[0]?.id || '';
+          const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            try {
+              const parsed = JSON.parse(jsonMatch[0]);
 
-      // 분량 부족 시 경고
-      if (result.episode.charCount < MIN_CHAR_COUNT) {
-        result.authorComment = `[분량 ${result.episode.charCount}자 - 목표 ${TARGET_MIN_CHAR}자 미달]\n\n${result.authorComment}`;
-      }
+              if (parsed.episode) {
+                const content = parsed.episode.content || '';
+                const episode = {
+                  id: `ep-${Date.now()}`,
+                  number: episodeNumber,
+                  title: parsed.episode.title || `제${episodeNumber}화`,
+                  content: content,
+                  charCount: content.length,
+                  status: 'drafted',
+                  pov: seeds?.[0]?.id || '',
+                  sourceEventIds: [],
+                  authorNote: parsed.authorComment || '',
+                  endHook: parsed.episode.endHook || '',
+                  monologueTone: parsed.monologueTone || undefined,
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                };
 
-      return NextResponse.json({
-        episode: result.episode,
-        authorComment: result.authorComment,
-        nextEpisodePreview: result.nextEpisodePreview,
-      });
-    }
+                // 분량 경고
+                let authorComment = parsed.authorComment || '';
+                if (content.length < MIN_CHAR_COUNT) {
+                  authorComment = `[분량 ${content.length}자 - 목표 ${TARGET_MIN_CHAR}자 미달]\n\n${authorComment}`;
+                }
 
-    // 파싱 실패 시 raw 텍스트로 에피소드 생성
-    return NextResponse.json({
-      episode: {
-        id: `ep-${Date.now()}`,
-        number: episodeNumber,
-        title: `제${episodeNumber}화`,
-        content: result.rawText.slice(0, 10000),
-        charCount: result.rawText.length,
-        status: 'drafted',
-        pov: seeds?.[0]?.id || '',
-        sourceEventIds: [],
-        authorNote: '',
-        endHook: '',
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+                const finalData = JSON.stringify({
+                  type: 'done',
+                  episode,
+                  authorComment,
+                  nextEpisodePreview: parsed.nextEpisodePreview || '',
+                });
+                controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+              } else {
+                // episode 키 없음 - raw 텍스트 사용
+                const episode = {
+                  id: `ep-${Date.now()}`,
+                  number: episodeNumber,
+                  title: `제${episodeNumber}화`,
+                  content: fullText.slice(0, 10000),
+                  charCount: fullText.length,
+                  status: 'drafted',
+                  pov: seeds?.[0]?.id || '',
+                  sourceEventIds: [],
+                  authorNote: '',
+                  endHook: '',
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                };
+
+                const finalData = JSON.stringify({
+                  type: 'done',
+                  episode,
+                  authorComment: '파싱 부분 실패 - 원본 텍스트 사용',
+                  nextEpisodePreview: '',
+                });
+                controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+              }
+            } catch {
+              // JSON 파싱 실패 - raw 텍스트 사용
+              const episode = {
+                id: `ep-${Date.now()}`,
+                number: episodeNumber,
+                title: `제${episodeNumber}화`,
+                content: fullText.slice(0, 10000),
+                charCount: fullText.length,
+                status: 'drafted',
+                pov: seeds?.[0]?.id || '',
+                sourceEventIds: [],
+                authorNote: '',
+                endHook: '',
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              };
+
+              const finalData = JSON.stringify({
+                type: 'done',
+                episode,
+                authorComment: '파싱 실패 - 원본 텍스트 사용',
+                nextEpisodePreview: '',
+              });
+              controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+            }
+          } else {
+            // JSON 없음 - raw 텍스트 사용
+            const episode = {
+              id: `ep-${Date.now()}`,
+              number: episodeNumber,
+              title: `제${episodeNumber}화`,
+              content: fullText.slice(0, 10000),
+              charCount: fullText.length,
+              status: 'drafted',
+              pov: seeds?.[0]?.id || '',
+              sourceEventIds: [],
+              authorNote: '',
+              endHook: '',
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+
+            const finalData = JSON.stringify({
+              type: 'done',
+              episode,
+              authorComment: 'JSON 없음 - 원본 텍스트 사용',
+              nextEpisodePreview: '',
+            });
+            controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+          }
+
+          controller.close();
+        } catch (error) {
+          console.error('Write episode streaming error:', error);
+          const errorData = JSON.stringify({
+            type: 'error',
+            message: error instanceof Error ? error.message : '에피소드 작성 오류',
+          });
+          controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
+          controller.close();
+        }
       },
-      authorComment: '파싱 실패 - 원본 텍스트 사용',
-      nextEpisodePreview: '',
+    });
+
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
     });
   } catch (error) {
     console.error('Write episode error:', error);
-    return NextResponse.json(
-      { error: '에피소드 작성 실패' },
-      { status: 500 }
-    );
+    const encoder = new TextEncoder();
+    const errorData = JSON.stringify({
+      type: 'error',
+      message: '에피소드 작성 실패',
+    });
+    return new Response(`data: ${errorData}\n\n`, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+      },
+    });
   }
 }

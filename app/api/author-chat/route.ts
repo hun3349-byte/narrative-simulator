@@ -1,8 +1,10 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { NextRequest } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { AUTHOR_PERSONA_PRESETS } from '@/lib/presets/author-personas';
 import type { LayerName, Episode, Feedback, FeedbackType } from '@/lib/types';
 import { getEpisodeFinalContent } from '@/lib/types';
+
+export const maxDuration = 60; // Vercel Fluid Compute 활성화
 
 const client = new Anthropic();
 
@@ -1081,6 +1083,8 @@ ${recentHistory || '(첫 대화)'}
 }
 
 export async function POST(req: NextRequest) {
+  const encoder = new TextEncoder();
+
   try {
     const body: AuthorChatRequest = await req.json();
     const { layer, action, userMessage } = body;
@@ -1091,54 +1095,110 @@ export async function POST(req: NextRequest) {
       if (userMessage) {
         const writingCheck = isWritingRequest(userMessage);
 
-        // 집필 요청이면 write-episode 로직 실행
+        // 집필 요청이면 스트리밍으로 에피소드 생성
         if (writingCheck.isWriting) {
-          console.log('\n=== WRITING REQUEST DETECTED ===');
+          console.log('\n=== WRITING REQUEST DETECTED (STREAMING) ===');
           console.log('Message:', userMessage);
-          console.log('Episode number hint:', writingCheck.episodeNumber);
 
           const persona = AUTHOR_PERSONA_PRESETS.find(p => p.id === body.authorPersonaId);
           const episodeNumber = writingCheck.episodeNumber || (body.episodesCount || 0) + 1;
-
           const systemPrompt = buildWritingSystemPrompt(persona, body.viewpoint);
-          let userPrompt = buildWritingUserPrompt(body, episodeNumber);
+          const userPrompt = buildWritingUserPrompt(body, episodeNumber);
 
-          let result = await generateEpisodeInternal(systemPrompt, userPrompt, episodeNumber);
-          let retryCount = 0;
+          // 스트리밍 응답 생성
+          const stream = new ReadableStream({
+            async start(controller) {
+              try {
+                let fullText = '';
 
-          // 분량 검증 및 재시도
-          while (
-            result.episode &&
-            result.episode.charCount < MIN_CHAR_COUNT &&
-            retryCount < MAX_RETRY
-          ) {
-            console.log(`Episode too short: ${result.episode.charCount} chars. Retry ${retryCount + 1}/${MAX_RETRY}`);
+                const streamResponse = client.messages.stream({
+                  model: WRITING_MODEL,
+                  max_tokens: WRITING_MAX_TOKENS,
+                  temperature: WRITING_TEMPERATURE,
+                  system: systemPrompt,
+                  messages: [{ role: 'user', content: userPrompt }],
+                });
 
-            userPrompt = buildWritingUserPrompt(body, episodeNumber, true, result.episode.charCount);
-            result = await generateEpisodeInternal(systemPrompt, userPrompt, episodeNumber);
-            retryCount++;
-          }
+                for await (const event of streamResponse) {
+                  if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+                    fullText += event.delta.text;
+                    // 텍스트 청크 전송
+                    const chunk = JSON.stringify({ type: 'text', content: event.delta.text });
+                    controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+                  }
+                }
 
-          if (result.episode) {
-            // 분량 부족 경고
-            let comment = result.authorComment;
-            if (result.episode.charCount < MIN_CHAR_COUNT) {
-              comment = `[분량 ${result.episode.charCount}자 - 목표 ${TARGET_MIN_CHAR}자 미달]\n\n${comment}`;
-            }
+                // 최종 파싱 및 결과 전송
+                let cleanText = fullText;
+                const codeBlockMatch = fullText.match(/```(?:json)?\s*([\s\S]*?)```/);
+                if (codeBlockMatch) {
+                  cleanText = codeBlockMatch[1].trim();
+                }
 
-            return NextResponse.json({
-              message: comment || `${episodeNumber}화 초안이야. 읽어봐.`,
-              episode: result.episode,
-              nextEpisodePreview: result.nextEpisodePreview,
-              isEpisode: true,
-            });
-          }
+                const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+                if (jsonMatch) {
+                  const parsed = JSON.parse(jsonMatch[0]);
+                  if (parsed.episode) {
+                    const content = parsed.episode.content || '';
+                    const episode = {
+                      id: `ep-${Date.now()}`,
+                      number: episodeNumber,
+                      title: parsed.episode.title || `제${episodeNumber}화`,
+                      content: content,
+                      charCount: content.length,
+                      status: 'drafted',
+                      pov: '',
+                      sourceEventIds: [],
+                      authorNote: parsed.authorComment || '',
+                      endHook: parsed.episode.endHook || '',
+                      createdAt: new Date().toISOString(),
+                      updatedAt: new Date().toISOString(),
+                    };
 
-          // 파싱 실패
-          return NextResponse.json({
-            message: '에피소드 생성 중 문제가 생겼어. 다시 시도해볼게.',
-            episode: null,
-            isEpisode: false,
+                    const finalData = JSON.stringify({
+                      type: 'done',
+                      message: parsed.authorComment || `${episodeNumber}화 초안이야. 읽어봐.`,
+                      episode,
+                      nextEpisodePreview: parsed.nextEpisodePreview || '',
+                      isEpisode: true,
+                    });
+                    controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+                  } else {
+                    const finalData = JSON.stringify({
+                      type: 'done',
+                      message: '에피소드 생성 중 문제가 생겼어.',
+                      isEpisode: false,
+                    });
+                    controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+                  }
+                } else {
+                  const finalData = JSON.stringify({
+                    type: 'done',
+                    message: '에피소드 파싱에 실패했어.',
+                    isEpisode: false,
+                  });
+                  controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+                }
+
+                controller.close();
+              } catch (error) {
+                console.error('Streaming error:', error);
+                const errorData = JSON.stringify({
+                  type: 'error',
+                  message: error instanceof Error ? error.message : '스트리밍 오류',
+                });
+                controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
+                controller.close();
+              }
+            },
+          });
+
+          return new Response(stream, {
+            headers: {
+              'Content-Type': 'text/event-stream',
+              'Cache-Control': 'no-cache',
+              'Connection': 'keep-alive',
+            },
           });
         }
 
@@ -1147,7 +1207,6 @@ export async function POST(req: NextRequest) {
         let feedbackInfo = null;
 
         if (isFeedback) {
-          // 피드백 분류
           const currentEpisodeNumber = body.currentEpisode?.number || body.episodesCount || 1;
           const classification = await classifyFeedback(userMessage, currentEpisodeNumber);
           feedbackInfo = {
@@ -1156,119 +1215,247 @@ export async function POST(req: NextRequest) {
             isRecurring: classification.isRecurring,
             episodeNumber: currentEpisodeNumber,
           };
-
-          console.log('\n=== FEEDBACK DETECTED ===');
-          console.log('Content:', userMessage);
-          console.log('Type:', classification.type);
-          console.log('Is Recurring:', classification.isRecurring);
         }
 
-        // 일반 대화
+        // 일반 대화 - 스트리밍
         const prompt = buildConversationPrompt(body);
 
-        const response = await client.messages.create({
-          model: 'claude-sonnet-4-5-20250929',
-          max_tokens: 2000,
-          messages: [{ role: 'user', content: prompt }],
+        const stream = new ReadableStream({
+          async start(controller) {
+            try {
+              let fullText = '';
+
+              const streamResponse = client.messages.stream({
+                model: 'claude-sonnet-4-5-20250929',
+                max_tokens: 2000,
+                messages: [{ role: 'user', content: prompt }],
+              });
+
+              for await (const event of streamResponse) {
+                if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+                  fullText += event.delta.text;
+                  const chunk = JSON.stringify({ type: 'text', content: event.delta.text });
+                  controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+                }
+              }
+
+              const finalData = JSON.stringify({
+                type: 'done',
+                message: fullText,
+                layer: null,
+                isEpisode: false,
+                feedback: feedbackInfo,
+              });
+              controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+              controller.close();
+            } catch (error) {
+              console.error('Conversation streaming error:', error);
+              const errorData = JSON.stringify({
+                type: 'error',
+                message: error instanceof Error ? error.message : '대화 오류',
+              });
+              controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
+              controller.close();
+            }
+          },
         });
 
-        const text = response.content[0].type === 'text' ? response.content[0].text : '';
-
-        return NextResponse.json({
-          message: text,
-          layer: null,
-          isEpisode: false,
-          feedback: feedbackInfo,  // 피드백 분류 정보 포함
+        return new Response(stream, {
+          headers: {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+          },
         });
       }
 
       // 사용자 메시지 없이 novel 단계 진입
-      return NextResponse.json({
+      const immediateData = JSON.stringify({
+        type: 'done',
         message: '세계 구축이 끝났어. 이제 뭘 할까? 1화 써볼까?',
         layer: null,
         isEpisode: false,
       });
+
+      return new Response(`data: ${immediateData}\n\n`, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+        },
+      });
     }
 
+    // 새 레이어 시작 - 환님 먼저 입력 방식
+    if (action === 'generate_layer') {
+      // 레이어별 안내 메시지 (환님에게 먼저 아이디어 요청)
+      const layerGuideMessages: Record<string, string> = {
+        world: `세계 레이어야. 이 이야기가 펼쳐질 세계에 대해 네 생각을 먼저 말해봐.
+
+대륙 이름, 지형, 분위기... 떠오르는 키워드만 던져도 돼.
+예: "황폐한 대륙", "마법이 사라진 세계", "하늘에 떠 있는 섬들"
+
+아무 아이디어 없으면 "제안해줘"라고 해. 내가 처음부터 만들어볼게.`,
+
+        coreRules: `규칙 레이어야. 이 세계의 힘의 체계, 마법, 계급, 신화, 역사에 대해 네 생각을 먼저 말해봐.
+
+키워드만 던져도 돼.
+예: "감정이 마법의 원천", "피로 계급이 결정됨", "고대 문명의 멸망"
+
+아무 아이디어 없으면 "제안해줘"라고 해. 내가 살을 붙일게.`,
+
+        seeds: `씨앗 레이어야. 이 세계에 존재하는 세력, 종족, NPC들에 대해 네 생각을 먼저 말해봐.
+
+예: "세 개의 대세력이 견제", "인간과 반인간 갈등", "암흑가의 정보상"
+
+아무 아이디어 없으면 "제안해줘"라고 해.`,
+
+        heroArc: `주인공 레이어야. 주인공에 대해 네 생각을 먼저 말해봐.
+
+이름, 출신, 성격, 목표, 결핍... 뭐든 떠오르는 거 말해.
+예: "버려진 아이", "복수가 아니라 인정받고 싶은 것", "천재지만 게으름"
+
+아무 아이디어 없으면 "제안해줘"라고 해.`,
+
+        villainArc: `빌런/대립 구도 레이어야. 빌런이나 대립 세력에 대해 네 생각을 먼저 말해봐.
+
+예: "빌런도 피해자", "목적은 같은데 방법이 다른 적", "제3세력의 등장"
+
+아무 아이디어 없으면 "제안해줘"라고 해.`,
+
+        ultimateMystery: `떡밥 레이어야. 이 이야기의 숨겨진 비밀, 반전에 대해 네 생각을 먼저 말해봐.
+
+예: "주인공의 진짜 정체", "세계의 숨겨진 진실", "빌런과의 연결 고리"
+
+아무 아이디어 없으면 "제안해줘"라고 해.`,
+      };
+
+      const guideMessage = layerGuideMessages[layer] || '이 레이어에 대해 네 생각을 먼저 말해봐. 키워드만 던져도 돼.';
+
+      const immediateData = JSON.stringify({
+        type: 'done',
+        message: guideMessage,
+        layer: null,
+        isEpisode: false,
+        waitingForUserInput: true,  // 프론트에서 감지할 수 있는 플래그
+      });
+
+      return new Response(`data: ${immediateData}\n\n`, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+        },
+      });
+    }
+
+    // 레이어 수정 (revise_layer) - 환님 아이디어 기반으로 확장
     const prompt = buildLayerPrompt(body);
 
-    const response = await client.messages.create({
-      model: 'claude-sonnet-4-5-20250929',
-      max_tokens: 4000,
-      messages: [{ role: 'user', content: prompt }],
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          let fullText = '';
+
+          const streamResponse = client.messages.stream({
+            model: 'claude-sonnet-4-5-20250929',
+            max_tokens: 4000,
+            messages: [{ role: 'user', content: prompt }],
+          });
+
+          for await (const event of streamResponse) {
+            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+              fullText += event.delta.text;
+              const chunk = JSON.stringify({ type: 'text', content: event.delta.text });
+              controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+            }
+          }
+
+          // 파싱
+          let cleanText = fullText;
+          const codeBlockMatch = fullText.match(/```(?:json)?\s*([\s\S]*?)```/);
+          if (codeBlockMatch) {
+            cleanText = codeBlockMatch[1].trim();
+          }
+
+          const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            try {
+              const parsed = JSON.parse(jsonMatch[0]);
+
+              let cleanMessage = parsed.message || '';
+              if (cleanMessage.includes('{') || /"\w+":\s*["{[]/.test(cleanMessage)) {
+                const lines = cleanMessage.split('\n').filter((line: string) => {
+                  const trimmed = line.trim();
+                  return trimmed &&
+                         !trimmed.startsWith('{') &&
+                         !trimmed.startsWith('}') &&
+                         !trimmed.startsWith('"') &&
+                         !/^\w+:/.test(trimmed) &&
+                         !/^"?\w+"?\s*:/.test(trimmed);
+                });
+                cleanMessage = lines.join('\n').trim() || '제안을 확인해봐.';
+              }
+
+              const hasValidLayer = parsed.layer &&
+                typeof parsed.layer === 'object' &&
+                Object.keys(parsed.layer).length > 0;
+
+              const finalData = JSON.stringify({
+                type: 'done',
+                message: cleanMessage,
+                layer: hasValidLayer ? parsed.layer : null,
+                isEpisode: false,
+              });
+              controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+            } catch {
+              const finalData = JSON.stringify({
+                type: 'done',
+                message: fullText.replace(/```json\s*/g, '').replace(/```\s*/g, '').replace(/\{[\s\S]*\}/g, '').trim() || '다시 제안할게.',
+                layer: null,
+                isEpisode: false,
+              });
+              controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+            }
+          } else {
+            const finalData = JSON.stringify({
+              type: 'done',
+              message: fullText.trim() || '다시 제안할게.',
+              layer: null,
+              isEpisode: false,
+            });
+            controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+          }
+
+          controller.close();
+        } catch (error) {
+          console.error('Layer streaming error:', error);
+          const errorData = JSON.stringify({
+            type: 'error',
+            message: error instanceof Error ? error.message : '레이어 생성 오류',
+          });
+          controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
+          controller.close();
+        }
+      },
     });
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
-
-    try {
-      // 마크다운 코드 블록 제거
-      let cleanText = text;
-      const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (codeBlockMatch) {
-        cleanText = codeBlockMatch[1].trim();
-      }
-
-      const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-
-        // message 정제: JSON 키 이름이나 구조가 포함되어 있으면 제거
-        let cleanMessage = parsed.message || '';
-        // JSON 형태의 문자열 제거 (중괄호로 시작하거나, key: value 패턴)
-        if (cleanMessage.includes('{') || /"\w+":\s*["{[]/.test(cleanMessage)) {
-          // message 안에 JSON이 섞여 있으면 첫 줄이나 마지막 자연어 부분만 추출
-          const lines = cleanMessage.split('\n').filter((line: string) => {
-            const trimmed = line.trim();
-            // JSON 시작/끝 또는 key-value 패턴이 아닌 줄만 유지
-            return trimmed &&
-                   !trimmed.startsWith('{') &&
-                   !trimmed.startsWith('}') &&
-                   !trimmed.startsWith('"') &&
-                   !/^\w+:/.test(trimmed) &&
-                   !/^"?\w+"?\s*:/.test(trimmed);
-          });
-          cleanMessage = lines.join('\n').trim() || '제안을 확인해봐.';
-        }
-
-        // layer가 있고 의미 있는 데이터가 있는지 확인
-        const hasValidLayer = parsed.layer &&
-          typeof parsed.layer === 'object' &&
-          Object.keys(parsed.layer).length > 0;
-
-        return NextResponse.json({
-          message: cleanMessage,
-          layer: hasValidLayer ? parsed.layer : null,
-          isEpisode: false
-        });
-      }
-    } catch (parseError) {
-      console.error('Layer JSON parsing error:', parseError);
-    }
-
-    // 파싱 실패 시 텍스트에서 message만 추출 시도
-    // JSON 구조 제거하고 자연어만 남김
-    let fallbackMessage = text
-      .replace(/```json\s*/g, '')
-      .replace(/```\s*/g, '')
-      .replace(/\{[\s\S]*\}/g, '')  // JSON 객체 전체 제거
-      .replace(/"message"\s*:\s*"([^"]+)"/g, '$1')  // "message": "..." 에서 내용만 추출
-      .trim();
-
-    // 빈 문자열이면 기본 메시지
-    if (!fallbackMessage) {
-      fallbackMessage = '피드백을 반영해서 다시 제안할게. 잠깐만.';
-    }
-
-    return NextResponse.json({
-      message: fallbackMessage,
-      layer: null,
-      isEpisode: false,
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
     });
   } catch (error) {
     console.error('Author chat error:', error);
-    return NextResponse.json(
-      { error: '작가 대화 실패', message: '문제가 생겼어. 다시 시도해볼게.' },
-      { status: 500 }
-    );
+    const errorData = JSON.stringify({
+      type: 'error',
+      message: '작가 대화 실패. 다시 시도해봐.',
+    });
+    return new Response(`data: ${errorData}\n\n`, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+      },
+    });
   }
 }

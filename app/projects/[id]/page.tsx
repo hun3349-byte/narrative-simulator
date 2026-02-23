@@ -11,6 +11,59 @@ import { trackBreadcrumbs, generateBreadcrumbInstructions } from '@/lib/utils/br
 import { buildActiveContext } from '@/lib/utils/active-context';
 import { createEmptyWritingMemory, updateQualityTracker, processFeedback, analyzeEdit, integrateEditPatterns, getWritingMemoryStats } from '@/lib/utils/writing-memory';
 
+// SSE 스트리밍 헬퍼 함수
+async function streamingFetch(
+  url: string,
+  body: unknown,
+  onText?: (text: string) => void,
+): Promise<{ type: string; [key: string]: unknown }> {
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('스트림을 읽을 수 없습니다');
+
+  const decoder = new TextDecoder();
+  let finalResult: { type: string; [key: string]: unknown } | null = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    const chunk = decoder.decode(value);
+    const lines = chunk.split('\n');
+
+    for (const line of lines) {
+      if (line.startsWith('data: ')) {
+        try {
+          const data = JSON.parse(line.slice(6));
+
+          if (data.type === 'text' && onText) {
+            onText(data.content);
+          } else if (data.type === 'done' || data.type === 'error') {
+            finalResult = data;
+          }
+        } catch {
+          // JSON 파싱 실패는 무시
+        }
+      }
+    }
+  }
+
+  if (!finalResult) {
+    throw new Error('응답을 받지 못했습니다');
+  }
+
+  return finalResult;
+}
+
 // 모바일 감지 훅
 function useIsMobile() {
   const [isMobile, setIsMobile] = useState(false);
@@ -279,7 +332,7 @@ export default function ProjectConversationPage() {
     }
   }, [project, addEpisodeLog]);
 
-  // 레이어 제안 생성
+  // 레이어 제안 생성 (스트리밍)
   const generateLayerProposal = useCallback(async (layer: LayerName) => {
     if (!project || layer === 'novel') return;
 
@@ -288,48 +341,45 @@ export default function ProjectConversationPage() {
 
     const doGenerate = async () => {
       try {
-        const response = await fetch('/api/author-chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            projectId: project.id,
-            action: 'generate_layer',
-            layer,
-            genre: project.genre,
-            tone: project.tone,
-            viewpoint: project.viewpoint,
-            authorPersonaId: project.authorPersona.id,
-            direction: project.direction,
-            previousLayers: {
-              world: project.layers.world.data,
-              coreRules: project.layers.coreRules.data,
-              seeds: project.layers.seeds.data,
-              heroArc: project.layers.heroArc.data,
-              villainArc: project.layers.villainArc.data,
-              ultimateMystery: project.layers.ultimateMystery.data,
-            },
-          }),
+        const data = await streamingFetch('/api/author-chat', {
+          projectId: project.id,
+          action: 'generate_layer',
+          layer,
+          genre: project.genre,
+          tone: project.tone,
+          viewpoint: project.viewpoint,
+          authorPersonaId: project.authorPersona.id,
+          direction: project.direction,
+          previousLayers: {
+            world: project.layers.world.data,
+            coreRules: project.layers.coreRules.data,
+            seeds: project.layers.seeds.data,
+            heroArc: project.layers.heroArc.data,
+            villainArc: project.layers.villainArc.data,
+            ultimateMystery: project.layers.ultimateMystery.data,
+          },
         });
 
-        const data = await response.json();
-
-        if (data.error) {
-          throw new Error(data.error);
+        if (data.type === 'error') {
+          throw new Error(data.message as string);
         }
 
         if (data.message) {
+          // 환님 먼저 입력 방식: waitingForUserInput 플래그 확인
+          const isWaitingForUser = data.waitingForUserInput === true;
+
           addMessage({
             role: 'author',
-            content: data.message,
-            layerData: data.layer,
-            choices: [
+            content: data.message as string,
+            layerData: data.layer as unknown,
+            choices: isWaitingForUser ? undefined : [
               { label: '확정', action: 'confirm_layer' },
               { label: '다시 제안해줘', action: 'regenerate' },
             ],
           });
 
           if (data.layer) {
-            updateLayer(layer, data.layer);
+            updateLayer(layer, data.layer as Record<string, unknown>);
           }
         }
       } catch (error) {
@@ -419,55 +469,49 @@ export default function ProjectConversationPage() {
         // 누적 피드백 가져오기
         const recurringFeedback = getRecurringFeedback();
 
-        const response = await fetch('/api/author-chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            projectId: project.id,
-            action: isNovelPhase ? 'conversation' : 'revise_layer',
-            layer: project.currentLayer,
-            userMessage,
-            genre: project.genre,
-            tone: project.tone,
-            viewpoint: project.viewpoint,
-            authorPersonaId: project.authorPersona.id,
-            direction: project.direction,
-            currentPhase: project.currentPhase,
-            conversationHistory: isNovelPhase ? conversationHistory : undefined,
-            previousLayers: {
-              world: project.layers.world.data,
-              coreRules: project.layers.coreRules.data,
-              seeds: project.layers.seeds.data,
-              heroArc: project.layers.heroArc.data,
-              villainArc: project.layers.villainArc.data,
-              ultimateMystery: project.layers.ultimateMystery.data,
-            },
-            currentDraft: isNovelPhase ? undefined : project.layers[project.currentLayer as keyof typeof project.layers]?.data,
-            // 추가 컨텍스트 (novel 단계에서만)
-            worldHistory: isNovelPhase ? worldHistory : undefined,
-            currentEpisode: isNovelPhase ? currentEpisode : undefined,
-            episodesCount: isNovelPhase ? project.episodes.length : undefined,
-            episodes: isNovelPhase ? project.episodes.slice(-3) : undefined,  // 이전 에피소드 (문체 참고용)
-            // 누적 피드백
-            recurringFeedback: isNovelPhase ? recurringFeedback : undefined,
-          }),
+        // 스트리밍 호출
+        const data = await streamingFetch('/api/author-chat', {
+          projectId: project.id,
+          action: isNovelPhase ? 'conversation' : 'revise_layer',
+          layer: project.currentLayer,
+          userMessage,
+          genre: project.genre,
+          tone: project.tone,
+          viewpoint: project.viewpoint,
+          authorPersonaId: project.authorPersona.id,
+          direction: project.direction,
+          currentPhase: project.currentPhase,
+          conversationHistory: isNovelPhase ? conversationHistory : undefined,
+          previousLayers: {
+            world: project.layers.world.data,
+            coreRules: project.layers.coreRules.data,
+            seeds: project.layers.seeds.data,
+            heroArc: project.layers.heroArc.data,
+            villainArc: project.layers.villainArc.data,
+            ultimateMystery: project.layers.ultimateMystery.data,
+          },
+          currentDraft: isNovelPhase ? undefined : project.layers[project.currentLayer as keyof typeof project.layers]?.data,
+          worldHistory: isNovelPhase ? worldHistory : undefined,
+          currentEpisode: isNovelPhase ? currentEpisode : undefined,
+          episodesCount: isNovelPhase ? project.episodes.length : undefined,
+          episodes: isNovelPhase ? project.episodes.slice(-3) : undefined,
+          recurringFeedback: isNovelPhase ? recurringFeedback : undefined,
         });
 
-        const data = await response.json();
-
-        if (data.error) {
-          throw new Error(data.error);
+        if (data.type === 'error') {
+          throw new Error(data.message as string);
         }
 
         // 에피소드 응답 처리
         if (data.isEpisode && data.episode) {
-          addEpisode(data.episode);
-          handlePostEpisodeCreation(data.episode); // Episode Log + Fact Check
-          setEditingEpisodeId(data.episode.id);
+          const episode = data.episode as Episode;
+          addEpisode(episode);
+          handlePostEpisodeCreation(episode);
+          setEditingEpisodeId(episode.id);
           addMessage({
             role: 'author',
-            content: data.message || `${data.episode.number}화 초안이야. 읽어봐.`,
-            episode: data.episode,
+            content: (data.message as string) || `${episode.number}화 초안이야. 읽어봐.`,
+            episode: episode,
             choices: [
               { label: '채택', action: 'adopt_episode' },
               { label: '수정 요청', action: 'request_revision' },
@@ -475,20 +519,19 @@ export default function ProjectConversationPage() {
             ],
           });
         } else if (data.message) {
-          // 레이어 데이터 유효성 확인: 객체이고 내용이 있어야 함
-          const hasValidLayer = data.layer &&
-            typeof data.layer === 'object' &&
-            Object.keys(data.layer).length > 0;
+          const layer = data.layer as Record<string, unknown> | null;
+          const hasValidLayer = layer &&
+            typeof layer === 'object' &&
+            Object.keys(layer).length > 0;
 
-          // novel 단계가 아니고 레이어 관련 대화중이면 항상 확정 버튼 표시
           const showLayerButtons = project.currentLayer !== 'novel' &&
             project.currentPhase !== 'writing' &&
             (hasValidLayer || project.layers[project.currentLayer as keyof typeof project.layers]?.status === 'drafting');
 
           addMessage({
             role: 'author',
-            content: data.message,
-            layerData: hasValidLayer ? data.layer : undefined,
+            content: data.message as string,
+            layerData: hasValidLayer ? layer : undefined,
             choices: showLayerButtons ? [
               { label: '확정', action: 'confirm_layer' },
               { label: '다시 제안해줘', action: 'regenerate' },
@@ -496,18 +539,19 @@ export default function ProjectConversationPage() {
           });
 
           if (hasValidLayer && project.currentLayer !== 'novel') {
-            updateLayer(project.currentLayer as Exclude<LayerName, 'novel'>, data.layer);
+            updateLayer(project.currentLayer as Exclude<LayerName, 'novel'>, layer);
           }
 
           // 피드백이 감지되었으면 저장
-          if (data.feedback) {
+          const feedback = data.feedback as { episodeNumber: number; type: string; content: string; isRecurring: boolean } | undefined;
+          if (feedback) {
             addFeedback({
-              episodeNumber: data.feedback.episodeNumber,
-              type: data.feedback.type,
-              content: data.feedback.content,
-              isRecurring: data.feedback.isRecurring,
+              episodeNumber: feedback.episodeNumber,
+              type: feedback.type as 'style' | 'character' | 'plot' | 'pacing' | 'general',
+              content: feedback.content,
+              isRecurring: feedback.isRecurring,
             });
-            console.log('Feedback saved:', data.feedback);
+            console.log('Feedback saved:', feedback);
           }
         }
       } catch (error) {
@@ -613,15 +657,10 @@ export default function ProjectConversationPage() {
       });
 
       const generateWorldBibleAndHistory = async () => {
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 120000); // 120초 타임아웃 (두 API 호출)
-
         try {
-          // 1. World Bible 생성
-          const worldBibleResponse = await fetch('/api/generate-world-bible', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
+          // 1. World Bible 생성 (스트리밍)
+          try {
+            const worldBibleData = await streamingFetch('/api/generate-world-bible', {
               layers: {
                 world: project.layers.world.data,
                 coreRules: project.layers.coreRules.data,
@@ -630,18 +669,16 @@ export default function ProjectConversationPage() {
                 villainArc: project.layers.villainArc.data,
                 ultimateMystery: project.layers.ultimateMystery.data,
               },
-            }),
-            signal: controller.signal,
-          });
+            });
 
-          if (!worldBibleResponse.ok) {
-            console.warn('World Bible 생성 실패, 계속 진행');
-          } else {
-            const worldBibleData = await worldBibleResponse.json();
-            if (worldBibleData.worldBible) {
-              setWorldBible(worldBibleData.worldBible);
-              console.log('World Bible 생성 완료:', worldBibleData.worldBible.tokenCount, '토큰');
+            if (worldBibleData.type === 'done' && worldBibleData.worldBible) {
+              setWorldBible(worldBibleData.worldBible as import('@/lib/types').WorldBible);
+              console.log('World Bible 생성 완료:', (worldBibleData.worldBible as { tokenCount?: number }).tokenCount, '토큰');
+            } else if (worldBibleData.type === 'error') {
+              console.warn('World Bible 생성 실패, 계속 진행:', worldBibleData.message);
             }
+          } catch (error) {
+            console.warn('World Bible 생성 실패, 계속 진행:', error);
           }
 
           // 2. 세계 역사 생성
@@ -664,10 +701,7 @@ export default function ProjectConversationPage() {
               ultimateMystery: project.layers.ultimateMystery.data,
               totalYears: 1000,
             }),
-            signal: controller.signal,
           });
-
-          clearTimeout(timeoutId);
 
           if (!response.ok) {
             throw new Error(`API 오류: ${response.status}`);
@@ -699,14 +733,7 @@ export default function ProjectConversationPage() {
         } catch (error) {
           console.error('World history generation error:', error);
 
-          let errorMsg = '알 수 없는 오류';
-          if (error instanceof Error) {
-            if (error.name === 'AbortError') {
-              errorMsg = '시간이 너무 오래 걸렸어 (60초 초과)';
-            } else {
-              errorMsg = error.message;
-            }
-          }
+          const errorMsg = error instanceof Error ? error.message : '알 수 없는 오류';
 
           setLastError(errorMsg);
           setRetryAction(() => () => handleChoiceClick('start_simulation'));
@@ -944,7 +971,7 @@ export default function ProjectConversationPage() {
       // 자동으로 1화 작성 시작
       setTimeout(() => handleChoiceClick('write_next_episode'), 500);
     } else if (action === 'write_next_episode') {
-      // 다음 화 작성 요청
+      // 다음 화 작성 요청 (스트리밍)
       const nextNumber = project.episodes.length + 1;
       setIsLoading(true);
 
@@ -985,52 +1012,49 @@ export default function ProjectConversationPage() {
           currentEpisodeNumber: nextNumber,
         }) : undefined;
 
-        const response = await fetch('/api/write-episode', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            episodeNumber: nextNumber,
-            projectConfig: {
-              genre: project.genre,
-              tone: project.tone,
-              viewpoint: project.viewpoint,
-              authorPersonaId: project.authorPersona?.id,
-            },
-            confirmedLayers: {
-              world: layerToString(project.layers.world.data),
-              coreRules: layerToString(project.layers.coreRules.data),
-              seeds: layerToString(project.layers.seeds.data),
-              heroArc: layerToString(project.layers.heroArc.data),
-              villainArc: layerToString(project.layers.villainArc.data),
-              ultimateMystery: layerToString(project.layers.ultimateMystery.data),
-            },
-            characterProfiles,
-            characterMemories,
-            authorDirection: `${nextNumber}화 - ${project.direction || '자유롭게 전개'}`,
-            previousEpisodes: project.episodes.slice(-3),
-            // 누적 피드백
-            recurringFeedback,
-            // Active Context (메타 지시 포함)
-            activeContext,
-            // 자가진화 피드백 루프 (Writing Memory)
-            writingMemory: getWritingMemory(),
-          }),
+        // 스트리밍 호출
+        const data = await streamingFetch('/api/write-episode', {
+          episodeNumber: nextNumber,
+          projectConfig: {
+            genre: project.genre,
+            tone: project.tone,
+            viewpoint: project.viewpoint,
+            authorPersonaId: project.authorPersona?.id,
+          },
+          confirmedLayers: {
+            world: layerToString(project.layers.world.data),
+            coreRules: layerToString(project.layers.coreRules.data),
+            seeds: layerToString(project.layers.seeds.data),
+            heroArc: layerToString(project.layers.heroArc.data),
+            villainArc: layerToString(project.layers.villainArc.data),
+            ultimateMystery: layerToString(project.layers.ultimateMystery.data),
+          },
+          characterProfiles,
+          characterMemories,
+          authorDirection: `${nextNumber}화 - ${project.direction || '자유롭게 전개'}`,
+          previousEpisodes: project.episodes.slice(-3),
+          recurringFeedback,
+          activeContext,
+          writingMemory: getWritingMemory(),
         });
 
-        const data = await response.json();
+        if (data.type === 'error') {
+          throw new Error(data.message as string);
+        }
 
         if (data.episode) {
-          addEpisode(data.episode);
-          handlePostEpisodeCreation(data.episode); // Episode Log + Fact Check
-          setEditingEpisodeId(data.episode.id);
+          const episode = data.episode as Episode;
+          addEpisode(episode);
+          handlePostEpisodeCreation(episode);
+          setEditingEpisodeId(episode.id);
           addMessage({
             role: 'author',
-            content: data.authorComment || `${nextNumber}화 초안이야. 읽어봐.`,
+            content: (data.authorComment as string) || `${nextNumber}화 초안이야. 읽어봐.`,
           });
         } else {
           addMessage({
             role: 'author',
-            content: data.authorComment || '문제가 생겼어.',
+            content: (data.authorComment as string) || '문제가 생겼어.',
             choices: [{ label: '다시 시도', action: 'write_next_episode' }],
           });
         }

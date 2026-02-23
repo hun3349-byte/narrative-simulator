@@ -1,5 +1,4 @@
 import Anthropic from '@anthropic-ai/sdk';
-import { NextResponse } from 'next/server';
 import type {
   WorldBible,
   WorldLayer,
@@ -9,6 +8,8 @@ import type {
   VillainArcLayer,
   UltimateMysteryLayer
 } from '@/lib/types';
+
+export const maxDuration = 60; // Vercel Fluid Compute 활성화
 
 const client = new Anthropic();
 
@@ -24,74 +25,126 @@ interface GenerateWorldBibleRequest {
 }
 
 export async function POST(request: Request) {
+  const encoder = new TextEncoder();
+
   try {
     const body: GenerateWorldBibleRequest = await request.json();
     const { layers } = body;
 
     // 레이어 데이터 검증
     if (!layers.world || !layers.coreRules || !layers.heroArc) {
-      return NextResponse.json(
-        { error: '필수 레이어(world, coreRules, heroArc)가 없습니다.' },
-        { status: 400 }
-      );
+      const errorData = JSON.stringify({
+        type: 'error',
+        message: '필수 레이어(world, coreRules, heroArc)가 없습니다.',
+      });
+      return new Response(`data: ${errorData}\n\n`, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+        },
+      });
     }
 
     const prompt = buildWorldBiblePrompt(layers);
 
-    const response = await client.messages.create({
-      model: 'claude-haiku-4-5-20251001',
-      max_tokens: 4000,
-      temperature: 0.3,
-      messages: [
-        {
-          role: 'user',
-          content: prompt
+    // 스트리밍 응답 생성
+    const stream = new ReadableStream({
+      async start(controller) {
+        try {
+          let fullText = '';
+
+          const streamResponse = client.messages.stream({
+            model: 'claude-haiku-4-5-20251001',
+            max_tokens: 4000,
+            temperature: 0.3,
+            messages: [
+              {
+                role: 'user',
+                content: prompt
+              }
+            ]
+          });
+
+          for await (const event of streamResponse) {
+            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+              fullText += event.delta.text;
+              // 진행 상황 전송
+              const chunk = JSON.stringify({ type: 'text', content: event.delta.text });
+              controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+            }
+          }
+
+          // 파싱
+          let cleanText = fullText;
+          const codeBlockMatch = fullText.match(/```(?:json)?\s*([\s\S]*?)```/);
+          if (codeBlockMatch) {
+            cleanText = codeBlockMatch[1].trim();
+          }
+
+          const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+          if (jsonMatch) {
+            try {
+              const parsed = JSON.parse(jsonMatch[0]);
+              const worldBible: WorldBible = {
+                ...parsed,
+                generatedAt: new Date().toISOString(),
+                lastUpdatedAt: new Date().toISOString(),
+                tokenCount: Math.ceil(JSON.stringify(parsed).length / 2),
+              };
+
+              const finalData = JSON.stringify({
+                type: 'done',
+                worldBible,
+              });
+              controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+            } catch {
+              const errorData = JSON.stringify({
+                type: 'error',
+                message: 'World Bible 파싱 실패',
+                raw: fullText.slice(0, 500),
+              });
+              controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
+            }
+          } else {
+            const errorData = JSON.stringify({
+              type: 'error',
+              message: 'JSON not found in response',
+            });
+            controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
+          }
+
+          controller.close();
+        } catch (error) {
+          console.error('World Bible streaming error:', error);
+          const errorData = JSON.stringify({
+            type: 'error',
+            message: error instanceof Error ? error.message : 'World Bible 생성 오류',
+          });
+          controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
+          controller.close();
         }
-      ]
+      },
     });
 
-    const text = response.content[0].type === 'text' ? response.content[0].text : '';
-
-    // JSON 파싱
-    let worldBible: WorldBible;
-    try {
-      // 마크다운 코드 블록 제거
-      let cleanText = text;
-      const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
-      if (codeBlockMatch) {
-        cleanText = codeBlockMatch[1].trim();
-      }
-
-      const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
-      if (jsonMatch) {
-        const parsed = JSON.parse(jsonMatch[0]);
-        worldBible = {
-          ...parsed,
-          generatedAt: new Date().toISOString(),
-          lastUpdatedAt: new Date().toISOString(),
-        };
-      } else {
-        throw new Error('JSON not found in response');
-      }
-    } catch (parseError) {
-      console.error('World Bible parse error:', parseError);
-      return NextResponse.json(
-        { error: 'World Bible 파싱 실패', raw: text },
-        { status: 500 }
-      );
-    }
-
-    // 토큰 수 추정 (대략 한글 1자 = 1.5토큰, 영문 1단어 = 1토큰)
-    const estimatedTokens = Math.ceil(JSON.stringify(worldBible).length / 2);
-    worldBible.tokenCount = estimatedTokens;
-
-    return NextResponse.json({ worldBible });
+    return new Response(stream, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      },
+    });
   } catch (error) {
     console.error('World Bible generation error:', error);
-    return NextResponse.json(
-      { error: error instanceof Error ? error.message : 'Unknown error' },
-      { status: 500 }
-    );
+    const errorData = JSON.stringify({
+      type: 'error',
+      message: error instanceof Error ? error.message : 'Unknown error',
+    });
+    return new Response(`data: ${errorData}\n\n`, {
+      headers: {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+      },
+    });
   }
 }
 
