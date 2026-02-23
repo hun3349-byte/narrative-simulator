@@ -1,5 +1,38 @@
 # Narrative Simulator - 프로젝트 가이드
 
+## 현재 진행 현황 (2026-02-23)
+
+### 사용자 역할 정의
+**PD (Producer/Director)**: 전체적인 소설의 집필과 세계관, 배경, 등장인물, 상황, 에피소드 전체부분의 디테일한 디렉팅
+
+### 완료된 작업
+1. ✅ **엔터키 이슈 수정** - 한국어 IME 입력 시 onKeyUp 사용
+2. ✅ **파일 업로드 기능** - JSON/TXT 파일로 레이어 데이터 적용/참조
+3. ✅ **세계관 디테일 필드 확장** - RegionDetail, ClimateInfo, EnvironmentInfo, SensoryPalette 타입 추가
+4. ✅ **캐릭터 추가 기능** - 사이드 패널에서 신규 캐릭터 추가 모달
+5. ✅ **시뮬레이션 NPC 승격** - 비중 높은 NPC를 주요 캐릭터로 승격
+
+### 다음 작업 (Task 3 남은 부분 + Task 4)
+
+#### Task 3 남은 작업
+- ⏳ **API 프롬프트 업데이트**: 새로운 세계관/캐릭터 세부 필드를 집필 API에서 활용
+  - `write-episode` 프롬프트에 regions, climate, environment, sensoryPalette 반영
+  - 캐릭터의 speechPattern, backstory, relationships 필드 활용
+- ⏳ **사이드 패널 세계관 탭 확장**: RegionDetail, ClimateInfo 등 표시 UI
+
+#### Task 4: 에피소드 레벨 디렉팅
+- ⬜ 에피소드별 디렉션 설정 UI
+- ⬜ 특정 장면/상황 강제 지정
+- ⬜ 감정 톤/분위기 지정
+- ⬜ 등장인물 제한/필수 등장 설정
+
+### 배포 정보
+- **플랫폼**: Railway
+- **URL**: https://narrative-simulator-production.up.railway.app
+- **환경변수**: ANTHROPIC_API_KEY, NEXT_PUBLIC_SUPABASE_URL, NEXT_PUBLIC_SUPABASE_ANON_KEY
+
+---
+
 ## 작업 규칙 (필수)
 - **모든 작업이 완료되면 반드시 이 CLAUDE.md 파일을 업데이트할 것.** 새로운 기능, 아키텍처 변경, 파일 추가/수정 내역을 반영하여 다음 세션에서 즉시 이어서 작업할 수 있도록 한다.
 - **작업 완료 후 자동 배포**: 코드 변경 완료 시 `git add` → `git commit` → `git push` 자동 실행. 사용자가 별도로 요청하지 않아도 기본으로 수행한다.
