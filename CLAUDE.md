@@ -6,6 +6,13 @@
 - 프로젝트 정체서(`project-identity.md`)와 최상위 원칙(`supreme-principles.md`)을 모든 설계/구현 판단의 기준으로 삼는다.
 
 ### 최근 업데이트
+- **2026-02-23**: 캐릭터 추가 및 시뮬레이션 NPC 승격 기능 추가
+  - 사이드 패널 캐릭터 탭에 등록된 NPC 목록 표시 (주연/조연/단역 배지)
+  - 캐릭터 추가 모달: 이름, 역할, 위치, 성격, 숨겨진 동기, 세부 설정
+  - 시뮬레이션 발생 NPC 표시 (중요도 50점 이상, 등장 횟수, 첫 등장 연도)
+  - NPC 승격 기능: 시뮬레이션 NPC를 주요 캐릭터로 전환
+  - `handleAddCharacter()`, `handlePromoteSimulationNPC()` 핸들러
+  - `NPCSeedInfo`, `SimulationNPC`, `SeedsLayer` 타입 활용
 - **2026-02-23**: 프로젝트 탐색 및 공개 설정 기능 추가
   - `/explore` 페이지: 모든 공개 프로젝트 목록 조회
   - `/shared/[projectId]`: 읽기 전용 프로젝트 뷰어 (스포일러 제외)
