@@ -186,6 +186,9 @@ export default function ProjectConversationPage() {
   const [factCheckResult, setFactCheckResult] = useState<FactCheckResult | null>(null);
   const [breadcrumbWarnings, setBreadcrumbWarnings] = useState<BreadcrumbWarning[]>([]);
   const [showFactCheckModal, setShowFactCheckModal] = useState(false);
+  const [uploadedFileContent, setUploadedFileContent] = useState<string | null>(null);
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const layerBarRef = useRef<HTMLDivElement>(null);
   const loadingIntervalRef = useRef<NodeJS.Timeout | null>(null);
@@ -400,17 +403,89 @@ export default function ProjectConversationPage() {
     await doGenerate();
   }, [project, addMessage, updateLayer]);
 
+  // 파일 업로드 핸들러
+  const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const content = e.target?.result as string;
+      setUploadedFileContent(content);
+      setUploadedFileName(file.name);
+
+      // 파일 내용 미리보기 메시지
+      const isJson = file.name.endsWith('.json');
+      const preview = content.length > 500 ? content.slice(0, 500) + '...' : content;
+
+      addMessage({
+        role: 'user',
+        content: `📎 파일 업로드: ${file.name}\n\n${isJson ? '(JSON 데이터)' : preview}`,
+      });
+
+      // JSON 파일이면 바로 적용 여부 묻기
+      if (isJson) {
+        try {
+          const jsonData = JSON.parse(content);
+          addMessage({
+            role: 'author',
+            content: `파일을 확인했어. 이 데이터를 어떻게 할까?`,
+            choices: [
+              { label: '현재 레이어에 적용', action: 'apply_file_to_layer' },
+              { label: '참고만 하고 새로 제안받기', action: 'reference_file' },
+              { label: '취소', action: 'cancel_file' },
+            ],
+          });
+        } catch {
+          addMessage({
+            role: 'author',
+            content: `JSON 파싱에 실패했어. 파일 형식을 확인해줘.`,
+          });
+          setUploadedFileContent(null);
+          setUploadedFileName(null);
+        }
+      } else {
+        // TXT 파일이면 참고 자료로 사용
+        addMessage({
+          role: 'author',
+          content: `텍스트 파일을 확인했어. 이 내용을 바탕으로 현재 레이어를 만들어볼까?`,
+          choices: [
+            { label: '이 내용으로 레이어 생성', action: 'generate_from_file' },
+            { label: '참고만 할게', action: 'reference_file' },
+            { label: '취소', action: 'cancel_file' },
+          ],
+        });
+      }
+    };
+    reader.readAsText(file);
+
+    // input 초기화 (같은 파일 다시 선택 가능하도록)
+    event.target.value = '';
+  }, [addMessage]);
+
+  // 파일 업로드 버튼 클릭
+  const handleFileButtonClick = () => {
+    fileInputRef.current?.click();
+  };
+
   // 메시지 전송
   const handleSendMessage = async () => {
     if (!inputValue.trim() || !project || isLoading) return;
 
-    const userMessage = inputValue.trim();
+    // 파일 내용이 있으면 메시지에 포함
+    let userMessage = inputValue.trim();
+    if (uploadedFileContent) {
+      userMessage += `\n\n[참고 파일 내용]\n${uploadedFileContent}`;
+      setUploadedFileContent(null);
+      setUploadedFileName(null);
+    }
+
     setInputValue('');
     setLastError(null);
 
     addMessage({
       role: 'user',
-      content: userMessage,
+      content: inputValue.trim(), // 화면에는 원본만 표시
     });
 
     // 레이어 수정 요청 감지
@@ -602,6 +677,68 @@ export default function ProjectConversationPage() {
   // 선택지 클릭
   const handleChoiceClick = async (action: string) => {
     if (!project || isLoading) return;
+
+    // 파일 관련 액션
+    if (action === 'apply_file_to_layer' && uploadedFileContent) {
+      if (project.currentLayer === 'novel') {
+        addMessage({
+          role: 'author',
+          content: '소설 단계에서는 파일 적용이 안 돼. 세계관 레이어에서 사용해줘.',
+        });
+        return;
+      }
+      try {
+        const jsonData = JSON.parse(uploadedFileContent);
+        updateLayer(project.currentLayer as Exclude<LayerName, 'novel'>, jsonData);
+        addMessage({
+          role: 'author',
+          content: `파일 데이터를 ${LAYER_LABELS[project.currentLayer]}에 적용했어. 내용을 확인하고 수정할 부분이 있으면 말해줘.`,
+          choices: [
+            { label: '이대로 확정', action: 'confirm_layer' },
+            { label: '수정이 필요해', action: 'regenerate' },
+          ],
+        });
+        setUploadedFileContent(null);
+        setUploadedFileName(null);
+      } catch {
+        addMessage({
+          role: 'author',
+          content: '파일 적용에 실패했어. 다시 시도해줘.',
+        });
+      }
+      return;
+    }
+
+    if (action === 'generate_from_file' && uploadedFileContent) {
+      // TXT 파일 내용을 AI에게 전달하여 레이어 생성
+      addMessage({
+        role: 'user',
+        content: `이 내용을 바탕으로 ${LAYER_LABELS[project.currentLayer]}를 만들어줘:\n\n${uploadedFileContent}`,
+      });
+      setUploadedFileContent(null);
+      setUploadedFileName(null);
+      // 일반 메시지 처리로 넘어감
+      return;
+    }
+
+    if (action === 'reference_file') {
+      addMessage({
+        role: 'author',
+        content: '알겠어, 참고만 할게. 계속 진행하자.',
+      });
+      // 파일 내용은 유지 (다음 요청에서 참고 가능)
+      return;
+    }
+
+    if (action === 'cancel_file') {
+      setUploadedFileContent(null);
+      setUploadedFileName(null);
+      addMessage({
+        role: 'author',
+        content: '취소했어. 다른 파일을 올리거나 직접 말해줘.',
+      });
+      return;
+    }
 
     // 재시도
     if (action === 'retry' && retryAction) {
@@ -1598,7 +1735,38 @@ export default function ProjectConversationPage() {
 
           {/* 입력 영역 - 하단 고정, 모바일 최적화 */}
           <div className={`border-t border-base-border bg-base-secondary p-3 md:p-4 ${isMobile ? 'fixed bottom-[60px] left-0 right-0 z-20' : ''}`} style={isMobile ? { paddingBottom: 'env(safe-area-inset-bottom)' } : undefined}>
+            {/* 업로드된 파일 표시 */}
+            {uploadedFileName && (
+              <div className="mx-auto max-w-2xl mb-2 flex items-center gap-2 text-sm text-text-muted">
+                <span>📎 {uploadedFileName}</span>
+                <button
+                  onClick={() => {
+                    setUploadedFileContent(null);
+                    setUploadedFileName(null);
+                  }}
+                  className="text-red-400 hover:text-red-300"
+                >
+                  ✕
+                </button>
+              </div>
+            )}
             <div className="mx-auto flex max-w-2xl gap-2">
+              {/* 파일 업로드 버튼 */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json,.txt"
+                onChange={handleFileUpload}
+                className="hidden"
+              />
+              <button
+                onClick={handleFileButtonClick}
+                disabled={isLoading}
+                className="rounded-lg border border-base-border bg-base-primary px-3 py-3 text-text-muted transition-colors hover:bg-base-tertiary hover:text-text-primary disabled:opacity-50 min-h-[48px]"
+                title="JSON/TXT 파일 업로드"
+              >
+                📎
+              </button>
               <input
                 type="text"
                 value={inputValue}
