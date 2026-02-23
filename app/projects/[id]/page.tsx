@@ -6,7 +6,7 @@ import { useProjectStore } from '@/lib/store/project-store';
 import { PERSONA_ICONS } from '@/lib/presets/author-personas';
 import { WorldTimelinePanel } from '@/components/world-timeline';
 import EpisodeViewer from '@/components/episode/EpisodeViewer';
-import type { LayerName, Episode, Character, SimulationConfig, WorldEvent, CharacterSeed, FactCheckResult, BreadcrumbWarning, EpisodeLog, WritingMemory } from '@/lib/types';
+import type { LayerName, Episode, Character, SimulationConfig, WorldEvent, CharacterSeed, FactCheckResult, BreadcrumbWarning, EpisodeLog, WritingMemory, NPCSeedInfo, SimulationNPC, SeedsLayer } from '@/lib/types';
 import { trackBreadcrumbs, generateBreadcrumbInstructions } from '@/lib/utils/breadcrumb-tracker';
 import { buildActiveContext } from '@/lib/utils/active-context';
 import { createEmptyWritingMemory, updateQualityTracker, processFeedback, analyzeEdit, integrateEditPatterns, getWritingMemoryStats } from '@/lib/utils/writing-memory';
@@ -188,6 +188,18 @@ export default function ProjectConversationPage() {
   const [showFactCheckModal, setShowFactCheckModal] = useState(false);
   const [uploadedFileContent, setUploadedFileContent] = useState<string | null>(null);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [showAddCharacterModal, setShowAddCharacterModal] = useState(false);
+  const [newCharacter, setNewCharacter] = useState<Partial<NPCSeedInfo>>({
+    name: '',
+    role: '',
+    location: '',
+    personality: '',
+    hiddenMotivation: '',
+    faction: '',
+    appearance: '',
+    speechPattern: '',
+    backstory: '',
+  });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const layerBarRef = useRef<HTMLDivElement>(null);
@@ -1541,6 +1553,115 @@ export default function ProjectConversationPage() {
     });
   };
 
+  // 새 캐릭터 추가 핸들러
+  const handleAddCharacter = () => {
+    if (!project || !newCharacter.name || !newCharacter.role) {
+      return;
+    }
+
+    const seedsData = project.layers.seeds.data as SeedsLayer | null;
+    const currentNpcs = seedsData?.npcs || [];
+
+    const newNpc: NPCSeedInfo = {
+      id: `npc_${Date.now()}`,
+      name: newCharacter.name,
+      role: newCharacter.role,
+      location: newCharacter.location || '',
+      personality: newCharacter.personality || '',
+      hiddenMotivation: newCharacter.hiddenMotivation,
+      faction: newCharacter.faction,
+      appearance: newCharacter.appearance,
+      speechPattern: newCharacter.speechPattern,
+      backstory: newCharacter.backstory,
+      source: 'manual',
+      importance: 'supporting',
+      promoted: false,
+    };
+
+    const updatedSeeds: SeedsLayer = {
+      ...seedsData,
+      factions: seedsData?.factions || [],
+      races: seedsData?.races || [],
+      threats: seedsData?.threats || [],
+      npcs: [...currentNpcs, newNpc],
+    };
+
+    updateLayer('seeds', updatedSeeds as unknown as Record<string, unknown>);
+
+    setNewCharacter({
+      name: '',
+      role: '',
+      location: '',
+      personality: '',
+      hiddenMotivation: '',
+      faction: '',
+      appearance: '',
+      speechPattern: '',
+      backstory: '',
+    });
+    setShowAddCharacterModal(false);
+
+    addMessage({
+      role: 'author',
+      content: `새 캐릭터 "${newNpc.name}" 추가했어. ${newNpc.role}로 등록했고, 시뮬레이션에서 활용할게.`,
+    });
+  };
+
+  // 시뮬레이션 NPC 승격 핸들러
+  const handlePromoteSimulationNPC = (npc: SimulationNPC) => {
+    if (!project) return;
+
+    const seedsData = project.layers.seeds.data as SeedsLayer | null;
+    const currentNpcs = seedsData?.npcs || [];
+    const currentSimNpcs = seedsData?.simulationNPCs || [];
+
+    // 이미 승격된 NPC인지 확인
+    const alreadyPromoted = currentNpcs.some(n => n.id === npc.id);
+    if (alreadyPromoted) {
+      addMessage({
+        role: 'author',
+        content: `${npc.name}은(는) 이미 주요 캐릭터로 등록되어 있어.`,
+      });
+      return;
+    }
+
+    // SimulationNPC → NPCSeedInfo 변환
+    const promotedNpc: NPCSeedInfo = {
+      id: npc.id,
+      name: npc.name,
+      role: npc.role,
+      location: '',
+      personality: npc.personality || '',
+      hiddenMotivation: '',
+      source: 'simulation',
+      appearanceCount: npc.appearances.length,
+      firstAppearanceYear: npc.firstAppearance.year,
+      importance: npc.suggestedImportance,
+      promoted: true,
+      relationships: npc.relationshipToHero,
+    };
+
+    // simulationNPCs에서 제거하고 npcs에 추가
+    const updatedSimNpcs = currentSimNpcs.filter(n => n.id !== npc.id);
+    const updatedNpcs = [...currentNpcs, promotedNpc];
+
+    const updatedSeeds: SeedsLayer = {
+      ...seedsData,
+      factions: seedsData?.factions || [],
+      races: seedsData?.races || [],
+      threats: seedsData?.threats || [],
+      npcs: updatedNpcs,
+      simulationNPCs: updatedSimNpcs,
+    };
+
+    updateLayer('seeds', updatedSeeds as unknown as Record<string, unknown>);
+
+    addMessage({
+      role: 'author',
+      content: `${npc.name}을(를) 주요 캐릭터로 승격했어! 중요도: ${npc.suggestedImportance === 'major' ? '주연급' : npc.suggestedImportance === 'supporting' ? '조연급' : '단역'}. 앞으로 더 비중 있게 다룰게.`,
+    });
+  };
+
   // Hydration 중 또는 프로젝트가 없으면
   if (!isHydrated) {
     return (
@@ -1881,6 +2002,102 @@ export default function ProjectConversationPage() {
                       <p className="mt-1 text-sm text-text-muted">{project.layers.villainArc.data.motivation}</p>
                     </div>
                   )}
+
+                  {/* NPC 목록 */}
+                  {(() => {
+                    const seedsData = project.layers.seeds.data as SeedsLayer | null;
+                    const npcs = seedsData?.npcs || [];
+                    if (npcs.length > 0) {
+                      return (
+                        <>
+                          <hr className="border-base-border" />
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                              <h3 className="text-sm font-medium text-text-primary">등록된 캐릭터</h3>
+                              <span className="text-xs text-text-muted">{npcs.length}명</span>
+                            </div>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {npcs.map((npc, idx) => (
+                                <div key={npc.id || idx} className="rounded-lg bg-base-tertiary p-2">
+                                  <div className="flex items-center justify-between">
+                                    <div className="font-medium text-sm text-text-primary">{npc.name}</div>
+                                    <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                      npc.importance === 'major' ? 'bg-seojin/20 text-seojin' :
+                                      npc.importance === 'supporting' ? 'bg-blue-500/20 text-blue-400' :
+                                      'bg-gray-500/20 text-gray-400'
+                                    }`}>
+                                      {npc.importance === 'major' ? '주연' : npc.importance === 'supporting' ? '조연' : '단역'}
+                                    </span>
+                                  </div>
+                                  <div className="text-xs text-text-muted mt-1">{npc.role}</div>
+                                  {npc.source === 'simulation' && (
+                                    <div className="text-xs text-purple-400 mt-1">시뮬레이션 출신</div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      );
+                    }
+                    return null;
+                  })()}
+
+                  {/* 시뮬레이션 NPC (승격 전) */}
+                  {(() => {
+                    const seedsData = project.layers.seeds.data as SeedsLayer | null;
+                    const simNpcs = seedsData?.simulationNPCs || [];
+                    const highImportanceNpcs = simNpcs.filter(n => n.significance >= 50).sort((a, b) => b.significance - a.significance);
+
+                    if (highImportanceNpcs.length > 0) {
+                      return (
+                        <>
+                          <hr className="border-base-border" />
+                          <div>
+                            <div className="flex items-center justify-between mb-2">
+                              <h3 className="text-sm font-medium text-text-primary">시뮬레이션 발생 NPC</h3>
+                              <span className="text-xs text-purple-400">{highImportanceNpcs.length}명</span>
+                            </div>
+                            <p className="text-xs text-text-muted mb-2">비중 높은 인물을 주요 캐릭터로 승격할 수 있어</p>
+                            <div className="space-y-2 max-h-48 overflow-y-auto">
+                              {highImportanceNpcs.map((npc) => (
+                                <div key={npc.id} className="rounded-lg bg-purple-500/10 border border-purple-500/30 p-2">
+                                  <div className="flex items-center justify-between">
+                                    <div className="font-medium text-sm text-text-primary">{npc.name}</div>
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-xs text-purple-400">{npc.significance}점</span>
+                                      <button
+                                        onClick={() => handlePromoteSimulationNPC(npc)}
+                                        className="text-xs px-2 py-0.5 bg-seojin/20 text-seojin rounded hover:bg-seojin/30 transition-colors"
+                                      >
+                                        승격
+                                      </button>
+                                    </div>
+                                  </div>
+                                  <div className="text-xs text-text-muted mt-1">{npc.role}</div>
+                                  <div className="text-xs text-purple-300 mt-1">
+                                    첫 등장: {npc.firstAppearance.year}년 • 등장 {npc.appearances.length}회
+                                  </div>
+                                  {npc.relationshipToHero && (
+                                    <div className="text-xs text-blue-400 mt-1">주인공과: {npc.relationshipToHero}</div>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      );
+                    }
+                    return null;
+                  })()}
+
+                  {/* 캐릭터 추가 버튼 */}
+                  <button
+                    onClick={() => setShowAddCharacterModal(true)}
+                    className="w-full py-2 border border-dashed border-seojin/50 rounded-lg text-seojin text-sm hover:bg-seojin/10 transition-colors"
+                  >
+                    + 캐릭터 추가
+                  </button>
                 </div>
               )}
 
@@ -2167,6 +2384,144 @@ export default function ProjectConversationPage() {
                 </div>
               </div>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* 캐릭터 추가 모달 */}
+      {showAddCharacterModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-w-md w-full bg-base-secondary rounded-xl shadow-xl border border-base-border max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-base-border px-4 py-3 sticky top-0 bg-base-secondary">
+              <h3 className="font-medium text-text-primary">새 캐릭터 추가</h3>
+              <button
+                onClick={() => setShowAddCharacterModal(false)}
+                className="text-text-muted hover:text-text-primary"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="p-4 space-y-4">
+              {/* 필수 필드 */}
+              <div>
+                <label className="block text-sm text-text-secondary mb-1">
+                  이름 <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newCharacter.name || ''}
+                  onChange={(e) => setNewCharacter({ ...newCharacter, name: e.target.value })}
+                  placeholder="캐릭터 이름"
+                  className="w-full rounded-lg bg-base-tertiary border border-base-border px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-seojin"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-text-secondary mb-1">
+                  역할 <span className="text-red-400">*</span>
+                </label>
+                <input
+                  type="text"
+                  value={newCharacter.role || ''}
+                  onChange={(e) => setNewCharacter({ ...newCharacter, role: e.target.value })}
+                  placeholder="예: 상인, 기사단장, 현자"
+                  className="w-full rounded-lg bg-base-tertiary border border-base-border px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-seojin"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-text-secondary mb-1">위치/지역</label>
+                <input
+                  type="text"
+                  value={newCharacter.location || ''}
+                  onChange={(e) => setNewCharacter({ ...newCharacter, location: e.target.value })}
+                  placeholder="예: 왕도, 변방 마을"
+                  className="w-full rounded-lg bg-base-tertiary border border-base-border px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-seojin"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-text-secondary mb-1">성격</label>
+                <textarea
+                  value={newCharacter.personality || ''}
+                  onChange={(e) => setNewCharacter({ ...newCharacter, personality: e.target.value })}
+                  placeholder="성격 특성 묘사"
+                  rows={2}
+                  className="w-full rounded-lg bg-base-tertiary border border-base-border px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-seojin resize-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-text-secondary mb-1">숨겨진 동기</label>
+                <textarea
+                  value={newCharacter.hiddenMotivation || ''}
+                  onChange={(e) => setNewCharacter({ ...newCharacter, hiddenMotivation: e.target.value })}
+                  placeholder="이 캐릭터의 진짜 목적"
+                  rows={2}
+                  className="w-full rounded-lg bg-base-tertiary border border-base-border px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-seojin resize-none"
+                />
+              </div>
+
+              {/* 선택 필드 (접기 가능) */}
+              <details className="group">
+                <summary className="text-sm text-seojin cursor-pointer hover:underline">
+                  + 상세 설정
+                </summary>
+                <div className="mt-3 space-y-3 pl-2 border-l-2 border-seojin/30">
+                  <div>
+                    <label className="block text-sm text-text-secondary mb-1">소속 세력</label>
+                    <input
+                      type="text"
+                      value={newCharacter.faction || ''}
+                      onChange={(e) => setNewCharacter({ ...newCharacter, faction: e.target.value })}
+                      placeholder="예: 왕실, 상인 길드"
+                      className="w-full rounded-lg bg-base-tertiary border border-base-border px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-seojin"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-text-secondary mb-1">외모</label>
+                    <textarea
+                      value={newCharacter.appearance || ''}
+                      onChange={(e) => setNewCharacter({ ...newCharacter, appearance: e.target.value })}
+                      placeholder="외모 묘사"
+                      rows={2}
+                      className="w-full rounded-lg bg-base-tertiary border border-base-border px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-seojin resize-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-text-secondary mb-1">말투/화법</label>
+                    <input
+                      type="text"
+                      value={newCharacter.speechPattern || ''}
+                      onChange={(e) => setNewCharacter({ ...newCharacter, speechPattern: e.target.value })}
+                      placeholder="예: 존댓말, 사투리, 고풍스러운 어투"
+                      className="w-full rounded-lg bg-base-tertiary border border-base-border px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-seojin"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-text-secondary mb-1">배경 스토리</label>
+                    <textarea
+                      value={newCharacter.backstory || ''}
+                      onChange={(e) => setNewCharacter({ ...newCharacter, backstory: e.target.value })}
+                      placeholder="이 캐릭터의 과거"
+                      rows={3}
+                      className="w-full rounded-lg bg-base-tertiary border border-base-border px-3 py-2 text-sm text-text-primary placeholder:text-text-muted focus:outline-none focus:border-seojin resize-none"
+                    />
+                  </div>
+                </div>
+              </details>
+            </div>
+            <div className="flex gap-2 border-t border-base-border px-4 py-3 sticky bottom-0 bg-base-secondary">
+              <button
+                onClick={handleAddCharacter}
+                disabled={!newCharacter.name || !newCharacter.role}
+                className="flex-1 rounded-lg bg-seojin px-4 py-2 text-sm text-white hover:bg-seojin/90 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                추가
+              </button>
+              <button
+                onClick={() => setShowAddCharacterModal(false)}
+                className="flex-1 rounded-lg bg-base-tertiary px-4 py-2 text-sm text-text-secondary hover:bg-base-border"
+              >
+                취소
+              </button>
+            </div>
           </div>
         </div>
       )}

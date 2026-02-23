@@ -940,6 +940,59 @@ export interface WorldLayer {
   cities: CityInfo[];
   landmarks: string[];            // 주요 지형지물
   mapDescription: string;         // 텍스트 기반 지도 묘사
+  // PD 디렉팅용 세부 필드
+  regions?: RegionDetail[];       // 지역별 상세 정보
+  climate?: ClimateInfo;          // 기후 정보
+  environment?: EnvironmentInfo;  // 환경 특성
+  sensoryPalette?: SensoryPalette; // 감각 묘사 팔레트
+}
+
+// 지역 상세 정보
+export interface RegionDetail {
+  name: string;                   // 지역명
+  type: string;                   // 유형 (산악, 평야, 해안, 사막, 숲 등)
+  climate: string;                // 기후 (한대, 온대, 열대, 건조 등)
+  terrain: string;                // 지형 묘사
+  flora: string;                  // 식생/식물
+  fauna: string;                  // 동물/생물
+  resources: string;              // 자원
+  hazards?: string;               // 위험 요소
+  atmosphere: string;             // 분위기/느낌
+  sensoryDescription: {           // 감각 묘사
+    sight: string;                // 시각
+    sound: string;                // 청각
+    smell: string;                // 후각
+    temperature: string;          // 온도/촉감
+  };
+  culturalNotes?: string;         // 이 지역 고유의 문화/관습
+  storySignificance?: string;     // 스토리에서의 중요성
+}
+
+// 기후 정보
+export interface ClimateInfo {
+  general: string;                // 전반적인 기후
+  seasons?: string;               // 계절 변화
+  extremes?: string;              // 극단적 날씨
+  weatherPatterns?: string;       // 날씨 패턴
+}
+
+// 환경 특성
+export interface EnvironmentInfo {
+  dayNightCycle?: string;         // 낮/밤 주기
+  celestialBodies?: string;       // 천체 (달, 별 등)
+  magicalInfluence?: string;      // 마법/초자연적 영향
+  pollution?: string;             // 오염/환경 문제
+  naturalDisasters?: string;      // 자연재해
+}
+
+// 감각 묘사 팔레트 (작가가 배경 묘사 시 참고)
+export interface SensoryPalette {
+  colors: string[];               // 주요 색감
+  sounds: string[];               // 배경음
+  smells: string[];               // 냄새
+  textures: string[];             // 질감
+  tastes?: string[];              // 맛 (음식 문화 관련)
+  atmosphericKeywords: string[];  // 분위기 키워드
 }
 
 export interface CityInfo {
@@ -1015,6 +1068,8 @@ export interface SeedsLayer {
     crime: string;                // 범죄와 치안
     religion?: string;            // 종교/신앙
   };
+  // 시뮬레이션에서 발생한 NPC (승격 대기)
+  simulationNPCs?: SimulationNPC[];
 }
 
 // 전설/설화 스토리
@@ -1051,11 +1106,45 @@ export interface ThreatInfo {
 }
 
 export interface NPCSeedInfo {
+  id?: string;                    // 고유 ID
   name: string;
   role: string;                   // "상인", "현자", "기사단장" 등
   location: string;
   personality: string;
   hiddenMotivation?: string;      // 숨겨진 동기 (있으면)
+  // PD 디렉팅용 확장 필드
+  faction?: string;               // 소속 세력
+  appearance?: string;            // 외모 묘사
+  speechPattern?: string;         // 말투/화법
+  backstory?: string;             // 배경 스토리
+  relationships?: string;         // 다른 인물과의 관계
+  arc?: string;                   // 이 인물의 서사 아크
+  // 시뮬레이션 추적 필드
+  source?: 'manual' | 'simulation'; // 수동 추가 or 시뮬레이션 발생
+  appearanceCount?: number;       // 등장 횟수
+  firstAppearanceYear?: number;   // 첫 등장 연도
+  importance?: 'major' | 'supporting' | 'minor'; // 비중
+  promoted?: boolean;             // 주요 캐릭터로 승격 여부
+}
+
+// 시뮬레이션에서 발생한 NPC (승격 전)
+export interface SimulationNPC {
+  id: string;
+  name: string;
+  role: string;
+  firstAppearance: {
+    year: number;
+    event: string;                // 어떤 이벤트에서 등장
+    context: string;              // 등장 맥락
+  };
+  appearances: {
+    year: number;
+    event: string;
+  }[];
+  relationshipToHero?: string;    // 주인공과의 관계
+  personality?: string;           // AI가 추론한 성격
+  significance: number;           // 중요도 점수 (0-100)
+  suggestedImportance: 'major' | 'supporting' | 'minor';
 }
 
 // Layer 4: 주인공 서사 (Hero Arc) — V2 강화
