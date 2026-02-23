@@ -1,11 +1,42 @@
 {
-  "worldName": "",
-  "description": "",
+  "worldName": "새 세계",
+  "description": "작가와 함께 세계관을 만들어가세요",
+  "genre": "판타지",
+  "coreRule": "세계관 생성 시 자동으로 설정됩니다",
+  "era": "현재",
+  "factions": [],
   "timeline": {
-    "startYear": -3,
+    "startYear": 0,
     "currentYear": 0,
-    "majorEras": [],
+    "majorEras": [
+      {
+        "name": "시작의 시대",
+        "years": [-100, 0],
+        "description": "세계가 시작되는 시대"
+      }
+    ],
     "worldEvents": []
   },
-  "factions": []
+  "worldLayers": {
+    "coreRule": {
+      "law": "",
+      "cost": "",
+      "implication": ""
+    },
+    "historicalWound": {
+      "event": "",
+      "consequence": "",
+      "livingMemory": ""
+    },
+    "currentTension": {
+      "faction": "",
+      "desire": "",
+      "method": "",
+      "blocked": ""
+    },
+    "sensoryDetails": [],
+    "socialNorms": [],
+    "dailyLife": []
+  },
+  "anchorEvents": []
 }

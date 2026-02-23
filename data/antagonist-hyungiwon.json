@@ -1,0 +1,163 @@
+{
+  "factionId": "hyungiwon",
+  "name": "현기원",
+  "nameChinese": "玄機院",
+  "type": "배후세력",
+  "affiliation": "황실 권문·비밀조직",
+  "description": "환제국 권문의 비밀 내각. 무림 질서의 제도권 흡수를 목표로 한다.",
+  "objectives": {
+    "longTerm": "무림 질서의 제도권 흡수 → 분절 약화 → 군정 단일화",
+    "midTerm": {
+      "phase1": "합법화: 면허·세무·안전규정으로 규제 우위 확보",
+      "phase2": "분절화: 동맹 균열(보급·혼맥·정보망을 각각 다른 도구로 분리 타격)",
+      "phase3": "대리전 유도: 정↔사, 세가↔사파, 정↔마의 상호충돌로 피로 누적"
+    }
+  },
+  "principles": {
+    "concealment": [
+      "합법 전면(금부감)",
+      "익명 집행(현의위)",
+      "우연 프레임(선소사)"
+    ],
+    "prohibitions": [
+      "민생 급붕괴",
+      "변방 공백",
+      "황제의사 위조",
+      "연합 동시결속",
+      "집단학살 프레임"
+    ]
+  },
+  "kpi": [
+    "무림 재정의 관세·벌금 의존율 25% 이상",
+    "연합간 공동작전 빈도 분기당 1회 이하",
+    "핵심 거점 면허취소/정지 누계 12건/분기",
+    "여론지수(무림 규제 찬성) 60% 유지"
+  ],
+  "structure": {
+    "commandLevel": {
+      "hyungiwon": {
+        "name": "현기원",
+        "nameChinese": "玄機院",
+        "description": "은밀 최고조정 기구",
+        "divisions": [
+          {"name": "내계사", "nameChinese": "內計司", "function": "인사·법제·세무·면허 설계"},
+          {"name": "외계사", "nameChinese": "外計司", "function": "변방·외교·상단 라인 조율"},
+          {"name": "기밀사", "nameChinese": "機密司", "function": "암호·문서 위장, 분절 임무화"},
+          {"name": "밀새고", "nameChinese": "密璽庫", "function": "친서·옥새 관리, 작전 승인 로그"}
+        ]
+      },
+      "gwonmunhoeui": {
+        "name": "권문회의",
+        "nameChinese": "權門會議",
+        "description": "상경 재정·이권 카르텔",
+        "function": "자금·인맥 제공 ↔ 지역 이권 배당(소금·광산·군납·운하)",
+        "subUnit": {"name": "자문국", "nameChinese": "諮問局", "function": "유생·상인·공방 장로 외곽자문 포섭"}
+      }
+    },
+    "executionLevel": {
+      "hyuneuiwi": {
+        "name": "현의위",
+        "nameChinese": "玄衣衛",
+        "description": "강제력·현장공작 담당",
+        "units": [
+          {"name": "야행영", "nameChinese": "夜行營", "function": "표적 체포·실종, 타 세력 소행 위장"},
+          {"name": "복뢰영", "nameChinese": "伏雷營", "function": "방화·폭약·기습, 의적/사파 프레임 연출"},
+          {"name": "쇄문영", "nameChinese": "鎖門營", "function": "관문·보급로 통행증, 검문·봉쇄"}
+        ],
+        "roe": [
+          {"type": "흑표", "action": "즉결"},
+          {"type": "적표", "action": "72h 내 송치"},
+          {"type": "백표", "action": "감시만"}
+        ]
+      },
+      "geumbugam": {
+        "name": "금부감",
+        "nameChinese": "金符監",
+        "description": "합법 외피 담당",
+        "function": "압수·조사·몰수·폐쇄 명령, 현의위 작전 뒤 문서 봉함·법적 사후정당화"
+      }
+    },
+    "infiltrationLevel": {
+      "eumjiksa": {
+        "name": "음직사",
+        "nameChinese": "陰織司",
+        "description": "침투·통제 담당",
+        "bureaus": [
+          {"name": "화원서", "nameChinese": "化員署", "function": "변장공작·커버스토리"},
+          {"name": "상교서", "nameChinese": "商交署", "function": "상단·표국 프런트, 홍계(紅契) 채무 족쇄"},
+          {"name": "서밀서", "nameChinese": "書密署", "function": "암호·연락·타임스탬프 조작"},
+          {"name": "주도서", "nameChinese": "鑄度署", "function": "허가증·관문패 위조·발급"}
+        ]
+      },
+      "seonsosa": {
+        "name": "선소사",
+        "nameChinese": "宣疏司",
+        "description": "여론 조작",
+        "function": "유생·서원·사설지 동원, 치안·위생·민생 담론으로 규제 정당화, 사건 48h 내 선도 해설 배포"
+      }
+    }
+  },
+  "targetedFactions": {
+    "jeongdomaeng": {
+      "methods": ["표국·상방 세무/검문 강화", "사찰 토지 재조사", "도장 면허제"],
+      "keyNodes": ["하남–관중 관문", "형호 운하", "진강 수로"],
+      "effects": ["보급지연 평균 20% 상승", "면허정지 도장 분기 3곳"]
+    },
+    "palgahoe": {
+      "methods": ["군납 규격·관세·채권압박", "혼맥·후견인 장악"],
+      "keyNodes": ["진주·하북·관서 집산지"],
+      "effects": ["방계·상단 담보 회수율 15% 상승", "군납 의존도 상승"]
+    },
+    "heukdoryeon": {
+      "methods": ["하오문·사마세가에 이중자금 투입→불신 유발", "장강 수로 밀수 미끼 제공 후 일괄검거"],
+      "keyNodes": ["장강 수로", "운남–귀주–호광 산맥로", "관서 사막 변두리"],
+      "effects": ["내부 충돌 사건 분기 1건 유도", "물자 압수"]
+    },
+    "magyo": {
+      "methods": ["염장·화약 유통 차단", "한음각엔 허위첩보", "요화각엔 선무역제"],
+      "keyNodes": ["하서회랑–하미", "귀주·운남 북상로"],
+      "effects": ["양각 상호불신 지수 상승", "출정지연 사례 축적"]
+    },
+    "seoe": {
+      "methods": ["관문·항세·소금권으로 연료·식량 조임", "용병 라이선스 차등 지급"],
+      "keyNodes": ["산둥·연해 해관", "요서 북로", "서역 관문"],
+      "effects": ["패천랑부 보급주기 1→1.5개월", "변방 충돌을 대리전으로 흡수"]
+    }
+  },
+  "locations": {
+    "core": "상경 비밀청사(현기원·현의위 본영)",
+    "hubs": [
+      {"name": "함곡관", "function": "관중 관문·금부감 합동청"},
+      {"name": "형호 운하 합동세창", "function": "세무·해관·선소사 합동"},
+      {"name": "안서도감", "region": "하서회랑", "function": "서방 총영 커버"}
+    ],
+    "outposts": [
+      {"name": "강남 상장", "function": "상교서 전진기지"},
+      {"name": "산둥 해관통합사", "function": "해상 통제"},
+      {"name": "운남 북부 관문망", "function": "쇄문영"},
+      {"name": "관서 사막 변두리 보급소", "function": "복뢰영"}
+    ]
+  },
+  "operationProtocol": {
+    "phases": [
+      {"level": "L0", "name": "기획", "description": "현기원 내·외계사 합동안, 위험·여론 시뮬"},
+      {"level": "L1", "name": "합법화", "description": "금부감 훈령·면허·세칙 공표(선소사 예고 보도)"},
+      {"level": "L2", "name": "분절타격", "description": "현의위(복뢰·쇄문) 병행, 공급·정보·혼맥 각개 차단"},
+      {"level": "L3", "name": "대리전", "description": "충돌지대 사건 유도, 선소사 프레임 고정"},
+      {"level": "L4", "name": "수습·봉함", "description": "금부감 법적 정리, 기록 봉함·이권 재배당"}
+    ],
+    "gates": {
+      "L1toL2": "여론지수 55% 이상",
+      "L2toL3": "변방 공백 0 조건"
+    }
+  },
+  "riskMitigation": {
+    "civilUnrest": "물가 급등 시 '표국·사파 횡령' 프레임 배포, 구휼미 투입",
+    "allianceFormation": "천추단 중재 조짐 → 팔가회와 '치안공동선언' 선제 제안",
+    "internalLeak": "문서 다층분할·1회성 열람키, 누수 시 가짜 설계도로 역추적",
+    "magyoCounterInfiltration": "한음각 침투 대비 '허위 코어' 운용, 요화각엔 신앙탄압 프레임 역이용",
+    "borderVacuum": "북해·서역 긴장 시 용병 라이선스 증발급+군납 가속으로 보강",
+    "publicBacklash": "도장 폐쇄 과도 비판 시, '안전·위생 점검' 명목의 부분 해제 카드"
+  },
+  "storyRole": "진정한 배후의 적. 강호 전체를 제도권으로 흡수하려는 음모를 꾸미며, 천추단과 대립."
+}

@@ -1,0 +1,98 @@
+{
+  "worldName": "천추의강호",
+  "mapDescription": "개념 배치 스케치. 실제 분기도·충돌지대 설계에 맞춰 세부 좌표 보정 예정.",
+  "factionTerritories": {
+    "magyo": {
+      "name": "마교",
+      "headquarters": "북서 변방 감숙–청해 접경 내륙 고지대(분지형 성채)",
+      "directControl": "호법원(본산 인접)",
+      "twoHalls": "한음각·요화각(본산권 배치)",
+      "militaryBases": "6대 무력대 본산권 외곽 집결지(원정 전개 거점)"
+    },
+    "jeongdomaeng": {
+      "name": "정도맹",
+      "nineSects": [
+        {"name": "소림사", "region": "하남"},
+        {"name": "무당파", "region": "호북"},
+        {"name": "화산파", "region": "섬서"},
+        {"name": "청성파", "region": "사천"},
+        {"name": "점창파", "region": "사천"},
+        {"name": "아미파", "region": "사천"},
+        {"name": "종남파", "region": "섬서"},
+        {"name": "형산파", "region": "호남"},
+        {"name": "곤륜파", "region": "서역 접경"}
+      ],
+      "gang": {"name": "개방", "region": "전국망(총타는 중원권)"}
+    },
+    "palgahoe": {
+      "name": "팔가회",
+      "axes": {
+        "northCentral": ["남궁세가(중원 동부권)", "제갈세가(관중·화북권)", "팽가·황보세가(화북권)", "공손세가(관중권)"],
+        "southEast": ["당가(사천)", "언가(강남 동부권)"],
+        "north": ["모용세가(요동권)"]
+      }
+    },
+    "heukdoryeon": {
+      "name": "흑도련",
+      "territories": [
+        {"name": "패혈궁", "region": "강동·강남권"},
+        {"name": "녹림", "region": "중원 산악대 전역"},
+        {"name": "하오문", "region": "강남·강동 상권"},
+        {"name": "살문", "region": "관중·강북 은거망"},
+        {"name": "사마세가", "region": "중원 중심 상권"},
+        {"name": "혈영교", "region": "서남·남중국"},
+        {"name": "귀도문", "region": "관중·강북 산악"}
+      ]
+    },
+    "seoe": {
+      "name": "세외세력(5왕 중심)",
+      "territories": [
+        {"king": "북빙왕", "region": "북해권"},
+        {"king": "동천왕", "region": "동해 군도"},
+        {"king": "서법왕", "region": "서역(사막·오아시스 벨트)"},
+        {"king": "남독왕", "region": "남만 정글·산악"},
+        {"king": "중랑왕", "region": "중원 유랑 세력(광역 회합지 다수)"}
+      ]
+    }
+  },
+  "conflictZones": [
+    {"region": "서역", "factions": ["마교", "서역 밀교", "정도맹(곤륜)"]},
+    {"region": "운남", "factions": ["남만 연합", "마교", "흑도련"]},
+    {"region": "섬서", "factions": ["정도맹(화산·종남)", "팔가회", "마교"]},
+    {"region": "하북", "factions": ["팔가회(팽가·황보)", "흑도련", "정도맹"]},
+    {"region": "호북", "factions": ["정도맹(무당)", "팔가회", "흑도련"]},
+    {"region": "강남", "factions": ["팔가회(언가)", "흑도련(패혈궁·하오문)", "정도맹"]}
+  ],
+  "strategicPoints": {
+    "antagonist": {
+      "core": "상경 비밀청사(현기원·현의위 본영)",
+      "hubs": [
+        {"name": "함곡관", "region": "관중", "description": "관문·금부감 합동청"},
+        {"name": "형호 운하 합동세창", "description": "세무·해관·선소사 합동"},
+        {"name": "안서도감", "region": "하서회랑", "description": "서방 총영 커버"}
+      ],
+      "outposts": [
+        {"name": "강남 상장", "description": "상교서 전진기지"},
+        {"name": "산둥 해관통합사", "description": "해상 통제"},
+        {"name": "운남 북부 관문망", "description": "쇄문영"},
+        {"name": "관서 사막 변두리 보급소", "description": "복뢰영"}
+      ]
+    }
+  },
+  "majorRoutes": {
+    "landRoutes": [
+      {"name": "하서회랑", "connects": ["중원", "서역"], "controlledBy": "배후세력 영향권"},
+      {"name": "관중 관문", "connects": ["섬서", "하남"], "controlledBy": "분쟁지역"},
+      {"name": "운남–귀주–호광 산맥로", "connects": ["남만", "중원"], "controlledBy": "흑도련 영향권"}
+    ],
+    "waterRoutes": [
+      {"name": "장강 수로", "connects": ["강남", "강동", "호북"], "controlledBy": "녹림(수귀)"},
+      {"name": "진강 수로", "connects": ["강소", "강남"], "controlledBy": "정도맹 영향권"},
+      {"name": "형호 운하", "connects": ["호남", "호북"], "controlledBy": "배후세력 영향권"}
+    ],
+    "seaRoutes": [
+      {"name": "동해 4대항로", "controlledBy": "동천왕(동해 군도)"},
+      {"name": "산둥 해관", "controlledBy": "배후세력 영향권"}
+    ]
+  }
+}

@@ -1,0 +1,58 @@
+{
+  "dataVersion": "1.0.0",
+  "worldName": "천추의강호",
+  "lastUpdated": "2026-02-23",
+  "files": {
+    "core": {
+      "world-config.json": "세계관 기본 설정 및 등급 체계",
+      "characters.json": "주인공, 전설적 인물(1신~4존), 5왕, 6괴",
+      "locations.json": "지역 및 전략 거점"
+    },
+    "factions": {
+      "factions-jeongdomaeng.json": "정도맹(正道盟) - 구파일방, 10선",
+      "factions-palgahoe.json": "팔가회(八家會) - 8대 세가, 8성",
+      "factions-heukdoryeon.json": "흑도련(黑道聯) - 7축 사파, 7귀",
+      "factions-magyo.json": "마교(魔敎) - 교주, 9마, 6대 무력대",
+      "factions-seoe.json": "세외세력(世外勢力) - 5왕, 4대 외곽 세력"
+    },
+    "antagonist": {
+      "antagonist-hyungiwon.json": "현기원(玄機院) - 배후세력, 황실 비밀 조직"
+    }
+  },
+  "powerHierarchy": {
+    "level1": {"title": "신(神)", "count": 1, "file": "characters.json#legends.rank1_god"},
+    "level2": {"title": "황(皇)", "count": 2, "file": "characters.json#legends.rank2_emperor"},
+    "level3": {"title": "제(帝)", "count": 3, "file": "characters.json#legends.rank3_supreme"},
+    "level4": {"title": "존(尊)", "count": 4, "file": "characters.json#legends.rank4_venerable"},
+    "level5": {"title": "왕(王)", "count": 5, "file": "characters.json#currentPowers.rank5_kings"},
+    "level6": {"title": "괴(怪)", "count": 6, "file": "characters.json#currentPowers.rank6_monstrous"},
+    "level7": {"title": "귀(鬼)", "count": 7, "file": "factions-heukdoryeon.json#sevenGhosts"},
+    "level8": {"title": "성(聖)", "count": 8, "file": "factions-palgahoe.json#eightStars"},
+    "level9": {"title": "마(魔)", "count": 9, "file": "factions-magyo.json#nineDemons"},
+    "level10": {"title": "선(仙)", "count": 10, "file": "factions-jeongdomaeng.json#tenImmortals"}
+  },
+  "protagonists": {
+    "cheonchuddan": {
+      "name": "천추단",
+      "nameChinese": "千秋團",
+      "founder": "강현",
+      "fourGuardians": [
+        {"symbol": "현무", "name": "강현", "file": "characters.json#protagonists[0]"},
+        {"symbol": "청룡", "name": "여운청", "file": "characters.json#protagonists[1]"},
+        {"symbol": "주작", "name": "진홍", "file": "characters.json#protagonists[2]"},
+        {"symbol": "백호", "name": "설무백", "file": "characters.json#protagonists[3]"}
+      ]
+    }
+  },
+  "majorConflicts": [
+    {"parties": ["천추단", "배후세력(현기원)"], "theme": "무림 질서 vs 제도권 흡수"},
+    {"parties": ["정도맹", "흑도련"], "theme": "정파 vs 사파"},
+    {"parties": ["팔가회", "마교"], "theme": "세가 vs 마도"},
+    {"parties": ["5왕", "중원 세력"], "theme": "세외 vs 중원"}
+  ],
+  "usage": {
+    "forSimulation": "시뮬레이션 엔진에서 캐릭터와 세력 데이터를 참조",
+    "forWriting": "작가 AI가 세계관 설정을 기반으로 소설 집필",
+    "forConsistency": "일관성 검증 시 캐릭터 관계와 세력 구도 참조"
+  }
+}

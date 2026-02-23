@@ -1,0 +1,101 @@
+{
+  "factionId": "seoe",
+  "name": "세외세력",
+  "nameChinese": "世外勢力",
+  "type": "중원외",
+  "description": "중원 바깥의 독자 세력들. 5왕 중심.",
+  "fiveKings": [
+    {
+      "id": "bukbingwang",
+      "direction": "북",
+      "title": "북빙왕",
+      "organization": "북해 빙궁"
+    },
+    {
+      "id": "seobeobwang",
+      "direction": "서",
+      "title": "서법왕",
+      "organization": "서역 밀교"
+    },
+    {
+      "id": "namdokwang",
+      "direction": "남",
+      "title": "남독왕",
+      "organization": "남만 연합(천독문 주축)"
+    },
+    {
+      "id": "dongcheonwang",
+      "direction": "동",
+      "title": "동천왕",
+      "organization": "동해 군도"
+    },
+    {
+      "id": "jungrangwang",
+      "direction": "중",
+      "title": "중랑왕",
+      "organization": "패천랑부"
+    }
+  ],
+  "regions": [
+    {
+      "id": "bukhaebinggung",
+      "name": "북해 빙궁",
+      "nameChinese": "北海氷宮",
+      "region": "북해권",
+      "leader": "북빙왕 한설강",
+      "formerLeader": "빙황 한광설(은거)",
+      "subUnits": ["설빙대", "빙해수문", "설궁사", "궁내 7사"],
+      "specialty": "한기의 절대 세력",
+      "description": "한씨 일문이 대대로 통치. 냉정한 질서와 균형을 상징."
+    },
+    {
+      "id": "donghaegundo",
+      "name": "동해 군도",
+      "nameChinese": "東海群島",
+      "region": "동해",
+      "leader": "동천왕 진천오",
+      "subUnits": ["해왕단", "36도", "사슬도대", "4대항로"],
+      "specialty": "해적 연맹, 해상 패권",
+      "description": "거지·부랑아 출신을 거둬 군도로 키움. 약자 보호 소문과 냉혹 통치의 괴리."
+    },
+    {
+      "id": "nammanyeonhap",
+      "name": "남만 연합",
+      "nameChinese": "南蠻聯合",
+      "region": "남만 정글·산악",
+      "leader": "남독왕 사독천",
+      "mainSect": "천독문",
+      "subUnits": {
+        "tribes": ["호랑이 부족", "독사 부족", "원숭이 부족", "독수리 부족", "악어 부족"],
+        "special": "만독부"
+      },
+      "specialty": "독술의 절대 지배",
+      "description": "독은 죽이기 위함만이 아닌, 살리기 위한 칼."
+    },
+    {
+      "id": "seoyeokmilgyo",
+      "name": "서역 밀교",
+      "nameChinese": "西域密敎",
+      "region": "서역(사막·오아시스 벨트)",
+      "leader": "서법왕 바르간",
+      "subUnits": ["법륜전", "금강승 전사단", "천광승려단", "밀교 108탑"],
+      "specialty": "종교적·군사적 양면의 거대 집단",
+      "description": "자비와 금강의 양면. 민초 보호에 헌신."
+    },
+    {
+      "id": "paecheonrangbu",
+      "name": "패천랑부",
+      "nameChinese": "覇天狼府",
+      "region": "중원 유랑 세력(광역 회합지 다수)",
+      "leader": "중랑왕 곽천도",
+      "subUnits": ["본진", "5대 전랑대", "속령", "낭인상단"],
+      "specialty": "준국가급 군단",
+      "description": "공포로 낭인을 지배. 살인을 돈벌이 수단으로 삼음. 겉 점잖음과 속 잔혹의 대비."
+    }
+  ],
+  "characteristics": [
+    "중원 바깥의 독자적 세력권",
+    "5왕이 각 방위를 대표",
+    "정파·사파·마교와 별개의 질서 체계"
+  ]
+}

@@ -1,0 +1,78 @@
+{
+  "worldName": "천추의강호",
+  "worldNameChinese": "千秋之江湖",
+  "genre": "무협",
+  "era": "가상 고대 중국",
+  "description": "무림의 질서와 혼란이 공존하는 세계. 정도맹, 팔가회, 흑도련, 마교, 세외세력의 5대 세력이 각축하고, 그 뒤에서 황실 배후세력(현기원)이 무림을 제도권으로 흡수하려는 음모를 꾸민다.",
+  "mainStoryline": {
+    "protagonist": "강현(姜玄)",
+    "organization": "천추단",
+    "theme": "전설의 계승자가 동료들과 함께 강호의 안녕을 지키며 배후세력과 대립",
+    "fourGuardians": ["현무 강현", "청룡 여운청", "주작 진홍", "백호 설무백"]
+  },
+  "powerRankingSystem": {
+    "tiers": [
+      {"rank": 1, "title": "신(神)", "count": 1, "description": "절대적 경지, 전설의 존재"},
+      {"rank": 2, "title": "황(皇)", "count": 2, "description": "황제급 절대자"},
+      {"rank": 3, "title": "제(帝)", "count": 3, "description": "제왕급 고수"},
+      {"rank": 4, "title": "존(尊)", "count": 4, "description": "존칭급 전설"},
+      {"rank": 5, "title": "왕(王)", "count": 5, "description": "현세대 절대자"},
+      {"rank": 6, "title": "괴(怪)", "count": 6, "description": "괴상한 절대 전력"},
+      {"rank": 7, "title": "귀(鬼)", "count": 7, "description": "사파연합 7축 대표"},
+      {"rank": 8, "title": "성(聖)", "count": 8, "description": "세가연합 8축 대표"},
+      {"rank": 9, "title": "마(魔)", "count": 9, "description": "마교 핵심 간부"},
+      {"rank": 10, "title": "선(仙)", "count": 10, "description": "정파 10대 장문인"}
+    ]
+  },
+  "majorFactions": [
+    {
+      "id": "jeongdomaeng",
+      "name": "정도맹",
+      "nameChinese": "正道盟",
+      "type": "정파연합",
+      "description": "구파일방 중심의 정파 연합"
+    },
+    {
+      "id": "palgahoe",
+      "name": "팔가회",
+      "nameChinese": "八家會",
+      "type": "세가연합",
+      "description": "8대 세가 중심의 가문 연합"
+    },
+    {
+      "id": "heukdoryeon",
+      "name": "흑도련",
+      "nameChinese": "黑道聯",
+      "type": "사파연합",
+      "description": "7귀 중심의 사파 연합"
+    },
+    {
+      "id": "magyo",
+      "name": "마교",
+      "nameChinese": "魔敎",
+      "type": "마도",
+      "description": "교주 혁련천우가 이끄는 마도 세력"
+    },
+    {
+      "id": "seoe",
+      "name": "세외세력",
+      "nameChinese": "世外勢力",
+      "type": "중원외",
+      "description": "5왕 중심의 중원 외곽 세력"
+    },
+    {
+      "id": "hyungiwon",
+      "name": "현기원",
+      "nameChinese": "玄機院",
+      "type": "배후세력",
+      "description": "황실 권문의 비밀 조직, 무림 흡수 음모"
+    }
+  ],
+  "worldRules": {
+    "taoistBuddhistRule": "도가/불가 인물은 비혼·무혈맥 원칙",
+    "namingConvention": "한자 표기 필수, 도호/법명 구분",
+    "combatPhilosophy": "내공과 외공의 조화, 심법과 무공의 융합"
+  },
+  "version": "1.0.0",
+  "lastUpdated": "2026-02-23"
+}

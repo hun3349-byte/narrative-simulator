@@ -5,6 +5,17 @@ import { useRouter } from 'next/navigation';
 import { useProjectStore } from '@/lib/store/project-store';
 import { PERSONA_ICONS } from '@/lib/presets/author-personas';
 import type { Project } from '@/lib/types';
+import {
+  convertToWorldLayer,
+  convertToCoreRulesLayer,
+  convertToSeedsLayer,
+  isWorldConfig,
+  type WorldConfigData,
+  type CharacterData,
+  type LocationData,
+  type FactionData,
+} from '@/lib/utils/world-data-loader';
+import { PERSONA_CLASSIC } from '@/lib/presets/author-personas';
 
 // 모바일 감지 훅
 function useIsMobile() {
@@ -24,6 +35,7 @@ export default function ProjectsPage() {
   const router = useRouter();
   const { projects, selectProject, deleteProject } = useProjectStore();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const worldDataInputRef = useRef<HTMLInputElement>(null);
 
   // Hydration 상태 - localStorage 로드 완료 전까지 로딩 표시
   const [isHydrated, setIsHydrated] = useState(false);
@@ -125,6 +137,128 @@ export default function ProjectsPage() {
     reader.readAsText(file);
   };
 
+  // 세계관 데이터 불러오기 (JSON 파일들 → 새 프로젝트 생성)
+  const handleWorldDataImport = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    try {
+      // 1. 단일 파일인지 복수 파일인지 확인
+      const fileArray = Array.from(files);
+
+      // 파일들 파싱
+      const parsedData: Record<string, unknown> = {};
+
+      for (const file of fileArray) {
+        const content = await file.text();
+        const data = JSON.parse(content);
+        const fileName = file.name.replace('.json', '');
+        parsedData[fileName] = data;
+      }
+
+      // 2. 필요한 데이터 식별
+      let worldConfig: WorldConfigData | null = null;
+      let characters: CharacterData | null = null;
+      let locations: LocationData | null = null;
+      const factions: FactionData[] = [];
+
+      // 파일명 또는 데이터 내용으로 타입 식별
+      for (const [key, value] of Object.entries(parsedData)) {
+        if (key === 'world-config' || key === 'worldConfig' || isWorldConfig(value)) {
+          worldConfig = value as WorldConfigData;
+        } else if (key === 'characters') {
+          characters = value as CharacterData;
+        } else if (key === 'locations') {
+          locations = value as LocationData;
+        } else if (key.startsWith('factions-') || key.startsWith('faction-')) {
+          factions.push(value as FactionData);
+        } else if (key.startsWith('antagonist-')) {
+          // 배후세력도 faction으로 취급
+          factions.push(value as FactionData);
+        }
+      }
+
+      // 3. 필수 데이터 확인
+      if (!worldConfig) {
+        alert('world-config.json 파일이 필요합니다. 세계관 기본 설정 파일을 포함해주세요.');
+        return;
+      }
+
+      // 4. 레이어 데이터로 변환
+      const worldLayer = convertToWorldLayer(
+        worldConfig,
+        locations || { factionTerritories: {}, conflictZones: [] }
+      );
+      const coreRulesLayer = convertToCoreRulesLayer(worldConfig);
+      const seedsLayer = convertToSeedsLayer(
+        worldConfig,
+        characters || { protagonists: [], legends: {}, currentPowers: {} },
+        factions
+      );
+
+      // 5. 새 프로젝트 생성
+      const newProjectId = `proj-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+      const newProject: Project = {
+        id: newProjectId,
+        genre: worldConfig.genre || '무협',
+        tone: '진지한',
+        viewpoint: '3인칭 작가',
+        direction: `${worldConfig.worldName} 세계관 기반 프로젝트`,
+        authorPersona: PERSONA_CLASSIC,
+        layers: {
+          world: { status: 'confirmed', data: worldLayer },
+          coreRules: { status: 'confirmed', data: coreRulesLayer },
+          seeds: { status: 'confirmed', data: seedsLayer },
+          heroArc: { status: 'pending', data: null },
+          villainArc: { status: 'pending', data: null },
+          ultimateMystery: { status: 'pending', data: null },
+        },
+        currentLayer: 'heroArc', // 다음 단계부터 시작
+        currentPhase: 'worldbuilding',
+        worldHistory: {
+          eras: [],
+          detailedDecades: [],
+        },
+        messages: [{
+          id: `msg-${Date.now()}`,
+          role: 'author',
+          content: `${worldConfig.worldName}(${worldConfig.worldNameChinese}) 세계관 데이터를 불러왔어.\n\n세계관의 기본 틀은 잡혔으니까, 이제 이 세계에서 활약할 주인공의 서사를 만들어볼까?\n\n주인공에 대해 어떤 아이디어가 있어? 아니면 내가 먼저 제안해볼까?`,
+          timestamp: new Date().toISOString(),
+        }],
+        characters: [],
+        seeds: [],
+        memoryStacks: {},
+        profiles: {},
+        npcPool: { npcs: [], maxActive: 30 },
+        episodes: [],
+        feedbackHistory: [],
+        simulationStatus: 'idle',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // 6. 스토어에 프로젝트 추가
+      useProjectStore.setState(state => ({
+        projects: [...state.projects, newProject],
+      }));
+
+      alert(`${worldConfig.worldName} 세계관을 불러왔습니다. (${factions.length}개 세력, ${characters?.protagonists?.length || 0}명 캐릭터)`);
+
+      // 7. 새 프로젝트로 이동
+      selectProject(newProjectId);
+      router.push(`/projects/${newProjectId}`);
+
+    } catch (error) {
+      console.error('World data import error:', error);
+      alert('세계관 데이터를 불러오는 중 오류가 발생했습니다. JSON 파일 형식을 확인해주세요.');
+    }
+
+    // 입력 초기화
+    if (worldDataInputRef.current) {
+      worldDataInputRef.current.value = '';
+    }
+  };
+
   const handleProjectClick = (id: string) => {
     selectProject(id);
     router.push(`/projects/${id}`);
@@ -192,7 +326,7 @@ export default function ProjectsPage() {
         <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
           <h1 className="font-serif text-2xl md:text-3xl text-text-primary">내 프로젝트</h1>
           <div className="flex gap-2 md:gap-3">
-            {/* 숨겨진 파일 입력 */}
+            {/* 숨겨진 파일 입력 - 프로젝트 */}
             <input
               ref={fileInputRef}
               type="file"
@@ -200,9 +334,25 @@ export default function ProjectsPage() {
               onChange={handleImport}
               className="hidden"
             />
+            {/* 숨겨진 파일 입력 - 세계관 데이터 (복수 파일) */}
+            <input
+              ref={worldDataInputRef}
+              type="file"
+              accept=".json"
+              multiple
+              onChange={handleWorldDataImport}
+              className="hidden"
+            />
 
             {/* 데스크톱: 모든 버튼 표시 */}
             <div className="hidden md:flex gap-3">
+              <button
+                onClick={() => worldDataInputRef.current?.click()}
+                className="rounded-lg border border-seojin/50 px-4 py-2.5 text-sm text-seojin transition-colors hover:bg-seojin/10"
+                title="data/ 폴더의 JSON 파일들을 불러와 새 프로젝트 생성"
+              >
+                📚 세계관 불러오기
+              </button>
               <button
                 onClick={() => fileInputRef.current?.click()}
                 className="rounded-lg border border-base-border px-4 py-2.5 text-sm text-text-secondary transition-colors hover:bg-base-tertiary hover:text-text-primary"
@@ -231,6 +381,15 @@ export default function ProjectsPage() {
               {/* 모바일 드롭다운 메뉴 */}
               {showMobileMenu && (
                 <div className="mobile-menu">
+                  <button
+                    onClick={() => {
+                      worldDataInputRef.current?.click();
+                      setShowMobileMenu(false);
+                    }}
+                    className="w-full text-left px-3 py-2 text-sm text-seojin hover:bg-seojin/10 rounded min-h-[44px]"
+                  >
+                    📚 세계관 불러오기
+                  </button>
                   <button
                     onClick={() => {
                       fileInputRef.current?.click();

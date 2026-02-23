@@ -1,0 +1,240 @@
+{
+  "factionId": "magyo",
+  "name": "마교",
+  "nameChinese": "魔敎",
+  "type": "마도",
+  "description": "교주 파천마황 혁련천우가 이끄는 마도 세력. 북서 변방 감숙-청해 접경 내륙 고지대에 본산.",
+  "headquarters": "북서 변방 감숙-청해 접경 내륙 고지대(분지형 성채)",
+  "leader": {
+    "title": "교주",
+    "alias": "파천마황",
+    "name": "혁련천우",
+    "rank": "마황(2황)"
+  },
+  "structure": {
+    "directControl": [
+      {
+        "name": "호법원",
+        "nameChinese": "護法院",
+        "description": "교주 직속의 절대 친위부",
+        "leader": "혈마 염강(원주)",
+        "members": ["혈마 염강", "독마 사문(부원주)", "광마 강열(좌호법)"]
+      }
+    ],
+    "twoHalls": [
+      {
+        "name": "한음각",
+        "nameChinese": "寒陰閣",
+        "description": "은밀·첩보, 심문, 암살, 정보 통제",
+        "leader": "음마 연세영"
+      },
+      {
+        "name": "요화각",
+        "nameChinese": "妖火閣",
+        "description": "교리 선전, 포교, 내외 선무공작",
+        "leader": "요마 낙정심"
+      }
+    ],
+    "sixMilitaryUnits": [
+      {
+        "name": "황천검수대",
+        "nameChinese": "黃天劍手隊",
+        "leader": "검마 탁천검",
+        "specialty": "검술 정예"
+      },
+      {
+        "name": "파멸귀도대",
+        "nameChinese": "破滅鬼刀隊",
+        "leader": "도마 하후진광",
+        "specialty": "도법 파괴력"
+      },
+      {
+        "name": "삭월귀영대",
+        "nameChinese": "朔月鬼影隊",
+        "leader": "귀마 예단희",
+        "specialty": "정찰·유격·암습"
+      },
+      {
+        "name": "무흔비영대",
+        "nameChinese": "無痕飛影隊",
+        "leader": "비마 풍무헌",
+        "specialty": "첩보·암살"
+      },
+      {
+        "name": "멸화천뢰대",
+        "nameChinese": "滅火天雷隊",
+        "leader": "미정",
+        "specialty": "폭약·화염 특화"
+      },
+      {
+        "name": "파천흑풍대",
+        "nameChinese": "破天黑風隊",
+        "leader": "미정",
+        "specialty": "기마전·기습 특화"
+      }
+    ],
+    "administrativeBureaus": [
+      {"name": "교령사", "nameChinese": "敎令司", "function": "교단 전체 명령·인사 총괄"},
+      {"name": "재정사", "nameChinese": "財政司", "function": "세금, 상단·암거래 관리, 군수 자원 조달"},
+      {"name": "법문사", "nameChinese": "法文司", "function": "교리 편찬, 경전 해석, 의례 주관"},
+      {"name": "형율사", "nameChinese": "刑律司", "function": "내부 규율·징벌 담당"},
+      {"name": "의방사", "nameChinese": "醫方司", "function": "의술·독술 연구, 전투 부상자 회복"},
+      {"name": "연공사", "nameChinese": "鍊工司", "function": "무기·병기 제작 및 비밀 기구 관리"}
+    ]
+  },
+  "nineDemons": [
+    {
+      "id": "hyeolma",
+      "title": "혈마",
+      "titleChinese": "血魔",
+      "alias": "적영혈마",
+      "aliasChinese": "赤影血魔",
+      "name": "염강",
+      "nameChinese": "廉剛",
+      "age": "80대 초중반",
+      "gender": "남성",
+      "position": "호법원 원주, 대호법",
+      "personality": ["충직", "과묵", "냉혹"],
+      "martialArts": ["혈영도법", "혈무신공"],
+      "philosophy": "교주를 따른다. 그것이 마도의 길이다.",
+      "storyRole": "9마 1인자, 마교 실질적 운영자"
+    },
+    {
+      "id": "dokma",
+      "title": "독마",
+      "titleChinese": "毒魔",
+      "alias": "천리독마",
+      "aliasChinese": "千里毒魔",
+      "name": "사문",
+      "nameChinese": "沙文",
+      "age": "70대 초중반",
+      "gender": "남성",
+      "position": "호법원 부원주, 우호법",
+      "personality": ["노회", "교활", "유머러스", "현자형"],
+      "martialArts": ["만리독기", "천리혈독술", "귀문만독진"],
+      "philosophy": "독은 죽이기도 살리기도 한다. 나는 그 균형을 쥐고 있다.",
+      "storyRole": "호법원 2인자, 혈마의 실질적 보좌"
+    },
+    {
+      "id": "gwangma",
+      "title": "광마",
+      "titleChinese": "狂魔",
+      "alias": "혈안광마",
+      "aliasChinese": "血眼狂魔",
+      "name": "강열",
+      "nameChinese": "姜烈",
+      "age": "50대 초반",
+      "gender": "남성",
+      "position": "호법원 좌호법, 무력대 총괄",
+      "personality": ["광폭", "충성", "은근한 부정"],
+      "appearance": "붉게 충혈된 한쪽 눈, 검게 그을린 전신",
+      "martialArts": ["혈광도법", "광마혈안공"],
+      "philosophy": "광폭이 곧 생존이다. 그러나 한 줄기 피는 지켜야 한다.",
+      "relationships": ["진홍(아들, 갈등)"],
+      "storyRole": "진홍의 친부, 후반부 부자 대립 핵심"
+    },
+    {
+      "id": "geomma",
+      "title": "검마",
+      "titleChinese": "劍魔",
+      "alias": "영멸검마",
+      "aliasChinese": "影滅劍魔",
+      "name": "탁천검",
+      "nameChinese": "卓天劍",
+      "age": "50대 후반",
+      "gender": "남성",
+      "position": "황천검수대 대주",
+      "personality": ["광기", "집착", "완벽주의"],
+      "martialArts": ["멸영검법", "마혈검경"],
+      "philosophy": "검은 나의 생명이다. 검을 넘어서는 순간, 나는 존재할 수 없다.",
+      "relationships": ["남궁현(숙명의 라이벌)"],
+      "storyRole": "중후반부 주요 보스, 남궁세가와 숙명의 대결"
+    },
+    {
+      "id": "doma",
+      "title": "도마",
+      "titleChinese": "刀魔",
+      "alias": "광열도마",
+      "aliasChinese": "狂烈刀魔",
+      "name": "하후진광",
+      "nameChinese": "夏侯震光",
+      "age": "60대 초중반",
+      "gender": "남성",
+      "position": "파멸귀도대 대주",
+      "personality": ["의리", "호쾌", "광렬"],
+      "martialArts": ["멸혼광도", "혈염도법"],
+      "philosophy": "칼은 배신하지 않는다. 사람도 마찬가지다 — 진심만 있다면.",
+      "relationships": ["검마 탁천검(평생지기)"],
+      "storyRole": "교주 직속 선봉장"
+    },
+    {
+      "id": "bima",
+      "title": "비마",
+      "titleChinese": "飛魔",
+      "alias": "무영비마",
+      "aliasChinese": "無影飛魔",
+      "name": "풍무헌",
+      "nameChinese": "馮無痕",
+      "age": "30대 후반~40대 초반",
+      "gender": "남성",
+      "position": "무흔비영대 대주",
+      "personality": ["무표정", "침묵", "소심", "의심 많음"],
+      "martialArts": ["무흔신보", "비영살수", "공영무음"],
+      "philosophy": "그림자는 드러나지 않기에 가장 완벽한 칼이다.",
+      "storyRole": "중반부 첩보전·암살전 보스"
+    },
+    {
+      "id": "eumma",
+      "title": "음마",
+      "titleChinese": "陰魔",
+      "alias": "현심음마",
+      "aliasChinese": "玄心陰魔",
+      "name": "연세영",
+      "nameChinese": "燕世英",
+      "age": "50대 초반",
+      "gender": "여성",
+      "position": "한음각 각주",
+      "personality": ["냉철", "치밀", "모성적 따스함"],
+      "martialArts": ["현심음공", "만음라망진"],
+      "philosophy": "음영 속에서 빛은 태어난다. 나는 그 음영을 설계할 뿐.",
+      "storyRole": "마교의 두뇌, 전략가"
+    },
+    {
+      "id": "gwima",
+      "title": "귀마",
+      "titleChinese": "月影鬼魔",
+      "alias": "월영귀마",
+      "name": "예단희",
+      "nameChinese": "芮丹姬",
+      "age": "40대 초반",
+      "gender": "여성",
+      "position": "삭월귀영대 대주",
+      "personality": ["잔소리 많은 큰언니", "다정", "엄격", "내적 선량함"],
+      "martialArts": ["월영낫법", "삭월보법"],
+      "philosophy": "달빛은 어둠을 쫓지 못하지만, 길을 잃은 이를 비출 수는 있다.",
+      "storyRole": "마화의 큰언니, 복잡한 조력자"
+    },
+    {
+      "id": "yoma",
+      "title": "요마",
+      "titleChinese": "妖魔",
+      "alias": "소수요마",
+      "aliasChinese": "素手妖魔",
+      "name": "낙정심",
+      "nameChinese": "駱貞心",
+      "age": "70대 초중반(외모 40대 후반)",
+      "gender": "여성",
+      "position": "요화각 각주",
+      "personality": ["강단", "침착", "현모양처 같은 내조", "가차 없는 결단"],
+      "martialArts": ["요화장법", "만화봉심", "현옥지수"],
+      "philosophy": "꽃은 아름답다고만 피우지 않는다. 독을 품어야 오래 산다.",
+      "storyRole": "마교의 안주인, 내정·외교 총책"
+    }
+  ],
+  "characteristics": [
+    "힘 숭상, 공명정대, 약속 중시",
+    "상업 기반 빈약하나 자급 체제로 재편",
+    "교단 내부 안정도 높음",
+    "규율 통치"
+  ]
+}
