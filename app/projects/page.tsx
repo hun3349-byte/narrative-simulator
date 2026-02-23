@@ -320,12 +320,12 @@ export default function ProjectsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-base-primary p-8">
+    <div className="min-h-screen bg-base-primary p-4 md:p-8">
       <div className="mx-auto max-w-4xl">
         {/* 헤더 */}
-        <div className="mb-8 flex flex-col md:flex-row md:items-center justify-between gap-4">
-          <h1 className="font-serif text-2xl md:text-3xl text-text-primary">내 프로젝트</h1>
-          <div className="flex gap-2 md:gap-3">
+        <div className="mb-6 md:mb-8 flex items-center justify-between gap-3">
+          <h1 className="font-serif text-xl md:text-3xl text-text-primary">내 프로젝트</h1>
+          <div className="flex gap-2 md:gap-3 flex-shrink-0">
             {/* 숨겨진 파일 입력 - 프로젝트 */}
             <input
               ref={fileInputRef}
@@ -370,34 +370,41 @@ export default function ProjectsPage() {
             </div>
 
             {/* 모바일: 메뉴 버튼 */}
-            <div className="relative md:hidden">
+            <div className="md:hidden">
               <button
                 onClick={() => setShowMobileMenu(!showMobileMenu)}
                 className="rounded-lg border border-base-border p-2.5 text-text-secondary hover:bg-base-tertiary min-h-[44px] min-w-[44px] flex items-center justify-center"
               >
                 ⋯
               </button>
+            </div>
 
-              {/* 모바일 드롭다운 메뉴 */}
-              {showMobileMenu && (
-                <div className="mobile-menu">
+            {/* 모바일 드롭다운 메뉴 - fixed 위치로 화면 중앙에 표시 */}
+            {showMobileMenu && (
+              <>
+                {/* 오버레이 */}
+                <div
+                  className="fixed inset-0 z-40 md:hidden"
+                  onClick={() => setShowMobileMenu(false)}
+                />
+                <div className="mobile-menu md:hidden" style={{ top: '120px' }}>
                   <button
                     onClick={() => {
                       worldDataInputRef.current?.click();
                       setShowMobileMenu(false);
                     }}
-                    className="w-full text-left px-3 py-2 text-sm text-seojin hover:bg-seojin/10 rounded min-h-[44px]"
+                    className="w-full text-left px-4 py-3 text-base text-seojin hover:bg-seojin/10 rounded-lg min-h-[48px] flex items-center gap-2"
                   >
-                    📚 세계관 불러오기
+                    <span>📚</span> 세계관 불러오기
                   </button>
                   <button
                     onClick={() => {
                       fileInputRef.current?.click();
                       setShowMobileMenu(false);
                     }}
-                    className="w-full text-left px-3 py-2 text-sm text-text-secondary hover:bg-base-tertiary rounded min-h-[44px]"
+                    className="w-full text-left px-4 py-3 text-base text-text-secondary hover:bg-base-tertiary rounded-lg min-h-[48px] flex items-center gap-2"
                   >
-                    불러오기
+                    <span>📁</span> 프로젝트 불러오기
                   </button>
                   {projects.length > 0 && (
                     <button
@@ -405,14 +412,14 @@ export default function ProjectsPage() {
                         handleExportAll();
                         setShowMobileMenu(false);
                       }}
-                      className="w-full text-left px-3 py-2 text-sm text-text-secondary hover:bg-base-tertiary rounded min-h-[44px]"
+                      className="w-full text-left px-4 py-3 text-base text-text-secondary hover:bg-base-tertiary rounded-lg min-h-[48px] flex items-center gap-2"
                     >
-                      전체 내보내기
+                      <span>💾</span> 전체 내보내기
                     </button>
                   )}
                 </div>
-              )}
-            </div>
+              </>
+            )}
 
             {/* 새 프로젝트 버튼 - 항상 표시 */}
             <button
@@ -426,48 +433,48 @@ export default function ProjectsPage() {
 
         {/* 프로젝트 목록 */}
         {projects.length === 0 ? (
-          <div className="rounded-lg border border-dashed border-base-border bg-base-secondary p-12 text-center">
-            <div className="mb-4 text-4xl">📖</div>
-            <div className="mb-2 text-lg text-text-primary">아직 프로젝트가 없습니다</div>
-            <div className="mb-6 text-text-muted">
+          <div className="rounded-xl border border-dashed border-base-border bg-base-secondary p-8 md:p-12 text-center">
+            <div className="mb-4 text-4xl md:text-5xl">📖</div>
+            <div className="mb-2 text-base md:text-lg text-text-primary">아직 프로젝트가 없습니다</div>
+            <div className="mb-6 text-sm md:text-base text-text-muted">
               새 프로젝트를 만들어 웹소설을 시작해보세요
             </div>
             <button
               onClick={handleNewProject}
-              className="rounded-lg bg-seojin px-6 py-3 font-medium text-white transition-colors hover:bg-seojin/90"
+              className="rounded-lg bg-seojin px-6 py-3 font-medium text-white transition-colors hover:bg-seojin/90 active:scale-95 min-h-[48px]"
             >
               첫 프로젝트 만들기
             </button>
           </div>
         ) : (
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-3 md:gap-4 grid-cols-1 md:grid-cols-2">
             {projects.map(project => (
               <div
                 key={project.id}
                 onClick={() => handleProjectClick(project.id)}
-                className="group cursor-pointer rounded-lg border border-base-border bg-base-secondary p-6 transition-all hover:border-seojin hover:shadow-lg"
+                className="group cursor-pointer rounded-xl border border-base-border bg-base-secondary p-4 md:p-6 transition-all hover:border-seojin hover:shadow-lg active:scale-[0.98]"
               >
                 {/* 헤더 */}
                 <div className="mb-3 flex items-start justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xl">
+                  <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <span className="text-lg md:text-xl flex-shrink-0">
                       {PERSONA_ICONS[project.authorPersona.id] || '✍️'}
                     </span>
-                    <span className="font-medium text-text-primary">
+                    <span className="font-medium text-text-primary text-sm md:text-base truncate">
                       {project.authorPersona.name}
                     </span>
                   </div>
-                  <div className="flex gap-1 md:opacity-0 md:group-hover:opacity-100 transition-opacity">
+                  <div className="flex gap-1 flex-shrink-0">
                     <button
                       onClick={(e) => { e.stopPropagation(); handleExport(project); }}
-                      className="rounded p-2 text-text-muted hover:bg-base-tertiary hover:text-seojin min-h-[44px] min-w-[44px] flex items-center justify-center"
+                      className="rounded p-2 text-text-muted hover:bg-base-tertiary hover:text-seojin min-h-[40px] min-w-[40px] md:min-h-[44px] md:min-w-[44px] flex items-center justify-center"
                       title="내보내기"
                     >
                       ↓
                     </button>
                     <button
                       onClick={(e) => handleDelete(e, project.id)}
-                      className="rounded p-2 text-text-muted hover:bg-base-tertiary hover:text-red-400 min-h-[44px] min-w-[44px] flex items-center justify-center"
+                      className="rounded p-2 text-text-muted hover:bg-base-tertiary hover:text-red-400 min-h-[40px] min-w-[40px] md:min-h-[44px] md:min-w-[44px] flex items-center justify-center"
                       title="삭제"
                     >
                       ✕

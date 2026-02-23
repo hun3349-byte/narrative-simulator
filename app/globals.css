@@ -344,17 +344,28 @@ main {
 
 /* 모바일 드롭다운 메뉴 */
 .mobile-menu {
-  position: absolute;
-  top: 100%;
-  right: 0;
+  position: fixed;
+  top: auto;
+  right: 16px;
+  left: 16px;
   margin-top: 8px;
   background: var(--color-base-secondary);
   border: 1px solid var(--color-base-border);
-  border-radius: 8px;
+  border-radius: 12px;
   padding: 8px;
-  min-width: 160px;
   z-index: 50;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+/* 데스크톱에서는 기존 방식 유지 */
+@media (min-width: 768px) {
+  .mobile-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    left: auto;
+    min-width: 160px;
+  }
 }
 
 /* 모바일 고정 팝업 (하단) */
