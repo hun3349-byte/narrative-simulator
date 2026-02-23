@@ -159,6 +159,9 @@ function createEmptyProject(config: NewProjectConfig): Project {
     feedbackHistory: [],
 
     simulationStatus: 'idle',
+
+    // 공개 설정 (기본값: 공개)
+    isPublic: true,
   };
 }
 

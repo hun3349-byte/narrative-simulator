@@ -4,6 +4,7 @@ import { useRef, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useProjectStore } from '@/lib/store/project-store';
 import { PERSONA_ICONS } from '@/lib/presets/author-personas';
+import { updateProjectVisibility } from '@/lib/supabase';
 import type { Project } from '@/lib/types';
 import {
   convertToWorldLayer,
@@ -275,6 +276,21 @@ export default function ProjectsPage() {
     }
   };
 
+  const handleTogglePublic = async (e: React.MouseEvent, project: Project) => {
+    e.stopPropagation();
+    const newIsPublic = !(project.isPublic ?? true);
+
+    // 로컬 스토어 업데이트
+    useProjectStore.setState(state => ({
+      projects: state.projects.map(p =>
+        p.id === project.id ? { ...p, isPublic: newIsPublic } : p
+      ),
+    }));
+
+    // Supabase 업데이트
+    await updateProjectVisibility(project.id, newIsPublic);
+  };
+
   const getProgressText = (project: typeof projects[0]) => {
     const layerNames = ['world', 'coreRules', 'seeds', 'heroArc', 'villainArc', 'ultimateMystery'] as const;
     const confirmedCount = layerNames.filter(
@@ -324,7 +340,15 @@ export default function ProjectsPage() {
       <div className="mx-auto max-w-4xl">
         {/* 헤더 */}
         <div className="mb-6 md:mb-8 flex items-center justify-between gap-3">
-          <h1 className="font-serif text-xl md:text-3xl text-text-primary">내 프로젝트</h1>
+          <div className="flex items-center gap-4">
+            <h1 className="font-serif text-xl md:text-3xl text-text-primary">내 프로젝트</h1>
+            <button
+              onClick={() => router.push('/explore')}
+              className="rounded-lg border border-base-border px-3 py-1.5 text-sm text-text-secondary transition-colors hover:bg-base-tertiary hover:text-text-primary"
+            >
+              탐색
+            </button>
+          </div>
           <div className="flex gap-2 md:gap-3 flex-shrink-0">
             {/* 숨겨진 파일 입력 - 프로젝트 */}
             <input
@@ -465,6 +489,17 @@ export default function ProjectsPage() {
                     </span>
                   </div>
                   <div className="flex gap-1 flex-shrink-0">
+                    <button
+                      onClick={(e) => handleTogglePublic(e, project)}
+                      className={`rounded p-2 min-h-[40px] min-w-[40px] md:min-h-[44px] md:min-w-[44px] flex items-center justify-center transition-colors ${
+                        project.isPublic ?? true
+                          ? 'text-seojin hover:bg-seojin/10'
+                          : 'text-text-muted hover:bg-base-tertiary'
+                      }`}
+                      title={project.isPublic ?? true ? '공개 (클릭하여 비공개로 변경)' : '비공개 (클릭하여 공개로 변경)'}
+                    >
+                      {project.isPublic ?? true ? '🌐' : '🔒'}
+                    </button>
                     <button
                       onClick={(e) => { e.stopPropagation(); handleExport(project); }}
                       className="rounded p-2 text-text-muted hover:bg-base-tertiary hover:text-seojin min-h-[40px] min-w-[40px] md:min-h-[44px] md:min-w-[44px] flex items-center justify-center"

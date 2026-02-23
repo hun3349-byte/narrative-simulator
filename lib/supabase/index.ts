@@ -5,6 +5,8 @@ export {
   loadProjectsFromSupabase,
   deleteProjectFromSupabase,
   getSharedProject,
+  loadPublicProjects,
+  updateProjectVisibility,
   testSupabaseConnection,
 } from './db';
 export type {
@@ -13,4 +15,5 @@ export type {
   ProjectInsert,
   ProjectUpdate,
   SharedProjectData,
+  PublicProjectSummary,
 } from './types';

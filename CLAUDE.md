@@ -6,6 +6,13 @@
 - 프로젝트 정체서(`project-identity.md`)와 최상위 원칙(`supreme-principles.md`)을 모든 설계/구현 판단의 기준으로 삼는다.
 
 ### 최근 업데이트
+- **2026-02-23**: 프로젝트 탐색 및 공개 설정 기능 추가
+  - `/explore` 페이지: 모든 공개 프로젝트 목록 조회
+  - `/shared/[projectId]`: 읽기 전용 프로젝트 뷰어 (스포일러 제외)
+  - `is_public` 컬럼 추가 (Supabase projects 테이블)
+  - 프로젝트 카드에 공개/비공개 토글 버튼 (🌐/🔒)
+  - 프로젝트 목록에 [탐색] 버튼 추가
+  - `loadPublicProjects()`, `updateProjectVisibility()` 함수 추가
 - **2026-02-23**: SSE 스트리밍 전환 + 레이어 진행 방식 변경
   - `author-chat`, `write-episode`, `generate-world-bible` API를 SSE 스트리밍으로 전환
   - `maxDuration = 60` 추가 (Vercel Fluid Compute 활성화)

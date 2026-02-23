@@ -1,5 +1,5 @@
 import { supabase, isSupabaseEnabled, getBrowserUserId } from './client';
-import type { SharedProjectData } from './types';
+import type { SharedProjectData, PublicProjectSummary } from './types';
 import type { Project, WorldBible, EpisodeLog, WritingMemory } from '../types';
 
 // 프로젝트를 Supabase 형식으로 변환 (사용자 스키마에 맞춤)
@@ -84,6 +84,8 @@ function projectToSupabase(project: Project) {
     })) || [],
     // 자가진화 피드백 루프
     writing_memory: project.writingMemory || null,
+    // 공개 설정 (기본값: true)
+    is_public: project.isPublic ?? true,
     created_at: project.createdAt,
     updated_at: new Date().toISOString(),
   };
@@ -177,6 +179,8 @@ export async function loadProjectsFromSupabase(): Promise<{ projects: Project[];
         episodeLogs: (row.episode_logs || []) as EpisodeLog[],
         // 자가진화 피드백 루프
         writingMemory: row.writing_memory as WritingMemory | undefined,
+        // 공개 설정
+        isPublic: row.is_public ?? true,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
       };
@@ -213,6 +217,82 @@ export async function deleteProjectFromSupabase(projectId: string): Promise<{ su
   }
 }
 
+// 모든 공개 프로젝트 불러오기 (탐색 페이지용)
+export async function loadPublicProjects(): Promise<{ projects: PublicProjectSummary[]; error?: string }> {
+  if (!isSupabaseEnabled || !supabase) {
+    return { projects: [], error: 'Supabase not configured' };
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('projects')
+      .select('id, title, genre, tone, author_persona, layer_status, episodes, created_at, updated_at, is_public')
+      .eq('is_public', true)
+      .order('updated_at', { ascending: false });
+
+    if (error) {
+      console.error('Supabase public projects error:', error);
+      return { projects: [], error: error.message };
+    }
+
+    if (!data) {
+      return { projects: [] };
+    }
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const projects: PublicProjectSummary[] = data.map((row: any) => {
+      const layerStatus = row.layer_status || {};
+      const confirmedCount = ['world', 'coreRules', 'seeds', 'heroArc', 'villainArc', 'ultimateMystery']
+        .filter(layer => layerStatus[layer] === 'confirmed')
+        .length;
+
+      const episodes = row.episodes || [];
+      const finalEpisodes = episodes.filter((ep: { status: string }) => ep.status === 'final');
+
+      return {
+        id: row.id,
+        title: row.title || '제목 없음',
+        genre: row.genre || '',
+        tone: row.tone || '',
+        authorPersonaName: (row.author_persona as { name?: string })?.name || '작가',
+        layersCompleted: confirmedCount,
+        episodeCount: finalEpisodes.length,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      };
+    });
+
+    return { projects };
+  } catch (err) {
+    console.error('Supabase public projects exception:', err);
+    return { projects: [], error: err instanceof Error ? err.message : 'Unknown error' };
+  }
+}
+
+// 프로젝트 공개/비공개 설정 변경
+export async function updateProjectVisibility(projectId: string, isPublic: boolean): Promise<{ success: boolean; error?: string }> {
+  if (!isSupabaseEnabled || !supabase) {
+    return { success: false, error: 'Supabase not configured' };
+  }
+
+  try {
+    const { error } = await supabase
+      .from('projects')
+      .update({ is_public: isPublic, updated_at: new Date().toISOString() })
+      .eq('id', projectId);
+
+    if (error) {
+      console.error('Supabase visibility update error:', error);
+      return { success: false, error: error.message };
+    }
+
+    return { success: true };
+  } catch (err) {
+    console.error('Supabase visibility update exception:', err);
+    return { success: false, error: err instanceof Error ? err.message : 'Unknown error' };
+  }
+}
+
 // 공유용 프로젝트 조회 (스포일러 제외)
 export async function getSharedProject(projectId: string): Promise<{ data: SharedProjectData | null; error?: string }> {
   if (!isSupabaseEnabled || !supabase) {
@@ -222,7 +302,7 @@ export async function getSharedProject(projectId: string): Promise<{ data: Share
   try {
     const { data, error } = await supabase
       .from('projects')
-      .select('id, title, genre, tone, viewpoint, author_persona, layers, episodes')
+      .select('id, title, genre, tone, viewpoint, author_persona, layers, episodes, is_public')
       .eq('id', projectId)
       .single();
 
@@ -233,6 +313,11 @@ export async function getSharedProject(projectId: string): Promise<{ data: Share
 
     if (!data) {
       return { data: null, error: 'Project not found' };
+    }
+
+    // 비공개 프로젝트는 조회 불가
+    if (data.is_public === false) {
+      return { data: null, error: '비공개 프로젝트입니다.' };
     }
 
     // 스포일러 제외한 공개 데이터만 반환

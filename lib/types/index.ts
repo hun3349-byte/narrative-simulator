@@ -1401,6 +1401,9 @@ export interface Project {
 
   // 자가진화 피드백 루프 (Writing Memory)
   writingMemory?: WritingMemory;
+
+  // 공개 설정 (탐색 페이지 노출 여부)
+  isPublic?: boolean;
 }
 
 // 환님 피드백 (누적 학습용)

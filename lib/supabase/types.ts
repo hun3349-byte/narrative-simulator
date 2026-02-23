@@ -32,6 +32,7 @@ export interface ProjectRow {
   feedback_history: FeedbackJson[];
   messages: MessageJson[];
   writing_memory: WritingMemoryJson | null;
+  is_public: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -56,6 +57,7 @@ export interface ProjectInsert {
   feedback_history?: FeedbackJson[];
   messages?: MessageJson[];
   writing_memory?: WritingMemoryJson | null;
+  is_public?: boolean;
   created_at?: string;
   updated_at?: string;
 }
@@ -78,6 +80,7 @@ export interface ProjectUpdate {
   feedback_history?: FeedbackJson[];
   messages?: MessageJson[];
   writing_memory?: WritingMemoryJson | null;
+  is_public?: boolean;
   updated_at?: string;
 }
 
@@ -260,6 +263,19 @@ export interface WritingMemoryJson {
   totalEpisodes: number;
   averageEditAmount: number;
   directAdoptionRate: number;
+}
+
+// 탐색 페이지용 프로젝트 요약
+export interface PublicProjectSummary {
+  id: string;
+  title: string;
+  genre: string;
+  tone: string;
+  authorPersonaName: string;
+  layersCompleted: number;  // 완료된 레이어 수 (0-6)
+  episodeCount: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // 공유용 프로젝트 데이터 (스포일러 제외)
