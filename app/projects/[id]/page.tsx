@@ -1603,9 +1603,8 @@ export default function ProjectConversationPage() {
                 type="text"
                 value={inputValue}
                 onChange={(e) => setInputValue(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-                    e.preventDefault();
+                onKeyUp={(e) => {
+                  if (e.key === 'Enter' && !e.shiftKey) {
                     handleSendMessage();
                   }
                 }}
