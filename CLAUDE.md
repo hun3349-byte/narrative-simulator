@@ -15,6 +15,7 @@
 7. ✅ **사이드 패널 세계관 탭 확장** - RegionDetail, ClimateInfo 등 표시 UI
 8. ✅ **에피소드 레벨 디렉팅 시스템** - PD 디렉팅 기능 완료
 9. ✅ **세계 역사 타임라인 편집** - 시대/10년 단위 역사 편집 기능
+10. ✅ **모바일 파일 업로드 호환성** - TXT/JSON 모바일 업로드 개선
 
 ### 다음 작업
 - 추가 기능 개선 및 사용자 피드백 반영
@@ -32,6 +33,13 @@
 - 프로젝트 정체서(`project-identity.md`)와 최상위 원칙(`supreme-principles.md`)을 모든 설계/구현 판단의 기준으로 삼는다.
 
 ### 최근 업데이트
+- **2026-02-24**: 모바일 파일 업로드 호환성 개선
+  - 숨겨진 파일 인풋을 sr-only 패턴으로 변경 (position: absolute, clip)
+  - accept 속성에 MIME 타입 추가 (`application/json`, `text/plain`, `text/*`)
+  - 캐릭터 업로드에서 TXT, JSON 파일 모두 지원
+  - `parseCharacterJson()` 함수 추가 (JSON 캐릭터 파일 파싱)
+  - 오류 처리 개선 및 파일 크기 제한 (10MB)
+  - 버튼 레이블 "TXT 업로드" → "파일 업로드" 변경
 - **2026-02-24**: 세계 역사 타임라인 편집 기능 추가
   - `components/world/TimelineEditor.tsx` - 타임라인 편집 모달 컴포넌트
   - 시대(Era) 탭: 이름, 연도 범위, 설명, 세력 변화, 분위기, 핵심 사건, 주요 인물, 미스터리 힌트, 유산
