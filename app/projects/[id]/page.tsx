@@ -12,6 +12,7 @@ import { trackBreadcrumbs, generateBreadcrumbInstructions } from '@/lib/utils/br
 import { buildActiveContext } from '@/lib/utils/active-context';
 import { createEmptyWritingMemory, updateQualityTracker, processFeedback, analyzeEdit, integrateEditPatterns, getWritingMemoryStats } from '@/lib/utils/writing-memory';
 import { parseCharacterFile, toNPCSeedInfo, generateExampleTxt, ParseResult, ParsedCharacter } from '@/lib/utils/character-txt-parser';
+import WorldSettingsEditor from '@/components/world/WorldSettingsEditor';
 
 // SSE 스트리밍 헬퍼 함수
 async function streamingFetch(
@@ -215,6 +216,9 @@ export default function ProjectConversationPage() {
   const [parsedCharacters, setParsedCharacters] = useState<ParsedCharacter[]>([]);
   const [characterUploadErrors, setCharacterUploadErrors] = useState<string[]>([]);
   const [selectedParsedCharacters, setSelectedParsedCharacters] = useState<Set<number>>(new Set());
+
+  // 세계관 편집 상태
+  const [showWorldEditor, setShowWorldEditor] = useState(false);
 
   // 모바일 감지
   const isMobile = useIsMobile();
@@ -1749,6 +1753,50 @@ export default function ProjectConversationPage() {
     URL.revokeObjectURL(url);
   };
 
+  // 세계관 편집 저장 핸들러
+  const handleSaveWorldSettings = (data: {
+    heroArc?: Partial<HeroArcLayer>;
+    villainArc?: Partial<VillainArcLayer>;
+    seedsLayer?: Partial<SeedsLayer>;
+  }) => {
+    if (!project) return;
+
+    const changes: string[] = [];
+
+    // 주인공 업데이트
+    if (data.heroArc) {
+      const currentHero = project.layers.heroArc.data as HeroArcLayer | null;
+      const updatedHero = { ...currentHero, ...data.heroArc } as HeroArcLayer;
+      updateLayer('heroArc', updatedHero as unknown as Record<string, unknown>);
+      changes.push('주인공');
+    }
+
+    // 빌런 업데이트
+    if (data.villainArc) {
+      const currentVillain = project.layers.villainArc.data as VillainArcLayer | null;
+      const updatedVillain = { ...currentVillain, ...data.villainArc } as VillainArcLayer;
+      updateLayer('villainArc', updatedVillain as unknown as Record<string, unknown>);
+      changes.push('빌런');
+    }
+
+    // NPC 업데이트
+    if (data.seedsLayer) {
+      const currentSeeds = project.layers.seeds.data as SeedsLayer | null;
+      const updatedSeeds = { ...currentSeeds, ...data.seedsLayer } as SeedsLayer;
+      updateLayer('seeds', updatedSeeds as unknown as Record<string, unknown>);
+      changes.push('NPC');
+    }
+
+    setShowWorldEditor(false);
+
+    if (changes.length > 0) {
+      addMessage({
+        role: 'author',
+        content: `세계관 수정 완료! (${changes.join(', ')}) 변경된 설정은 다음 화 집필부터 자동으로 반영할게.`,
+      });
+    }
+  };
+
   // 시뮬레이션 NPC 승격 핸들러
   const handlePromoteSimulationNPC = (npc: SimulationNPC) => {
     if (!project) return;
@@ -2076,6 +2124,17 @@ export default function ProjectConversationPage() {
 
             {/* 탭 내용 */}
             <div className="overflow-y-auto p-4" style={{ height: 'calc(100% - 45px)' }}>
+              {/* 세계관 편집 버튼 - 세계/캐릭터 탭에서 표시 */}
+              {(sideTab === 'world' || sideTab === 'character') && (
+                <button
+                  onClick={() => setShowWorldEditor(true)}
+                  className="w-full mb-4 py-2 px-3 rounded-lg border border-dashed border-yellow-500/50 text-yellow-400 text-sm hover:bg-yellow-500/10 transition-colors flex items-center justify-center gap-2"
+                >
+                  <span>🛠️</span>
+                  <span>세계관/캐릭터 편집</span>
+                </button>
+              )}
+
               {sideTab === 'world' && (
                 <div className="space-y-4">
                   {project.layers.world.data ? (
@@ -3079,6 +3138,17 @@ export default function ProjectConversationPage() {
         seedsLayer={project?.layers.seeds.data as SeedsLayer | null}
         existingDirection={currentEpisodeDirection}
       />
+
+      {/* 세계관 편집 모달 */}
+      {showWorldEditor && (
+        <WorldSettingsEditor
+          heroArc={project?.layers.heroArc.data as HeroArcLayer | null}
+          villainArc={project?.layers.villainArc.data as VillainArcLayer | null}
+          seedsLayer={project?.layers.seeds.data as SeedsLayer | null}
+          onSave={handleSaveWorldSettings}
+          onClose={() => setShowWorldEditor(false)}
+        />
+      )}
     </div>
   );
 }
