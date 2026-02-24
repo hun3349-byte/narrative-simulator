@@ -8,10 +8,14 @@ import type {
   VillainArcLayer,
   UltimateMysteryLayer
 } from '@/lib/types';
+import { estimateTokens, TOKEN_BUDGET } from '@/lib/utils/token-budget';
 
 export const maxDuration = 60; // Vercel Fluid Compute 활성화
 
 const client = new Anthropic();
+
+// World Bible 토큰 상한
+const WORLD_BIBLE_TOKEN_LIMIT = TOKEN_BUDGET.worldBible; // 2,000
 
 interface GenerateWorldBibleRequest {
   layers: {
@@ -85,16 +89,33 @@ export async function POST(request: Request) {
           if (jsonMatch) {
             try {
               const parsed = JSON.parse(jsonMatch[0]);
-              const worldBible: WorldBible = {
+
+              // 토큰 수 추정
+              const tokenCount = estimateTokens(JSON.stringify(parsed));
+
+              // 토큰 초과 시 캐릭터/떡밥 축소
+              let worldBible: WorldBible = {
                 ...parsed,
                 generatedAt: new Date().toISOString(),
                 lastUpdatedAt: new Date().toISOString(),
-                tokenCount: Math.ceil(JSON.stringify(parsed).length / 2),
+                tokenCount,
               };
+
+              // 2,000 토큰 초과 시 자동 축소
+              if (tokenCount > WORLD_BIBLE_TOKEN_LIMIT) {
+                console.log(`World Bible 토큰 초과: ${tokenCount} > ${WORLD_BIBLE_TOKEN_LIMIT}, 축소 중...`);
+                worldBible = compressWorldBible(worldBible, WORLD_BIBLE_TOKEN_LIMIT);
+              }
 
               const finalData = JSON.stringify({
                 type: 'done',
                 worldBible,
+                tokenInfo: {
+                  original: tokenCount,
+                  final: estimateTokens(JSON.stringify(worldBible)),
+                  limit: WORLD_BIBLE_TOKEN_LIMIT,
+                  compressed: tokenCount > WORLD_BIBLE_TOKEN_LIMIT,
+                }
               });
               controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
             } catch {
@@ -146,6 +167,79 @@ export async function POST(request: Request) {
       },
     });
   }
+}
+
+/**
+ * World Bible이 토큰 초과 시 자동 압축
+ */
+function compressWorldBible(wb: WorldBible, targetTokens: number): WorldBible {
+  const result = { ...wb };
+
+  // 1단계: 캐릭터 수 줄이기 (10명 → 5명)
+  if (result.characters && Object.keys(result.characters).length > 5) {
+    const entries = Object.entries(result.characters);
+    // major importance 또는 앞의 5명만 유지
+    const kept = entries.slice(0, 5);
+    result.characters = Object.fromEntries(kept);
+
+    if (estimateTokens(JSON.stringify(result)) <= targetTokens) {
+      result.tokenCount = estimateTokens(JSON.stringify(result));
+      return result;
+    }
+  }
+
+  // 2단계: 캐릭터 정보 축소 (core + currentState만)
+  if (result.characters) {
+    for (const [name, info] of Object.entries(result.characters)) {
+      result.characters[name] = {
+        core: info.core,
+        currentState: info.currentState,
+      } as typeof info;
+    }
+
+    if (estimateTokens(JSON.stringify(result)) <= targetTokens) {
+      result.tokenCount = estimateTokens(JSON.stringify(result));
+      return result;
+    }
+  }
+
+  // 3단계: 떡밥 수 줄이기 (핵심 3개만)
+  if (result.breadcrumbs && Object.keys(result.breadcrumbs).length > 3) {
+    const entries = Object.entries(result.breadcrumbs);
+    const kept = entries.slice(0, 3);
+    result.breadcrumbs = Object.fromEntries(kept);
+
+    if (estimateTokens(JSON.stringify(result)) <= targetTokens) {
+      result.tokenCount = estimateTokens(JSON.stringify(result));
+      return result;
+    }
+  }
+
+  // 4단계: 긴 텍스트 필드 축소
+  if (result.rules) {
+    if (result.rules.keyHistory && result.rules.keyHistory.length > 200) {
+      result.rules.keyHistory = result.rules.keyHistory.slice(0, 200) + '...';
+    }
+    if (result.rules.powerSystem && result.rules.powerSystem.length > 150) {
+      result.rules.powerSystem = result.rules.powerSystem.slice(0, 150) + '...';
+    }
+  }
+
+  if (result.worldSummary && result.worldSummary.length > 100) {
+    result.worldSummary = result.worldSummary.slice(0, 100) + '...';
+  }
+
+  if (result.factions && result.factions.length > 150) {
+    result.factions = result.factions.slice(0, 150) + '...';
+  }
+
+  // 5단계: 전설 제거
+  if (result.legends) {
+    delete result.legends;
+  }
+
+  result.tokenCount = estimateTokens(JSON.stringify(result));
+  return result;
 }
 
 function buildWorldBiblePrompt(layers: GenerateWorldBibleRequest['layers']): string {
@@ -228,12 +322,23 @@ ${JSON.stringify(ultimateMystery, null, 2)}
   "legends": ["전설1 요약", "전설2 요약"]
 }
 
-## 압축 규칙
-1. 모든 값은 **짧고 명확하게**
+## ⚠️ 압축 규칙 (절대 지킬 것)
+
+**토큰 상한: 2,000토큰 (약 4,000자)**
+- 이 한계를 반드시 지켜라. 초과하면 실패.
+
+1. 모든 값은 **짧고 명확하게** (1~2문장)
 2. 예시나 설명은 제외, 핵심 사실만
-3. 중복 정보 제거
+3. 중복 정보 완전 제거
 4. 이야기에 직접 영향 주지 않는 정보는 과감히 삭제
-5. 캐릭터는 주인공 + 빌런 + 핵심 조연 최대 5명만
+5. **캐릭터**: 주인공 + 빌런 + 핵심 조연 **최대 5명**만
+   - 캐릭터가 많으면: 상위 5명만 상세, 나머지는 이름만 factions에 언급
+6. **떡밥**: 핵심 **3~5개**만 (minor 떡밥 제외)
+7. **역사**: **3~5줄**만 (현재 이야기에 영향 주는 것만)
+8. **세력**: 핵심 대립 구도만 **2~3문장**
+
+잘린 정보는 Supabase 원본에 보존되어 있으니 걱정 마라.
+필요할 때 Tier 3로 상세 로드된다.
 
 JSON만 출력하세요. 설명 없이.`;
 }

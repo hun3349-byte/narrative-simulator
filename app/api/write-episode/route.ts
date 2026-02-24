@@ -18,10 +18,33 @@ import type {
   CharacterDirective,
   BreadcrumbDirective,
   CliffhangerType,
+  EpisodeLog,
+  WorldBible,
 } from '@/lib/types';
 import { getEpisodeFinalContent } from '@/lib/types';
 import { activeContextToPrompt } from '@/lib/utils/active-context';
 import { buildWritingMemoryPrompt } from '@/lib/utils/writing-memory';
+import {
+  TOKEN_BUDGET,
+  estimateTokens,
+  calculateTokenUsage,
+  isOverBudget,
+  fitToBudget,
+  getNextReductionLevel,
+  getReductionMessage,
+  getFinalErrorMessage,
+  truncateToTokenLimit,
+  type ReductionLevel,
+  type PromptSections,
+} from '@/lib/utils/token-budget';
+import {
+  selectCharactersForEpisode,
+  buildDetailedCharacterPrompt,
+  buildSummaryCharacterPrompt,
+  normalizeToCharacterDetail,
+  worldBibleCharactersToSummary,
+  type CharacterDetail,
+} from '@/lib/utils/character-selector';
 
 // 세계관 세부 정보를 프롬프트용 문자열로 변환
 function buildWorldDetailSection(worldLayer?: WorldLayer): string {
@@ -303,6 +326,149 @@ function buildEpisodeDirectionSection(direction?: EpisodeDirection): string {
 }
 
 export const maxDuration = 60; // Vercel Fluid Compute 활성화
+
+/**
+ * 계층적 캐릭터 컨텍스트 빌드 (토큰 예산 적용)
+ * Tier 2: World Bible의 요약 (항상 포함)
+ * Tier 3: 이번 화 등장 캐릭터 상세 (선택적 로드)
+ */
+function buildHierarchicalCharacterContext(params: {
+  allCharacters: NPCSeedInfo[];
+  episodeDirection?: EpisodeDirection;
+  recentLogs?: EpisodeLog[];
+  worldBible?: WorldBible;
+  unresolvedTensions?: string[];
+  reductionLevel?: ReductionLevel;
+}): { detailed: string; summary: string; selectedNames: string[] } {
+  const {
+    allCharacters,
+    episodeDirection,
+    recentLogs,
+    worldBible,
+    unresolvedTensions,
+    reductionLevel = 'normal'
+  } = params;
+
+  // 최대 캐릭터 수 (축소 레벨에 따라 조정)
+  const maxDetailedCount = reductionLevel === 'normal' ? 10 :
+                           reductionLevel === 'reduced30' ? 7 :
+                           reductionLevel === 'reduced50' ? 5 : 3;
+
+  // 캐릭터 선택
+  const normalizedCharacters = normalizeToCharacterDetail(allCharacters);
+  const selection = selectCharactersForEpisode({
+    pdDirection: episodeDirection,
+    recentLogs,
+    worldBible,
+    unresolvedTensions,
+    allCharacters: normalizedCharacters,
+    maxDetailedCount,
+  });
+
+  // 상세 캐릭터 정보 빌드
+  const detailedCharacters = normalizedCharacters.filter(c =>
+    selection.detailed.includes(c.name)
+  );
+  const detailedPrompt = buildDetailedCharacterPrompt(
+    detailedCharacters,
+    TOKEN_BUDGET.characters
+  );
+
+  // 요약 캐릭터 정보 빌드
+  const summaryCharacters = worldBible
+    ? worldBibleCharactersToSummary(worldBible).filter(c =>
+        selection.summary.includes(c.name)
+      )
+    : normalizedCharacters
+        .filter(c => selection.summary.includes(c.name))
+        .map(c => ({ name: c.name, oneLine: c.role || c.core || '역할 미정' }));
+
+  const summaryPrompt = buildSummaryCharacterPrompt(summaryCharacters, 500);
+
+  return {
+    detailed: detailedPrompt,
+    summary: summaryPrompt,
+    selectedNames: selection.detailed,
+  };
+}
+
+/**
+ * 프롬프트 섹션을 예산에 맞게 조립
+ */
+function assemblePromptWithBudget(
+  sections: PromptSections,
+  reductionLevel: ReductionLevel = 'normal'
+): { prompt: string; tokenUsage: ReturnType<typeof calculateTokenUsage>; truncated: boolean } {
+  // 예산에 맞게 섹션 축소
+  const fittedSections = fitToBudget(sections, reductionLevel);
+
+  // 토큰 사용량 계산
+  const tokenUsage = calculateTokenUsage(fittedSections);
+
+  // 최종 프롬프트 조립 (우선순위 순서)
+  const parts: string[] = [];
+
+  // ① 시스템은 별도 (user prompt에 포함 안 함)
+
+  // ② World Bible
+  if (fittedSections.worldBible) {
+    parts.push('=== 세계관 성경 (World Bible) ===');
+    parts.push(fittedSections.worldBible);
+    parts.push('=== 세계관 성경 끝 ===\n');
+  }
+
+  // ③ 직전 화 엔딩
+  if (fittedSections.previousEnding) {
+    parts.push('### 직전 화 마지막 장면');
+    parts.push(fittedSections.previousEnding);
+    parts.push('');
+  }
+
+  // ④ 직전 3화 로그
+  if (fittedSections.recentLogs) {
+    parts.push('### 최근 화 요약');
+    parts.push(fittedSections.recentLogs);
+    parts.push('');
+  }
+
+  // ⑤ 등장 캐릭터 상세
+  if (fittedSections.characters) {
+    parts.push(fittedSections.characters);
+    parts.push('');
+  }
+
+  // ⑥ 떡밥 + 미해결 긴장
+  if (fittedSections.breadcrumbs) {
+    parts.push('### 활성 떡밥 & 미해결 긴장');
+    parts.push(fittedSections.breadcrumbs);
+    parts.push('');
+  }
+
+  // ⑦ 메타 지시
+  if (fittedSections.episodeMeta) {
+    parts.push('### 이번 화 메타 지시');
+    parts.push(fittedSections.episodeMeta);
+    parts.push('');
+  }
+
+  // ⑧ Writing Memory
+  if (fittedSections.writingMemory) {
+    parts.push('=== 학습된 문체 규칙 ===');
+    parts.push(fittedSections.writingMemory);
+    parts.push('=== 학습된 문체 규칙 끝 ===\n');
+  }
+
+  // ⑨ PD 디렉팅
+  if (fittedSections.episodeDirection) {
+    parts.push(fittedSections.episodeDirection);
+    parts.push('');
+  }
+
+  const prompt = parts.join('\n');
+  const truncated = isOverBudget(tokenUsage, reductionLevel);
+
+  return { prompt, tokenUsage, truncated };
+}
 
 // 누적 피드백을 프롬프트용 문자열로 변환
 function buildFeedbackSection(recurringFeedback?: Feedback[]): string {
@@ -839,6 +1005,11 @@ export async function POST(req: NextRequest) {
     // 시스템 프롬프트 (고정 + 화수/톤 기반 동적 요소)
     const systemPrompt = buildSystemPrompt(persona, viewpoint, episodeNumber, previousMonologueTone);
 
+    // 토큰 예산 모니터링
+    const systemTokens = estimateTokens(systemPrompt);
+    console.log('\n=== TOKEN BUDGET MONITORING ===');
+    console.log(`시스템 프롬프트: ${systemTokens} 토큰 (예산: ${TOKEN_BUDGET.system})`);
+
     // 유저 프롬프트 (가변)
     const userPrompt = buildUserPrompt({
       episodeNumber,
@@ -854,6 +1025,20 @@ export async function POST(req: NextRequest) {
       activeContext,
       writingMemory,
     });
+
+    // 토큰 예산 최종 확인
+    const userTokens = estimateTokens(userPrompt);
+    const totalTokens = systemTokens + userTokens;
+    console.log(`유저 프롬프트: ${userTokens} 토큰`);
+    console.log(`총 입력 토큰: ${totalTokens} (예산: ${TOKEN_BUDGET.TOTAL_MAX})`);
+
+    if (totalTokens > TOKEN_BUDGET.TOTAL_MAX) {
+      console.warn(`⚠️ 토큰 예산 초과! ${totalTokens} > ${TOKEN_BUDGET.TOTAL_MAX}`);
+      // 경고만 기록하고 계속 진행 (API가 자체적으로 처리)
+    } else {
+      console.log(`✅ 토큰 예산 내: ${((totalTokens / TOKEN_BUDGET.TOTAL_MAX) * 100).toFixed(1)}% 사용`);
+    }
+    console.log('=== TOKEN BUDGET MONITORING END ===\n');
 
     // 스트리밍 응답 생성
     const stream = new ReadableStream({
@@ -1000,9 +1185,46 @@ export async function POST(req: NextRequest) {
           controller.close();
         } catch (error) {
           console.error('Write episode streaming error:', error);
+
+          // 에러 유형에 따른 구체적 메시지
+          let errorMessage = '에피소드 작성 오류';
+          let suggestion = '';
+
+          if (error instanceof Error) {
+            const errMsg = error.message.toLowerCase();
+
+            // API 토큰 초과 에러
+            if (errMsg.includes('token') || errMsg.includes('context') || errMsg.includes('length')) {
+              errorMessage = '프롬프트 토큰이 초과되었습니다.';
+              suggestion = '세계관/캐릭터 데이터를 줄이거나, PD 디렉팅에서 이번 화에 필요한 핵심 인물만 지정해주세요.';
+            }
+            // 타임아웃
+            else if (errMsg.includes('timeout') || errMsg.includes('timed out')) {
+              errorMessage = '요청 시간이 초과되었습니다.';
+              suggestion = '네트워크 상태를 확인하고 다시 시도해주세요.';
+            }
+            // API 키 문제
+            else if (errMsg.includes('api') || errMsg.includes('key') || errMsg.includes('auth')) {
+              errorMessage = 'API 인증 오류가 발생했습니다.';
+              suggestion = '관리자에게 문의해주세요.';
+            }
+            // 기타
+            else {
+              errorMessage = error.message;
+            }
+          }
+
           const errorData = JSON.stringify({
             type: 'error',
-            message: error instanceof Error ? error.message : '에피소드 작성 오류',
+            message: errorMessage,
+            suggestion,
+            tokenInfo: {
+              systemTokens,
+              userTokens,
+              totalTokens,
+              budget: TOKEN_BUDGET.TOTAL_MAX,
+              overBudget: totalTokens > TOKEN_BUDGET.TOTAL_MAX,
+            },
           });
           controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
           controller.close();
