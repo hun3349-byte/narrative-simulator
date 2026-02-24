@@ -19,14 +19,34 @@ export async function POST(req: NextRequest) {
   console.log('[Export API] Request received');
 
   try {
-    const body: ExportRequest = await req.json();
+    let body: ExportRequest;
+    try {
+      body = await req.json();
+    } catch (parseError) {
+      console.error('[Export API] JSON parse error:', parseError);
+      return NextResponse.json(
+        { error: '요청 데이터 파싱 실패' },
+        { status: 400 }
+      );
+    }
+
     const { format, episodes, projectInfo } = body;
 
     console.log('[Export API] Format:', format);
+    console.log('[Export API] Episodes:', JSON.stringify(episodes?.slice(0, 1)).slice(0, 200));
     console.log('[Export API] Episodes count:', episodes?.length);
+    console.log('[Export API] ProjectInfo:', JSON.stringify(projectInfo));
 
     // 에피소드 검증
-    if (!episodes || episodes.length === 0) {
+    if (!episodes || !Array.isArray(episodes)) {
+      console.log('[Export API] Error: episodes is not an array');
+      return NextResponse.json(
+        { error: '에피소드 데이터가 올바르지 않습니다.' },
+        { status: 400 }
+      );
+    }
+
+    if (episodes.length === 0) {
       console.log('[Export API] Error: No episodes');
       return NextResponse.json(
         { error: '내보낼 에피소드가 없습니다. 먼저 에피소드를 작성해주세요.' },
@@ -34,9 +54,33 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    // 각 에피소드 검증 및 정규화
+    const validEpisodes = episodes.map((ep, idx) => ({
+      id: ep.id || `ep-${idx}`,
+      number: ep.number || idx + 1,
+      title: ep.title || '',
+      content: ep.content || ep.editedContent || '',
+      editedContent: ep.editedContent,
+      charCount: ep.charCount || (ep.content?.length || 0),
+      status: ep.status || 'draft',
+    }));
+
+    // content가 있는 에피소드만 필터링
+    const exportableEpisodes = validEpisodes.filter(ep => ep.content && ep.content.trim().length > 0);
+
+    if (exportableEpisodes.length === 0) {
+      console.log('[Export API] Error: No episodes with content');
+      return NextResponse.json(
+        { error: '내보낼 본문이 있는 에피소드가 없습니다.' },
+        { status: 400 }
+      );
+    }
+
+    console.log('[Export API] Valid episodes:', exportableEpisodes.length);
+
     // 형식 검증
-    if (!['txt', 'html', 'docx'].includes(format)) {
-      console.log('[Export API] Error: Invalid format');
+    if (!format || !['txt', 'html', 'docx'].includes(format)) {
+      console.log('[Export API] Error: Invalid format:', format);
       return NextResponse.json(
         { error: `지원하지 않는 형식입니다: ${format}` },
         { status: 400 }
@@ -48,7 +92,8 @@ export async function POST(req: NextRequest) {
     switch (format) {
       case 'txt': {
         console.log('[Export API] Generating TXT');
-        const text = exportEpisodesToTxt(episodes, projectInfo);
+        const text = exportEpisodesToTxt(exportableEpisodes, projectInfo);
+        console.log('[Export API] TXT length:', text.length);
         return new Response(text, {
           headers: {
             'Content-Type': 'text/plain; charset=utf-8',
@@ -59,7 +104,8 @@ export async function POST(req: NextRequest) {
 
       case 'html': {
         console.log('[Export API] Generating HTML');
-        const html = exportEpisodesToHtml(episodes, projectInfo);
+        const html = exportEpisodesToHtml(exportableEpisodes, projectInfo);
+        console.log('[Export API] HTML length:', html.length);
         return new Response(html, {
           headers: {
             'Content-Type': 'text/html; charset=utf-8',
@@ -70,13 +116,22 @@ export async function POST(req: NextRequest) {
 
       case 'docx': {
         console.log('[Export API] Generating DOCX');
-        const buffer = await exportEpisodesToDocx(episodes, projectInfo);
-        return new Response(buffer as unknown as BodyInit, {
-          headers: {
-            'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-            'Content-Disposition': `attachment; filename="${encodeURIComponent(title)}.docx"`,
-          },
-        });
+        try {
+          const buffer = await exportEpisodesToDocx(exportableEpisodes, projectInfo);
+          console.log('[Export API] DOCX buffer size:', buffer.length);
+          return new Response(buffer as unknown as BodyInit, {
+            headers: {
+              'Content-Type': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+              'Content-Disposition': `attachment; filename="${encodeURIComponent(title)}.docx"`,
+            },
+          });
+        } catch (docxError) {
+          console.error('[Export API] DOCX generation error:', docxError);
+          return NextResponse.json(
+            { error: 'DOCX 생성 중 오류가 발생했습니다.' },
+            { status: 500 }
+          );
+        }
       }
 
       default:
@@ -92,11 +147,22 @@ export async function POST(req: NextRequest) {
   }
 }
 
+// 정규화된 에피소드 타입
+interface NormalizedEpisode {
+  id: string;
+  number: number;
+  title: string;
+  content: string;
+  editedContent?: string;
+  charCount: number;
+  status: string;
+}
+
 /**
  * TXT 내보내기
  */
 function exportEpisodesToTxt(
-  episodes: Episode[],
+  episodes: NormalizedEpisode[],
   projectInfo?: ExportRequest['projectInfo']
 ): string {
   let output = '';
@@ -143,7 +209,7 @@ function exportEpisodesToTxt(
  * HTML 내보내기
  */
 function exportEpisodesToHtml(
-  episodes: Episode[],
+  episodes: NormalizedEpisode[],
   projectInfo?: ExportRequest['projectInfo']
 ): string {
   const title = projectInfo?.title || '웹소설';
@@ -329,7 +395,7 @@ function exportEpisodesToHtml(
  * DOCX 내보내기
  */
 async function exportEpisodesToDocx(
-  episodes: Episode[],
+  episodes: NormalizedEpisode[],
   projectInfo?: ExportRequest['projectInfo']
 ): Promise<Uint8Array> {
   const title = projectInfo?.title || '웹소설';
