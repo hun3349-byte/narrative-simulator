@@ -27,6 +27,22 @@ export async function POST(request: Request) {
       );
     }
 
+    // episode 유효성 검사
+    if (typeof episode.number !== 'number' || !episode.content) {
+      return NextResponse.json(
+        { error: '유효하지 않은 에피소드 데이터입니다.' },
+        { status: 400 }
+      );
+    }
+
+    // worldBible 필수 필드 검사
+    if (!worldBible.worldSummary || !worldBible.characters) {
+      return NextResponse.json(
+        { error: '유효하지 않은 World Bible 데이터입니다.' },
+        { status: 400 }
+      );
+    }
+
     const prompt = buildFactCheckPrompt(worldBible, episode);
 
     const response = await client.messages.create({

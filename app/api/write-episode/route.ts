@@ -796,6 +796,37 @@ export async function POST(req: NextRequest) {
       writingMemory,
     } = body;
 
+    // 에피소드 번호 유효성 검사
+    if (typeof episodeNumber !== 'number' || episodeNumber < 1 || !Number.isInteger(episodeNumber)) {
+      const errorData = JSON.stringify({
+        type: 'error',
+        message: '유효하지 않은 에피소드 번호입니다.',
+      });
+      return new Response(`data: ${errorData}\n\n`, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+        },
+      });
+    }
+
+    // 이전 에피소드들과 번호 충돌 체크
+    if (previousEpisodes && Array.isArray(previousEpisodes)) {
+      const existingNumbers = previousEpisodes.map((ep: { number: number }) => ep.number);
+      if (existingNumbers.includes(episodeNumber)) {
+        const errorData = JSON.stringify({
+          type: 'error',
+          message: `${episodeNumber}화는 이미 존재합니다.`,
+        });
+        return new Response(`data: ${errorData}\n\n`, {
+          headers: {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+          },
+        });
+      }
+    }
+
     const persona = AUTHOR_PERSONA_PRESETS.find(
       p => p.id === projectConfig?.authorPersonaId
     );

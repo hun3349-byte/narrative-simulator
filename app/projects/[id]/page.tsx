@@ -15,57 +15,87 @@ import { parseCharacterFile, toNPCSeedInfo, generateExampleTxt, ParseResult, Par
 import WorldSettingsEditor from '@/components/world/WorldSettingsEditor';
 import TimelineEditor from '@/components/world/TimelineEditor';
 
-// SSE 스트리밍 헬퍼 함수
+// SSE 스트리밍 헬퍼 함수 (타임아웃 및 에러 처리 개선)
 async function streamingFetch(
   url: string,
   body: unknown,
   onText?: (text: string) => void,
+  timeoutMs: number = 180000, // 기본 3분 타임아웃
 ): Promise<{ type: string; [key: string]: unknown }> {
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-  if (!response.ok) {
-    throw new Error(`HTTP ${response.status}`);
-  }
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+      signal: controller.signal,
+    });
 
-  const reader = response.body?.getReader();
-  if (!reader) throw new Error('스트림을 읽을 수 없습니다');
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
 
-  const decoder = new TextDecoder();
-  let finalResult: { type: string; [key: string]: unknown } | null = null;
+    const reader = response.body?.getReader();
+    if (!reader) throw new Error('스트림을 읽을 수 없습니다');
 
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
+    const decoder = new TextDecoder();
+    let finalResult: { type: string; [key: string]: unknown } | null = null;
+    let buffer = ''; // 불완전한 SSE 데이터를 위한 버퍼
 
-    const chunk = decoder.decode(value);
-    const lines = chunk.split('\n');
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
 
-    for (const line of lines) {
-      if (line.startsWith('data: ')) {
-        try {
-          const data = JSON.parse(line.slice(6));
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
 
-          if (data.type === 'text' && onText) {
-            onText(data.content);
-          } else if (data.type === 'done' || data.type === 'error') {
-            finalResult = data;
+      // 마지막 불완전한 라인은 버퍼에 유지
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (line.startsWith('data: ')) {
+          const dataStr = line.slice(6).trim();
+          if (!dataStr) continue;
+
+          try {
+            const data = JSON.parse(dataStr);
+
+            // SSE 데이터 유효성 검사
+            if (typeof data !== 'object' || data === null) {
+              console.warn('Invalid SSE data format:', dataStr);
+              continue;
+            }
+
+            if (data.type === 'text' && onText) {
+              if (typeof data.content === 'string') {
+                onText(data.content);
+              }
+            } else if (data.type === 'done' || data.type === 'error') {
+              finalResult = data;
+            }
+          } catch (parseError) {
+            console.warn('SSE JSON parse error:', parseError);
+            // JSON 파싱 실패는 무시하되 로깅
           }
-        } catch {
-          // JSON 파싱 실패는 무시
         }
       }
     }
-  }
 
-  if (!finalResult) {
-    throw new Error('응답을 받지 못했습니다');
-  }
+    if (!finalResult) {
+      throw new Error('응답을 받지 못했습니다');
+    }
 
-  return finalResult;
+    return finalResult;
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('요청 시간이 초과되었습니다. 다시 시도해 주세요.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 // 모바일 감지 훅
