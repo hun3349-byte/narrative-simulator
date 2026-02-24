@@ -7,12 +7,13 @@ import { PERSONA_ICONS } from '@/lib/presets/author-personas';
 import { WorldTimelinePanel } from '@/components/world-timeline';
 import EpisodeViewer from '@/components/episode/EpisodeViewer';
 import EpisodeDirectionModal from '@/components/episode/EpisodeDirectionModal';
-import type { LayerName, Episode, Character, SimulationConfig, WorldEvent, CharacterSeed, FactCheckResult, BreadcrumbWarning, EpisodeLog, WritingMemory, NPCSeedInfo, SimulationNPC, SeedsLayer, EpisodeDirection, HeroArcLayer, VillainArcLayer } from '@/lib/types';
+import type { LayerName, Episode, Character, SimulationConfig, WorldEvent, CharacterSeed, FactCheckResult, BreadcrumbWarning, EpisodeLog, WritingMemory, NPCSeedInfo, SimulationNPC, SeedsLayer, EpisodeDirection, HeroArcLayer, VillainArcLayer, WorldHistoryEra, DetailedDecade } from '@/lib/types';
 import { trackBreadcrumbs, generateBreadcrumbInstructions } from '@/lib/utils/breadcrumb-tracker';
 import { buildActiveContext } from '@/lib/utils/active-context';
 import { createEmptyWritingMemory, updateQualityTracker, processFeedback, analyzeEdit, integrateEditPatterns, getWritingMemoryStats } from '@/lib/utils/writing-memory';
 import { parseCharacterFile, toNPCSeedInfo, generateExampleTxt, ParseResult, ParsedCharacter } from '@/lib/utils/character-txt-parser';
 import WorldSettingsEditor from '@/components/world/WorldSettingsEditor';
+import TimelineEditor from '@/components/world/TimelineEditor';
 
 // SSE 스트리밍 헬퍼 함수
 async function streamingFetch(
@@ -219,6 +220,9 @@ export default function ProjectConversationPage() {
 
   // 세계관 편집 상태
   const [showWorldEditor, setShowWorldEditor] = useState(false);
+
+  // 타임라인 편집 상태
+  const [showTimelineEditor, setShowTimelineEditor] = useState(false);
 
   // 모바일 감지
   const isMobile = useIsMobile();
@@ -1797,6 +1801,22 @@ export default function ProjectConversationPage() {
     }
   };
 
+  // 타임라인 편집 저장 핸들러
+  const handleSaveTimeline = (data: {
+    eras: WorldHistoryEra[];
+    detailedDecades: DetailedDecade[];
+  }) => {
+    if (!project) return;
+
+    setWorldHistory(data.eras, data.detailedDecades);
+    setShowTimelineEditor(false);
+
+    addMessage({
+      role: 'author',
+      content: `세계 역사 타임라인 수정 완료! 시대 ${data.eras.length}개, 10년 단위 ${data.detailedDecades.length}개가 업데이트됐어. 변경된 역사는 다음 화 집필부터 자동으로 반영할게.`,
+    });
+  };
+
   // 시뮬레이션 NPC 승격 핸들러
   const handlePromoteSimulationNPC = (npc: SimulationNPC) => {
     if (!project) return;
@@ -2305,11 +2325,21 @@ export default function ProjectConversationPage() {
               )}
 
               {sideTab === 'timeline' && (
-                <WorldTimelinePanel
-                  eras={project.worldHistory.eras}
-                  decades={project.worldHistory.detailedDecades}
-                  heroSeed={project.seeds?.[0]}
-                />
+                <div className="space-y-4">
+                  {/* 타임라인 편집 버튼 */}
+                  <button
+                    onClick={() => setShowTimelineEditor(true)}
+                    className="w-full py-2 px-3 rounded-lg border border-dashed border-amber-500/50 text-amber-400 text-sm hover:bg-amber-500/10 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <span>📅</span>
+                    <span>역사 타임라인 편집</span>
+                  </button>
+                  <WorldTimelinePanel
+                    eras={project.worldHistory.eras}
+                    decades={project.worldHistory.detailedDecades}
+                    heroSeed={project.seeds?.[0]}
+                  />
+                </div>
               )}
 
               {sideTab === 'character' && (
@@ -2641,11 +2671,21 @@ export default function ProjectConversationPage() {
             )}
 
             {sideTab === 'timeline' && (
-              <WorldTimelinePanel
-                eras={project.worldHistory.eras}
-                decades={project.worldHistory.detailedDecades}
-                heroSeed={project.seeds?.[0]}
-              />
+              <div className="space-y-4">
+                {/* 타임라인 편집 버튼 */}
+                <button
+                  onClick={() => setShowTimelineEditor(true)}
+                  className="w-full py-2 px-3 rounded-lg border border-dashed border-amber-500/50 text-amber-400 text-sm hover:bg-amber-500/10 transition-colors flex items-center justify-center gap-2"
+                >
+                  <span>📅</span>
+                  <span>역사 타임라인 편집</span>
+                </button>
+                <WorldTimelinePanel
+                  eras={project.worldHistory.eras}
+                  decades={project.worldHistory.detailedDecades}
+                  heroSeed={project.seeds?.[0]}
+                />
+              </div>
             )}
 
             {sideTab === 'character' && (
@@ -3147,6 +3187,16 @@ export default function ProjectConversationPage() {
           seedsLayer={project?.layers.seeds.data as SeedsLayer | null}
           onSave={handleSaveWorldSettings}
           onClose={() => setShowWorldEditor(false)}
+        />
+      )}
+
+      {/* 타임라인 편집 모달 */}
+      {showTimelineEditor && project && (
+        <TimelineEditor
+          eras={project.worldHistory.eras || []}
+          detailedDecades={project.worldHistory.detailedDecades || []}
+          onSave={handleSaveTimeline}
+          onClose={() => setShowTimelineEditor(false)}
         />
       )}
     </div>
