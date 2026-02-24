@@ -19,6 +19,51 @@ export interface CharacterProfile {
   abilities: string[];    // 능력 목록
   weakness: string;       // 약점
   secretGoal: string;     // 숨겨진 목표
+
+  // 시뮬레이션에서 파생된 프로필 (선택적)
+  simulationDerived?: SimulationDerivedProfile;
+}
+
+/**
+ * 시뮬레이션에서 자동 추출되는 캐릭터 프로필
+ * 집필 시 캐릭터 행동/대사의 기준이 됨
+ */
+export interface SimulationDerivedProfile {
+  // 시뮬레이션에서 형성된 성격 (행동 패턴 기반)
+  personality: string;
+
+  // 트라우마/상처 목록
+  trauma: string[];
+
+  // 행동 패턴 (사람을 안 믿음, 혼자 해결 등)
+  behaviorPatterns: string[];
+
+  // 말투 (짧게 끊음, 자조적, 공손 등)
+  speechStyle: string;
+
+  // 관계 패턴 (경계심 강함, 의리파 등)
+  relationshipPatterns: string[];
+
+  // 현재 능력 수준
+  growthLevel: string;
+
+  // 핵심 기억 (성격에 영향 준 사건들)
+  keyMemories: string[];
+
+  // 소설 시점 나이
+  novelStartAge: number;
+
+  // 시뮬레이션 핵심 요약 (500자 이내)
+  simulationSummary: string;
+
+  // 추출 시점
+  extractedAt: string;
+
+  // 시뮬레이션 연도 범위
+  simulatedYearRange: {
+    start: number;
+    end: number;
+  };
 }
 
 export interface CharacterStats {

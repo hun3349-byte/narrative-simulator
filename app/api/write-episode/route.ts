@@ -20,6 +20,7 @@ import type {
   CliffhangerType,
   EpisodeLog,
   WorldBible,
+  SimulationDerivedProfile,
 } from '@/lib/types';
 import { getEpisodeFinalContent } from '@/lib/types';
 import { activeContextToPrompt } from '@/lib/utils/active-context';
@@ -152,6 +153,86 @@ function buildCharacterDetailSection(seedsLayer?: SeedsLayer): string {
   }
 
   result += '\n※ 이 인물들의 대사 작성 시 말투와 배경을 반영하세요.\n=== 주요 인물 말투/배경 끝 ===\n';
+
+  return result;
+}
+
+// 시뮬레이션 파생 프로필 → 캐릭터 행동 규칙 프롬프트
+interface CharacterSimProfile {
+  characterName: string;
+  profile: SimulationDerivedProfile;
+}
+
+function buildCharacterBehaviorRulesSection(profiles?: CharacterSimProfile[]): string {
+  if (!profiles || profiles.length === 0) return '';
+
+  let result = '\n=== 캐릭터 행동 규칙 (시뮬레이션 기반 - 절대 준수) ===\n';
+  result += '아래 프로필은 시뮬레이션에서 형성된 캐릭터의 진짜 모습입니다.\n';
+  result += '이 프로필에 맞지 않는 행동/대사는 절대 쓰지 마세요.\n\n';
+
+  for (const { characterName, profile } of profiles) {
+    result += `【${characterName} 프로필】\n`;
+
+    if (profile.personality) {
+      result += `성격: ${profile.personality}\n`;
+    }
+
+    if (profile.trauma && profile.trauma.length > 0) {
+      result += `트라우마: ${profile.trauma.join(', ')}\n`;
+    }
+
+    if (profile.behaviorPatterns && profile.behaviorPatterns.length > 0) {
+      result += `행동 패턴:\n`;
+      for (const pattern of profile.behaviorPatterns) {
+        result += `  - ${pattern}\n`;
+      }
+    }
+
+    if (profile.speechStyle) {
+      result += `말투: ${profile.speechStyle}\n`;
+    }
+
+    if (profile.relationshipPatterns && profile.relationshipPatterns.length > 0) {
+      result += `관계 패턴: ${profile.relationshipPatterns.join(', ')}\n`;
+    }
+
+    if (profile.growthLevel) {
+      result += `능력 수준: ${profile.growthLevel}\n`;
+    }
+
+    if (profile.keyMemories && profile.keyMemories.length > 0) {
+      result += `핵심 기억:\n`;
+      for (const memory of profile.keyMemories.slice(0, 3)) {
+        result += `  - ${memory}\n`;
+      }
+    }
+
+    if (profile.simulationSummary) {
+      result += `\n[${characterName}의 인생 요약]\n${profile.simulationSummary}\n`;
+    }
+
+    result += '\n';
+  }
+
+  result += `## 행동 검증 규칙
+
+이 캐릭터가 어떻게 반응할지는 위 프로필에서 나와야 합니다.
+
+❌ 장르 클리셰 자동 반응 금지:
+- 여자가 위험 → 주인공이 바로 구함 (무협 템플릿)
+- 적이 나타남 → 주인공이 차분하게 대응 (먼치킨 템플릿)
+- 사부 단서 → 주인공이 진지하게 추적 (성장물 템플릿)
+
+✅ 프로필 기반 반응:
+- 사람을 안 믿는 캐릭터 → 여자 비명에 의심부터
+- 트라우마 있는 캐릭터 → 시체 보고 과거 회상
+- 혼자 해결하는 캐릭터 → 도움 요청을 거부
+- 경계심 강한 캐릭터 → 친절한 제안에 경계
+
+※ 캐릭터가 "왜 이렇게 행동하는가"를 프로필로 설명할 수 없으면
+  그 행동은 쓰면 안 됩니다.
+
+=== 캐릭터 행동 규칙 끝 ===\n`;
 
   return result;
 }
@@ -795,6 +876,29 @@ ${pacingGuide}
 7. 한 화 완결 금지 - 미완의 긴장으로 끝낼 것
 8. 첫 문장 어그로 필수
 
+## 설명 금지 원칙
+- '○○○. □□□의 △△△이다.' 패턴 금지
+  나쁜 예: "현천문. 무림 최강의 문파이다."
+  좋은 예: 현천문의 위상을 행동/반응으로 보여줌
+- 설정은 행동/감각/대사 속에 녹인다
+- 괄호 한자 설명 금지 (예: 현천문(玄天門))
+- 무공명 나열 후 설명 금지. 효과/감각만 보여줌
+  나쁜 예: "태극혼원장. 음양의 기운을 섞어 만드는 장법이다."
+  좋은 예: "손바닥 위로 검은 기운과 흰 기운이 소용돌이쳤다."
+
+## 쉬운 승리 금지
+- 주인공이 이름/정체 한마디로 적을 쫓아내면 안 됨
+- 대가 없는 승리 금지
+- 1화부터 주인공의 한계를 보여줘야 함
+- 능력이 있어도 발휘하지 못하는 상황을 만들 것
+
+## 라이트한 필체
+- 주인공 내면 독백에 유머/자조 섞기
+  예: "이쯤 되면 운이 아니라 저주다."
+- 딱딱한 무협체가 아니라 현대적 감각의 서술
+- 독자가 킥킥거릴 수 있는 순간 삽입
+- 진지한 장면에서도 캐릭터의 인간미 보여주기
+
 ## 출력 형식
 JSON으로만 응답:
 {
@@ -809,7 +913,7 @@ JSON으로만 응답:
 }`;
 }
 
-// 유저 프롬프트 (가변 - 세계관 + 캐릭터 + 이전 화 + 방향 + Active Context + Writing Memory + PD 디렉팅)
+// 유저 프롬프트 (가변 - 세계관 + 캐릭터 + 이전 화 + 방향 + Active Context + Writing Memory + PD 디렉팅 + 시뮬레이션 프로필)
 function buildUserPrompt(params: {
   episodeNumber: number;
   confirmedLayers?: {
@@ -835,6 +939,8 @@ function buildUserPrompt(params: {
   recurringFeedback?: Feedback[];
   activeContext?: ActiveContext;
   writingMemory?: WritingMemory;
+  // 시뮬레이션 파생 프로필 (캐릭터 행동 규칙)
+  simulationProfiles?: CharacterSimProfile[];
 }): string {
   const {
     episodeNumber,
@@ -851,7 +957,8 @@ function buildUserPrompt(params: {
     previousCharCount,
     recurringFeedback,
     activeContext,
-    writingMemory
+    writingMemory,
+    simulationProfiles
   } = params;
 
   // 세계관 세부 정보 섹션
@@ -860,6 +967,8 @@ function buildUserPrompt(params: {
   const characterDetailSection = buildCharacterDetailSection(seedsLayer);
   // 에피소드 디렉팅 섹션 (PD 지시)
   const episodeDirectionSection = buildEpisodeDirectionSection(episodeDirection);
+  // 캐릭터 행동 규칙 섹션 (시뮬레이션 기반)
+  const characterBehaviorRulesSection = buildCharacterBehaviorRulesSection(simulationProfiles);
 
   const lastEpisode = previousEpisodes?.[previousEpisodes.length - 1];
   const lastEpisodeFinalContent = lastEpisode ? getEpisodeFinalContent(lastEpisode) : null;
@@ -921,6 +1030,7 @@ ${characterProfiles || '(없음)'}
 ### 기억 잔상
 ${characterMemories || '(없음)'}
 ※ 이 경험들을 직접 언급하지 말고, 행동/반응/망설임에 자연스럽게 반영하세요.
+${characterBehaviorRulesSection}
 
 ### 이전 화 (문체 참고)
 ${lastEpisodeFinalContent ? `
@@ -1062,6 +1172,7 @@ export async function POST(req: NextRequest) {
       recurringFeedback,
       activeContext,
       writingMemory,
+      simulationProfiles,  // 시뮬레이션 파생 캐릭터 프로필
     } = body;
 
     // 에피소드 번호 유효성 검사
@@ -1126,6 +1237,7 @@ export async function POST(req: NextRequest) {
       recurringFeedback,
       activeContext,
       writingMemory,
+      simulationProfiles,  // 시뮬레이션 파생 캐릭터 프로필
     });
 
     // 토큰 예산 최종 확인
