@@ -11,6 +11,7 @@ import type { LayerName, Episode, Character, SimulationConfig, WorldEvent, Chara
 import { trackBreadcrumbs, generateBreadcrumbInstructions } from '@/lib/utils/breadcrumb-tracker';
 import { buildActiveContext } from '@/lib/utils/active-context';
 import { createEmptyWritingMemory, updateQualityTracker, processFeedback, analyzeEdit, integrateEditPatterns, getWritingMemoryStats } from '@/lib/utils/writing-memory';
+import { parseCharacterFile, toNPCSeedInfo, generateExampleTxt, ParseResult, ParsedCharacter } from '@/lib/utils/character-txt-parser';
 
 // SSE 스트리밍 헬퍼 함수
 async function streamingFetch(
@@ -204,9 +205,16 @@ export default function ProjectConversationPage() {
     backstory: '',
   });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const characterFileInputRef = useRef<HTMLInputElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const layerBarRef = useRef<HTMLDivElement>(null);
   const loadingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+
+  // 캐릭터 파일 업로드 관련 상태
+  const [showCharacterUploadResult, setShowCharacterUploadResult] = useState(false);
+  const [parsedCharacters, setParsedCharacters] = useState<ParsedCharacter[]>([]);
+  const [characterUploadErrors, setCharacterUploadErrors] = useState<string[]>([]);
+  const [selectedParsedCharacters, setSelectedParsedCharacters] = useState<Set<number>>(new Set());
 
   // 모바일 감지
   const isMobile = useIsMobile();
@@ -1658,6 +1666,89 @@ export default function ProjectConversationPage() {
     });
   };
 
+  // 캐릭터 TXT 파일 업로드 핸들러
+  const handleCharacterFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    try {
+      const result = await parseCharacterFile(file);
+      setParsedCharacters(result.characters);
+      setCharacterUploadErrors(result.errors);
+      // 기본적으로 모든 캐릭터 선택
+      setSelectedParsedCharacters(new Set(result.characters.map((_, i) => i)));
+      setShowCharacterUploadResult(true);
+    } catch (error) {
+      setCharacterUploadErrors([error instanceof Error ? error.message : '파일 파싱 오류']);
+      setParsedCharacters([]);
+      setShowCharacterUploadResult(true);
+    }
+
+    // 파일 인풋 초기화 (같은 파일 재선택 가능하도록)
+    e.target.value = '';
+  };
+
+  // 선택한 캐릭터들 추가
+  const handleAddParsedCharacters = () => {
+    if (!project || selectedParsedCharacters.size === 0) return;
+
+    const seedsData = project.layers.seeds.data as SeedsLayer | null;
+    const currentNpcs = seedsData?.npcs || [];
+
+    // 선택된 캐릭터들만 추가
+    const newNpcs: NPCSeedInfo[] = [];
+    parsedCharacters.forEach((char, index) => {
+      if (selectedParsedCharacters.has(index)) {
+        newNpcs.push(toNPCSeedInfo(char));
+      }
+    });
+
+    const updatedSeeds: SeedsLayer = {
+      ...seedsData,
+      factions: seedsData?.factions || [],
+      races: seedsData?.races || [],
+      threats: seedsData?.threats || [],
+      npcs: [...currentNpcs, ...newNpcs],
+    };
+
+    updateLayer('seeds', updatedSeeds as unknown as Record<string, unknown>);
+
+    // 상태 초기화
+    setShowCharacterUploadResult(false);
+    setParsedCharacters([]);
+    setSelectedParsedCharacters(new Set());
+
+    addMessage({
+      role: 'author',
+      content: `${newNpcs.length}명의 캐릭터를 추가했어. (${newNpcs.map(n => n.name).join(', ')}) 시뮬레이션과 집필에 활용할게.`,
+    });
+  };
+
+  // 캐릭터 선택 토글
+  const toggleParsedCharacter = (index: number) => {
+    setSelectedParsedCharacters(prev => {
+      const next = new Set(prev);
+      if (next.has(index)) {
+        next.delete(index);
+      } else {
+        next.add(index);
+      }
+      return next;
+    });
+  };
+
+  // 예시 TXT 파일 다운로드
+  const handleDownloadExampleTxt = () => {
+    const content = generateExampleTxt();
+    const blob = new Blob([content], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'character-template.txt';
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   // 시뮬레이션 NPC 승격 핸들러
   const handlePromoteSimulationNPC = (npc: SimulationNPC) => {
     if (!project) return;
@@ -2270,13 +2361,37 @@ export default function ProjectConversationPage() {
                     return null;
                   })()}
 
-                  {/* 캐릭터 추가 버튼 */}
-                  <button
-                    onClick={() => setShowAddCharacterModal(true)}
-                    className="w-full py-2 border border-dashed border-seojin/50 rounded-lg text-seojin text-sm hover:bg-seojin/10 transition-colors"
-                  >
-                    + 캐릭터 추가
-                  </button>
+                  {/* 캐릭터 추가 버튼들 */}
+                  <div className="space-y-2">
+                    <div className="flex gap-2">
+                      <button
+                        onClick={() => setShowAddCharacterModal(true)}
+                        className="flex-1 py-2 border border-dashed border-seojin/50 rounded-lg text-seojin text-sm hover:bg-seojin/10 transition-colors"
+                      >
+                        + 캐릭터 추가
+                      </button>
+                      <button
+                        onClick={() => characterFileInputRef.current?.click()}
+                        className="flex-1 py-2 border border-dashed border-purple-500/50 rounded-lg text-purple-400 text-sm hover:bg-purple-500/10 transition-colors"
+                      >
+                        📄 TXT 업로드
+                      </button>
+                    </div>
+                    <button
+                      onClick={handleDownloadExampleTxt}
+                      className="w-full py-1.5 text-xs text-text-muted hover:text-text-secondary transition-colors"
+                    >
+                      예시 템플릿 다운로드 ↓
+                    </button>
+                  </div>
+                  {/* 숨겨진 파일 인풋 */}
+                  <input
+                    ref={characterFileInputRef}
+                    type="file"
+                    accept=".txt"
+                    onChange={handleCharacterFileUpload}
+                    className="hidden"
+                  />
                 </div>
               )}
 
@@ -2696,6 +2811,146 @@ export default function ProjectConversationPage() {
               </button>
               <button
                 onClick={() => setShowAddCharacterModal(false)}
+                className="flex-1 rounded-lg bg-base-tertiary px-4 py-2 text-sm text-text-secondary hover:bg-base-border"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 캐릭터 업로드 결과 모달 */}
+      {showCharacterUploadResult && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-w-2xl w-full bg-base-secondary rounded-xl shadow-xl border border-base-border max-h-[90vh] overflow-hidden flex flex-col">
+            <div className="flex items-center justify-between border-b border-base-border px-4 py-3 shrink-0">
+              <h3 className="font-medium text-text-primary">📄 캐릭터 파일 분석 결과</h3>
+              <button
+                onClick={() => setShowCharacterUploadResult(false)}
+                className="text-text-muted hover:text-text-primary"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto flex-1">
+              {/* 에러 메시지 */}
+              {characterUploadErrors.length > 0 && (
+                <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+                  <div className="text-sm text-red-400 font-medium mb-1">파싱 경고</div>
+                  {characterUploadErrors.map((err, i) => (
+                    <div key={i} className="text-xs text-red-300">{err}</div>
+                  ))}
+                </div>
+              )}
+
+              {/* 파싱된 캐릭터 목록 */}
+              {parsedCharacters.length > 0 ? (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-text-secondary">
+                      {parsedCharacters.length}명의 캐릭터 발견 ({selectedParsedCharacters.size}명 선택됨)
+                    </span>
+                    <button
+                      onClick={() => {
+                        if (selectedParsedCharacters.size === parsedCharacters.length) {
+                          setSelectedParsedCharacters(new Set());
+                        } else {
+                          setSelectedParsedCharacters(new Set(parsedCharacters.map((_, i) => i)));
+                        }
+                      }}
+                      className="text-xs text-seojin hover:underline"
+                    >
+                      {selectedParsedCharacters.size === parsedCharacters.length ? '전체 해제' : '전체 선택'}
+                    </button>
+                  </div>
+
+                  {parsedCharacters.map((char, index) => (
+                    <div
+                      key={index}
+                      onClick={() => toggleParsedCharacter(index)}
+                      className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                        selectedParsedCharacters.has(index)
+                          ? 'bg-seojin/10 border-seojin/50'
+                          : 'bg-base-tertiary border-base-border hover:border-base-border/80'
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className={`w-5 h-5 rounded border flex items-center justify-center shrink-0 mt-0.5 ${
+                          selectedParsedCharacters.has(index)
+                            ? 'bg-seojin border-seojin text-white'
+                            : 'border-base-border'
+                        }`}>
+                          {selectedParsedCharacters.has(index) && '✓'}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="font-medium text-text-primary">{char.name}</span>
+                            <span className="text-xs px-2 py-0.5 bg-purple-500/20 text-purple-300 rounded">
+                              {char.role}
+                            </span>
+                            {char.importance && (
+                              <span className={`text-xs px-2 py-0.5 rounded ${
+                                char.importance === 'major'
+                                  ? 'bg-yellow-500/20 text-yellow-300'
+                                  : char.importance === 'minor'
+                                  ? 'bg-gray-500/20 text-gray-400'
+                                  : 'bg-blue-500/20 text-blue-300'
+                              }`}>
+                                {char.importance === 'major' ? '주연' : char.importance === 'minor' ? '단역' : '조연'}
+                              </span>
+                            )}
+                          </div>
+                          {char.personality && (
+                            <div className="text-xs text-text-muted line-clamp-2">{char.personality}</div>
+                          )}
+                          {char.backstory && (
+                            <div className="text-xs text-text-muted mt-1 line-clamp-2">
+                              <span className="text-purple-400">배경:</span> {char.backstory}
+                            </div>
+                          )}
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {char.location && (
+                              <span className="text-xs px-2 py-0.5 bg-base-primary rounded text-text-muted">
+                                📍 {char.location}
+                              </span>
+                            )}
+                            {char.faction && (
+                              <span className="text-xs px-2 py-0.5 bg-base-primary rounded text-text-muted">
+                                🏛️ {char.faction}
+                              </span>
+                            )}
+                            {char.speechPattern && (
+                              <span className="text-xs px-2 py-0.5 bg-base-primary rounded text-text-muted">
+                                💬 {char.speechPattern}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="text-center text-text-muted py-8">
+                  <div className="text-4xl mb-2">😕</div>
+                  <div>캐릭터를 찾지 못했어요.</div>
+                  <div className="text-xs mt-2">TXT 형식을 확인해주세요.</div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2 border-t border-base-border px-4 py-3 shrink-0">
+              <button
+                onClick={handleAddParsedCharacters}
+                disabled={selectedParsedCharacters.size === 0}
+                className="flex-1 rounded-lg bg-seojin px-4 py-2 text-sm text-white hover:bg-seojin/90 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {selectedParsedCharacters.size}명 추가
+              </button>
+              <button
+                onClick={() => setShowCharacterUploadResult(false)}
                 className="flex-1 rounded-lg bg-base-tertiary px-4 py-2 text-sm text-text-secondary hover:bg-base-border"
               >
                 취소
