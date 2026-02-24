@@ -14,6 +14,7 @@ import { createEmptyWritingMemory, updateQualityTracker, processFeedback, analyz
 import { parseCharacterFile, toNPCSeedInfo, generateExampleTxt, ParseResult, ParsedCharacter } from '@/lib/utils/character-txt-parser';
 import WorldSettingsEditor from '@/components/world/WorldSettingsEditor';
 import TimelineEditor from '@/components/world/TimelineEditor';
+import { CharacterEditModal } from '@/components/character';
 
 // SSE 스트리밍 헬퍼 함수 (타임아웃 및 에러 처리 개선)
 async function streamingFetch(
@@ -202,6 +203,9 @@ export default function ProjectConversationPage() {
     addEpisodeLog,
     getWritingMemory,
     updateWritingMemory,
+    updateNPC,
+    deleteNPC,
+    getCharacterAppearances,
   } = useProjectStore();
 
   // Hydration 상태 - 클라이언트에서 localStorage 로드 완료 전까지 로딩 표시
@@ -253,6 +257,12 @@ export default function ProjectConversationPage() {
 
   // 타임라인 편집 상태
   const [showTimelineEditor, setShowTimelineEditor] = useState(false);
+
+  // 캐릭터 편집 상태
+  const [editingCharacter, setEditingCharacter] = useState<{
+    character: NPCSeedInfo;
+    type: 'hero' | 'villain' | 'npc';
+  } | null>(null);
 
   // 모바일 감지
   const isMobile = useIsMobile();
@@ -1966,6 +1976,74 @@ export default function ProjectConversationPage() {
     });
   };
 
+  // 캐릭터 편집 핸들러
+  const handleEditCharacter = (character: NPCSeedInfo, type: 'hero' | 'villain' | 'npc') => {
+    setEditingCharacter({ character, type });
+  };
+
+  // 캐릭터 저장 핸들러
+  const handleSaveCharacter = (updated: NPCSeedInfo, oldName: string) => {
+    if (!project || !editingCharacter) return;
+
+    const { type } = editingCharacter;
+
+    if (type === 'npc') {
+      // NPC 업데이트
+      updateNPC(updated.id || '', updated, oldName !== updated.name ? oldName : undefined);
+      addMessage({
+        role: 'author',
+        content: oldName !== updated.name
+          ? `캐릭터 정보 수정 완료! ${oldName} → ${updated.name}으로 이름도 변경됐어.`
+          : `${updated.name} 캐릭터 정보 수정 완료!`,
+      });
+    } else if (type === 'hero') {
+      // 주인공 업데이트
+      const heroData = project.layers.heroArc.data as HeroArcLayer | null;
+      if (heroData) {
+        const updatedHero: HeroArcLayer = {
+          ...heroData,
+          name: updated.name,
+        };
+        updateLayer('heroArc', updatedHero as unknown as Record<string, unknown>);
+        addMessage({
+          role: 'author',
+          content: `주인공 정보 수정 완료!`,
+        });
+      }
+    } else if (type === 'villain') {
+      // 빌런 업데이트
+      const villainData = project.layers.villainArc.data as VillainArcLayer | null;
+      if (villainData) {
+        const updatedVillain: VillainArcLayer = {
+          ...villainData,
+          name: updated.name,
+        };
+        updateLayer('villainArc', updatedVillain as unknown as Record<string, unknown>);
+        addMessage({
+          role: 'author',
+          content: `빌런 정보 수정 완료!`,
+        });
+      }
+    }
+
+    setEditingCharacter(null);
+  };
+
+  // 캐릭터 삭제 핸들러
+  const handleDeleteCharacter = () => {
+    if (!project || !editingCharacter) return;
+
+    const { character } = editingCharacter;
+    deleteNPC(character.id || '');
+
+    addMessage({
+      role: 'author',
+      content: `${character.name} 캐릭터를 삭제했어.`,
+    });
+
+    setEditingCharacter(null);
+  };
+
   // Hydration 중 또는 프로젝트가 없으면
   if (!isHydrated) {
     return (
@@ -2450,8 +2528,26 @@ export default function ProjectConversationPage() {
               {sideTab === 'character' && (
                 <div className="space-y-4">
                   {project.layers.heroArc.data ? (
-                    <div className="rounded-lg bg-base-primary p-3">
-                      <div className="mb-1 text-xs text-seojin">주인공</div>
+                    <div
+                      className="rounded-lg bg-base-primary p-3 cursor-pointer hover:bg-base-tertiary transition-colors group"
+                      onClick={() => {
+                        const heroData = project.layers.heroArc.data as HeroArcLayer;
+                        handleEditCharacter({
+                          id: 'hero',
+                          name: heroData.name,
+                          role: '주인공',
+                          location: '',
+                          personality: '',
+                          hiddenMotivation: heroData.desire,
+                          backstory: heroData.coreNarrative,
+                          importance: 'major',
+                        }, 'hero');
+                      }}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="text-xs text-seojin">주인공</div>
+                        <span className="text-xs text-text-muted opacity-0 group-hover:opacity-100 transition-opacity">클릭해서 편집</span>
+                      </div>
                       <div className="font-medium text-text-primary">{project.layers.heroArc.data.name}</div>
                       <p className="mt-1 text-sm text-text-muted">{project.layers.heroArc.data.coreNarrative}</p>
                     </div>
@@ -2460,8 +2556,26 @@ export default function ProjectConversationPage() {
                   )}
 
                   {project.layers.villainArc.data && (
-                    <div className="rounded-lg bg-base-primary p-3">
-                      <div className="mb-1 text-xs text-red-400">빌런</div>
+                    <div
+                      className="rounded-lg bg-base-primary p-3 cursor-pointer hover:bg-base-tertiary transition-colors group"
+                      onClick={() => {
+                        const villainData = project.layers.villainArc.data as VillainArcLayer;
+                        handleEditCharacter({
+                          id: 'villain',
+                          name: villainData.name,
+                          role: '빌런',
+                          location: '',
+                          personality: '',
+                          hiddenMotivation: villainData.motivation,
+                          backstory: villainData.coreNarrative,
+                          importance: 'major',
+                        }, 'villain');
+                      }}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <div className="text-xs text-red-400">빌런</div>
+                        <span className="text-xs text-text-muted opacity-0 group-hover:opacity-100 transition-opacity">클릭해서 편집</span>
+                      </div>
                       <div className="font-medium text-text-primary">{project.layers.villainArc.data.name}</div>
                       <p className="mt-1 text-sm text-text-muted">{project.layers.villainArc.data.motivation}</p>
                     </div>
@@ -2482,16 +2596,32 @@ export default function ProjectConversationPage() {
                             </div>
                             <div className="space-y-2 max-h-48 overflow-y-auto">
                               {npcs.map((npc, idx) => (
-                                <div key={npc.id || idx} className="rounded-lg bg-base-tertiary p-2">
+                                <div
+                                  key={npc.id || idx}
+                                  className="rounded-lg bg-base-tertiary p-2 cursor-pointer hover:bg-base-border transition-colors group"
+                                  onClick={() => handleEditCharacter(npc, 'npc')}
+                                >
                                   <div className="flex items-center justify-between">
                                     <div className="font-medium text-sm text-text-primary">{npc.name}</div>
-                                    <span className={`text-xs px-1.5 py-0.5 rounded ${
-                                      npc.importance === 'major' ? 'bg-seojin/20 text-seojin' :
-                                      npc.importance === 'supporting' ? 'bg-blue-500/20 text-blue-400' :
-                                      'bg-gray-500/20 text-gray-400'
-                                    }`}>
-                                      {npc.importance === 'major' ? '주연' : npc.importance === 'supporting' ? '조연' : '단역'}
-                                    </span>
+                                    <div className="flex items-center gap-1">
+                                      <span className={`text-xs px-1.5 py-0.5 rounded ${
+                                        npc.importance === 'major' ? 'bg-seojin/20 text-seojin' :
+                                        npc.importance === 'supporting' ? 'bg-blue-500/20 text-blue-400' :
+                                        'bg-gray-500/20 text-gray-400'
+                                      }`}>
+                                        {npc.importance === 'major' ? '주연' : npc.importance === 'supporting' ? '조연' : '단역'}
+                                      </span>
+                                      <button
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setEditingCharacter({ character: npc, type: 'npc' });
+                                        }}
+                                        className="text-text-muted hover:text-red-400 opacity-0 group-hover:opacity-100 transition-all p-1"
+                                        title="삭제"
+                                      >
+                                        🗑️
+                                      </button>
+                                    </div>
                                   </div>
                                   <div className="text-xs text-text-muted mt-1">{npc.role}</div>
                                   {npc.source === 'simulation' && (
@@ -3313,6 +3443,18 @@ export default function ProjectConversationPage() {
           detailedDecades={project.worldHistory.detailedDecades || []}
           onSave={handleSaveTimeline}
           onClose={() => setShowTimelineEditor(false)}
+        />
+      )}
+
+      {/* 캐릭터 편집 모달 */}
+      {editingCharacter && (
+        <CharacterEditModal
+          character={editingCharacter.character}
+          characterType={editingCharacter.type}
+          episodeAppearances={getCharacterAppearances(editingCharacter.character.name)}
+          onSave={handleSaveCharacter}
+          onDelete={editingCharacter.type === 'npc' ? handleDeleteCharacter : undefined}
+          onClose={() => setEditingCharacter(null)}
         />
       )}
     </div>

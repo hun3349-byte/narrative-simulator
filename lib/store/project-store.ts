@@ -22,6 +22,7 @@ import type {
   Memory,
   EmergentProfile,
   NPCPool,
+  NPCSeedInfo,
   ProjectPhase,
   Feedback,
   WorldBible,
@@ -84,6 +85,11 @@ interface ProjectStore {
   addMemory: (characterId: string, memory: Memory) => void;
   setProfiles: (profiles: Record<string, EmergentProfile>) => void;
   setNpcPool: (pool: NPCPool) => void;
+
+  // 캐릭터 관리 (NPC)
+  updateNPC: (npcId: string, updates: Partial<NPCSeedInfo>, oldName?: string) => void;
+  deleteNPC: (npcId: string) => void;
+  getCharacterAppearances: (characterName: string) => number[]; // 등장 에피소드 번호들
 
   // 에피소드
   addEpisode: (episode: Episode) => void;
@@ -427,6 +433,138 @@ export const useProjectStore = create<ProjectStore>()(
               : p
           ),
         });
+      },
+
+      // 캐릭터 관리 (NPC)
+      updateNPC: (npcId, updates, oldName) => {
+        const { currentProjectId, projects } = get();
+        if (!currentProjectId) return;
+
+        set({
+          projects: projects.map(p => {
+            if (p.id !== currentProjectId) return p;
+
+            // seeds 레이어에서 NPC 업데이트
+            const seedsData = p.layers.seeds.data as SeedsLayer | null;
+            if (!seedsData?.npcs) return p;
+
+            const updatedNpcs = seedsData.npcs.map(npc =>
+              npc.id === npcId ? { ...npc, ...updates } : npc
+            );
+
+            // World Bible에서 캐릭터 이름 업데이트 (이름이 변경된 경우)
+            let updatedWorldBible = p.worldBible;
+            if (oldName && updates.name && oldName !== updates.name && p.worldBible?.characters) {
+              const newCharacters = { ...p.worldBible.characters };
+              if (newCharacters[oldName]) {
+                newCharacters[updates.name] = newCharacters[oldName];
+                delete newCharacters[oldName];
+              }
+              updatedWorldBible = {
+                ...p.worldBible,
+                characters: newCharacters,
+                lastUpdatedAt: new Date().toISOString(),
+              };
+            }
+
+            // Episode Log에서 캐릭터 이름 업데이트 (이름이 변경된 경우)
+            let updatedEpisodeLogs = p.episodeLogs;
+            const newName = updates.name;
+            if (oldName && newName && oldName !== newName && p.episodeLogs) {
+              updatedEpisodeLogs = p.episodeLogs.map(log => ({
+                ...log,
+                scenes: log.scenes?.map(scene => ({
+                  ...scene,
+                  characters: scene.characters?.map(c => c === oldName ? newName : c).filter((c): c is string => c !== undefined) || [],
+                })) || [],
+                characterChanges: log.characterChanges ?
+                  Object.fromEntries(
+                    Object.entries(log.characterChanges).map(([k, v]) =>
+                      [k === oldName ? newName : k, v]
+                    )
+                  ) : {},
+              }));
+            }
+
+            return {
+              ...p,
+              layers: {
+                ...p.layers,
+                seeds: {
+                  ...p.layers.seeds,
+                  data: { ...seedsData, npcs: updatedNpcs },
+                },
+              },
+              worldBible: updatedWorldBible,
+              episodeLogs: updatedEpisodeLogs,
+              updatedAt: new Date().toISOString(),
+            };
+          }),
+        });
+        get().syncCurrentProjectToSupabase();
+      },
+
+      deleteNPC: (npcId) => {
+        const { currentProjectId, projects } = get();
+        if (!currentProjectId) return;
+
+        set({
+          projects: projects.map(p => {
+            if (p.id !== currentProjectId) return p;
+
+            const seedsData = p.layers.seeds.data as SeedsLayer | null;
+            if (!seedsData?.npcs) return p;
+
+            // 삭제할 NPC 찾기
+            const npcToDelete = seedsData.npcs.find(npc => npc.id === npcId);
+            const updatedNpcs = seedsData.npcs.filter(npc => npc.id !== npcId);
+
+            // World Bible에서도 제거
+            let updatedWorldBible = p.worldBible;
+            if (npcToDelete && p.worldBible?.characters) {
+              const newCharacters = { ...p.worldBible.characters };
+              delete newCharacters[npcToDelete.name];
+              updatedWorldBible = {
+                ...p.worldBible,
+                characters: newCharacters,
+                lastUpdatedAt: new Date().toISOString(),
+              };
+            }
+
+            return {
+              ...p,
+              layers: {
+                ...p.layers,
+                seeds: {
+                  ...p.layers.seeds,
+                  data: { ...seedsData, npcs: updatedNpcs },
+                },
+              },
+              worldBible: updatedWorldBible,
+              updatedAt: new Date().toISOString(),
+            };
+          }),
+        });
+        get().syncCurrentProjectToSupabase();
+      },
+
+      getCharacterAppearances: (characterName) => {
+        const { currentProjectId, projects } = get();
+        if (!currentProjectId) return [];
+
+        const project = projects.find(p => p.id === currentProjectId);
+        if (!project) return [];
+
+        // 에피소드 본문에서 캐릭터 이름 검색
+        const appearances: number[] = [];
+        for (const episode of project.episodes) {
+          const content = episode.editedContent || episode.content;
+          if (content && content.includes(characterName)) {
+            appearances.push(episode.number);
+          }
+        }
+
+        return appearances;
       },
 
       addEpisode: (episode) => {
