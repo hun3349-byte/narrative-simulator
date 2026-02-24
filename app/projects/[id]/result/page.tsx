@@ -62,7 +62,15 @@ export default function ProjectResultPage() {
   const handleExport = async (format: 'txt' | 'html' | 'docx') => {
     setShowExportMenu(false);
 
+    // 에피소드 확인
+    if (!project.episodes || project.episodes.length === 0) {
+      alert('내보낼 에피소드가 없습니다. 먼저 에피소드를 작성해주세요.');
+      return;
+    }
+
     try {
+      console.log('[Export] Requesting:', format, 'Episodes:', project.episodes.length);
+
       const response = await fetch('/api/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -70,25 +78,52 @@ export default function ProjectResultPage() {
           format,
           episodes: project.episodes,
           projectInfo: {
+            title: project.direction || `${project.genre} 웹소설`,
             genre: project.genre,
             tone: project.tone,
-            authorName: project.authorPersona.name,
+            authorName: project.authorPersona?.name || '작가',
           },
         }),
       });
 
-      if (!response.ok) throw new Error('Export failed');
+      console.log('[Export] Response status:', response.status);
+
+      if (!response.ok) {
+        // JSON 에러 응답 파싱
+        try {
+          const errData = await response.json();
+          throw new Error(errData.error || `서버 오류 (${response.status})`);
+        } catch {
+          throw new Error(`서버 오류 (${response.status})`);
+        }
+      }
 
       const blob = await response.blob();
+      console.log('[Export] Blob size:', blob.size);
+
+      if (blob.size === 0) {
+        throw new Error('다운로드 파일이 비어있습니다.');
+      }
+
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `narrative-${project.id}.${format}`;
+      a.download = `${project.direction || 'narrative'}.${format}`;
+      document.body.appendChild(a);
       a.click();
+      document.body.removeChild(a);
       URL.revokeObjectURL(url);
+
+      console.log('[Export] Download triggered successfully');
     } catch (error) {
-      console.error('Export error:', error);
-      alert('내보내기에 실패했습니다.');
+      console.error('[Export] Error:', error);
+      const message = error instanceof Error ? error.message : '알 수 없는 오류';
+
+      if (message.includes('fetch') || message.includes('network')) {
+        alert('네트워크 연결을 확인해주세요.');
+      } else {
+        alert(`내보내기 실패: ${message}`);
+      }
     }
   };
 
