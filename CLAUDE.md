@@ -1,6 +1,6 @@
 # Narrative Simulator - 프로젝트 가이드
 
-## 현재 진행 현황 (2026-02-23)
+## 현재 진행 현황 (2026-02-24)
 
 ### 사용자 역할 정의
 **PD (Producer/Director)**: 전체적인 소설의 집필과 세계관, 배경, 등장인물, 상황, 에피소드 전체부분의 디테일한 디렉팅
@@ -11,20 +11,12 @@
 3. ✅ **세계관 디테일 필드 확장** - RegionDetail, ClimateInfo, EnvironmentInfo, SensoryPalette 타입 추가
 4. ✅ **캐릭터 추가 기능** - 사이드 패널에서 신규 캐릭터 추가 모달
 5. ✅ **시뮬레이션 NPC 승격** - 비중 높은 NPC를 주요 캐릭터로 승격
+6. ✅ **API 프롬프트 업데이트** - write-episode에 세계관/캐릭터 세부 필드 반영
+7. ✅ **사이드 패널 세계관 탭 확장** - RegionDetail, ClimateInfo 등 표시 UI
+8. ✅ **에피소드 레벨 디렉팅 시스템** - PD 디렉팅 기능 완료
 
-### 다음 작업 (Task 3 남은 부분 + Task 4)
-
-#### Task 3 남은 작업
-- ⏳ **API 프롬프트 업데이트**: 새로운 세계관/캐릭터 세부 필드를 집필 API에서 활용
-  - `write-episode` 프롬프트에 regions, climate, environment, sensoryPalette 반영
-  - 캐릭터의 speechPattern, backstory, relationships 필드 활용
-- ⏳ **사이드 패널 세계관 탭 확장**: RegionDetail, ClimateInfo 등 표시 UI
-
-#### Task 4: 에피소드 레벨 디렉팅
-- ⬜ 에피소드별 디렉션 설정 UI
-- ⬜ 특정 장면/상황 강제 지정
-- ⬜ 감정 톤/분위기 지정
-- ⬜ 등장인물 제한/필수 등장 설정
+### 다음 작업
+- 추가 기능 개선 및 사용자 피드백 반영
 
 ### 배포 정보
 - **플랫폼**: Railway
@@ -39,6 +31,12 @@
 - 프로젝트 정체서(`project-identity.md`)와 최상위 원칙(`supreme-principles.md`)을 모든 설계/구현 판단의 기준으로 삼는다.
 
 ### 최근 업데이트
+- **2026-02-24**: 에피소드 레벨 디렉팅 시스템 완료
+  - `EpisodeDirection` 타입 정의 (감정 톤, 강제 장면, 캐릭터 지시, 떡밥 지시, 페이스, 클리프행어 등)
+  - `EpisodeDirectionModal` 컴포넌트 구현 (감정 그리드, 장면 편집기, 캐릭터 지시 등)
+  - `write-episode` API에 `buildEpisodeDirectionSection()` 함수 추가 - PD 디렉팅을 프롬프트에 최우선 반영
+  - 에피소드 채택 후 "🎬 디렉팅 설정" 옵션 추가
+  - 세계관/캐릭터 세부 정보(`worldLayer`, `seedsLayer`)를 write-episode API에서 활용
 - **2026-02-23**: 캐릭터 추가 및 시뮬레이션 NPC 승격 기능 추가
   - 사이드 패널 캐릭터 탭에 등록된 NPC 목록 표시 (주연/조연/단역 배지)
   - 캐릭터 추가 모달: 이름, 역할, 위치, 성격, 숨겨진 동기, 세부 설정

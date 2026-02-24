@@ -6,7 +6,8 @@ import { useProjectStore } from '@/lib/store/project-store';
 import { PERSONA_ICONS } from '@/lib/presets/author-personas';
 import { WorldTimelinePanel } from '@/components/world-timeline';
 import EpisodeViewer from '@/components/episode/EpisodeViewer';
-import type { LayerName, Episode, Character, SimulationConfig, WorldEvent, CharacterSeed, FactCheckResult, BreadcrumbWarning, EpisodeLog, WritingMemory, NPCSeedInfo, SimulationNPC, SeedsLayer } from '@/lib/types';
+import EpisodeDirectionModal from '@/components/episode/EpisodeDirectionModal';
+import type { LayerName, Episode, Character, SimulationConfig, WorldEvent, CharacterSeed, FactCheckResult, BreadcrumbWarning, EpisodeLog, WritingMemory, NPCSeedInfo, SimulationNPC, SeedsLayer, EpisodeDirection, HeroArcLayer, VillainArcLayer } from '@/lib/types';
 import { trackBreadcrumbs, generateBreadcrumbInstructions } from '@/lib/utils/breadcrumb-tracker';
 import { buildActiveContext } from '@/lib/utils/active-context';
 import { createEmptyWritingMemory, updateQualityTracker, processFeedback, analyzeEdit, integrateEditPatterns, getWritingMemoryStats } from '@/lib/utils/writing-memory';
@@ -189,6 +190,8 @@ export default function ProjectConversationPage() {
   const [uploadedFileContent, setUploadedFileContent] = useState<string | null>(null);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [showAddCharacterModal, setShowAddCharacterModal] = useState(false);
+  const [showDirectionModal, setShowDirectionModal] = useState(false);
+  const [currentEpisodeDirection, setCurrentEpisodeDirection] = useState<EpisodeDirection | null>(null);
   const [newCharacter, setNewCharacter] = useState<Partial<NPCSeedInfo>>({
     name: '',
     role: '',
@@ -1088,6 +1091,7 @@ export default function ProjectConversationPage() {
             content: `시뮬레이션 완료! ${eventCount}개의 이벤트가 발생했어. 캐릭터들이 살아있는 인생을 경험했어. 이제 집필을 시작할 수 있어.`,
             choices: [
               { label: '1화 쓰기', action: 'write_next_episode' },
+              { label: '🎬 디렉팅 설정', action: 'open_direction_modal' },
             ],
           });
         } else {
@@ -1119,6 +1123,9 @@ export default function ProjectConversationPage() {
 
       // 자동으로 1화 작성 시작
       setTimeout(() => handleChoiceClick('write_next_episode'), 500);
+    } else if (action === 'open_direction_modal') {
+      // 에피소드 디렉팅 모달 열기
+      setShowDirectionModal(true);
     } else if (action === 'write_next_episode') {
       // 다음 화 작성 요청 (스트리밍)
       const nextNumber = project.episodes.length + 1;
@@ -1161,6 +1168,43 @@ export default function ProjectConversationPage() {
           currentEpisodeNumber: nextNumber,
         }) : undefined;
 
+        // 에피소드 디렉션 기반 추가 지시 생성
+        let directionText = `${nextNumber}화`;
+        if (currentEpisodeDirection && currentEpisodeDirection.episodeNumber === nextNumber) {
+          directionText += ` [톤: ${currentEpisodeDirection.primaryTone}]`;
+          if (currentEpisodeDirection.emotionArc) {
+            directionText += ` [감정흐름: ${currentEpisodeDirection.emotionArc}]`;
+          }
+          if (currentEpisodeDirection.pacing) {
+            directionText += ` [속도: ${currentEpisodeDirection.pacing}]`;
+          }
+          if (currentEpisodeDirection.forcedScenes && currentEpisodeDirection.forcedScenes.length > 0) {
+            directionText += ` [필수장면: ${currentEpisodeDirection.forcedScenes.map(s => s.description).join(', ')}]`;
+          }
+          if (currentEpisodeDirection.characterDirectives && currentEpisodeDirection.characterDirectives.length > 0) {
+            const mustAppear = currentEpisodeDirection.characterDirectives
+              .filter(d => d.directive === 'must_appear' || d.directive === 'spotlight')
+              .map(d => d.characterName);
+            const mustNotAppear = currentEpisodeDirection.characterDirectives
+              .filter(d => d.directive === 'must_not_appear')
+              .map(d => d.characterName);
+            if (mustAppear.length > 0) {
+              directionText += ` [필수등장: ${mustAppear.join(', ')}]`;
+            }
+            if (mustNotAppear.length > 0) {
+              directionText += ` [등장금지: ${mustNotAppear.join(', ')}]`;
+            }
+          }
+          if (currentEpisodeDirection.freeDirectives && currentEpisodeDirection.freeDirectives.length > 0) {
+            directionText += ` [추가지시: ${currentEpisodeDirection.freeDirectives.join('; ')}]`;
+          }
+          if (currentEpisodeDirection.avoid && currentEpisodeDirection.avoid.length > 0) {
+            directionText += ` [금지: ${currentEpisodeDirection.avoid.join(', ')}]`;
+          }
+        } else {
+          directionText += ` - ${project.direction || '자유롭게 전개'}`;
+        }
+
         // 스트리밍 호출
         const data = await streamingFetch('/api/write-episode', {
           episodeNumber: nextNumber,
@@ -1178,9 +1222,14 @@ export default function ProjectConversationPage() {
             villainArc: layerToString(project.layers.villainArc.data),
             ultimateMystery: layerToString(project.layers.ultimateMystery.data),
           },
+          // 세계관/캐릭터 세부 정보 (PD 디렉팅)
+          worldLayer: project.layers.world.data,
+          seedsLayer: project.layers.seeds.data,
+          // 에피소드 디렉션 (PD 디렉팅)
+          episodeDirection: currentEpisodeDirection?.episodeNumber === nextNumber ? currentEpisodeDirection : undefined,
           characterProfiles,
           characterMemories,
-          authorDirection: `${nextNumber}화 - ${project.direction || '자유롭게 전개'}`,
+          authorDirection: directionText,
           previousEpisodes: project.episodes.slice(-3),
           recurringFeedback,
           activeContext,
@@ -1227,6 +1276,7 @@ export default function ProjectConversationPage() {
           content: `좋아, ${episode.number}화 채택! 다음 화 쓸까?`,
           choices: [
             { label: '다음 화 써줘', action: 'write_next_from_chat' },
+            { label: '🎬 디렉팅 설정', action: 'open_direction_modal' },
             { label: '잠깐, 다시 볼게', action: 'revert_adopt' },
           ],
         });
@@ -1526,6 +1576,7 @@ export default function ProjectConversationPage() {
       content: `좋아, ${episode.number}화 채택! 다음 화 쓸까?`,
       choices: [
         { label: '다음 화 작성', action: 'write_next_episode' },
+        { label: '🎬 디렉팅 설정', action: 'open_direction_modal' },
         { label: '잠깐, 수정 다시', action: 'revert_adopt' },
       ],
     });
@@ -1957,6 +2008,134 @@ export default function ProjectConversationPage() {
                             ))}
                           </ul>
                         </div>
+                      )}
+
+                      {/* 지역별 상세 정보 (PD 디렉팅) */}
+                      {project.layers.world.data.regions && project.layers.world.data.regions.length > 0 && (
+                        <>
+                          <hr className="border-base-border" />
+                          <div>
+                            <h3 className="mb-2 text-sm font-medium text-text-primary flex items-center gap-1">
+                              <span className="text-green-400">🗺️</span> 지역 상세
+                            </h3>
+                            <div className="space-y-2 max-h-60 overflow-y-auto">
+                              {project.layers.world.data.regions.map((region, idx) => (
+                                <details key={idx} className="rounded-lg bg-base-tertiary p-2 group">
+                                  <summary className="cursor-pointer text-sm font-medium text-text-primary flex items-center gap-2">
+                                    <span className="text-xs text-green-400">{region.type}</span>
+                                    {region.name}
+                                  </summary>
+                                  <div className="mt-2 space-y-1 text-xs text-text-muted">
+                                    {region.atmosphere && <p><span className="text-text-secondary">분위기:</span> {region.atmosphere}</p>}
+                                    {region.terrain && <p><span className="text-text-secondary">지형:</span> {region.terrain}</p>}
+                                    {region.flora && <p><span className="text-text-secondary">식물:</span> {region.flora}</p>}
+                                    {region.fauna && <p><span className="text-text-secondary">동물:</span> {region.fauna}</p>}
+                                    {region.hazards && <p><span className="text-red-400">위험:</span> {region.hazards}</p>}
+                                    {region.sensoryDescription && (
+                                      <div className="mt-2 p-2 bg-base-secondary rounded text-xs">
+                                        <div className="font-medium text-text-secondary mb-1">감각 묘사</div>
+                                        {region.sensoryDescription.sight && <p>👁️ {region.sensoryDescription.sight}</p>}
+                                        {region.sensoryDescription.sound && <p>👂 {region.sensoryDescription.sound}</p>}
+                                        {region.sensoryDescription.smell && <p>👃 {region.sensoryDescription.smell}</p>}
+                                        {region.sensoryDescription.temperature && <p>🌡️ {region.sensoryDescription.temperature}</p>}
+                                      </div>
+                                    )}
+                                  </div>
+                                </details>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      {/* 기후 정보 */}
+                      {project.layers.world.data.climate && (
+                        <>
+                          <hr className="border-base-border" />
+                          <div>
+                            <h3 className="mb-1 text-sm font-medium text-text-primary flex items-center gap-1">
+                              <span className="text-blue-400">🌤️</span> 기후
+                            </h3>
+                            <div className="text-sm text-text-muted space-y-1">
+                              <p>{project.layers.world.data.climate.general}</p>
+                              {project.layers.world.data.climate.seasons && (
+                                <p className="text-xs"><span className="text-text-secondary">계절:</span> {project.layers.world.data.climate.seasons}</p>
+                              )}
+                              {project.layers.world.data.climate.extremes && (
+                                <p className="text-xs text-orange-400">{project.layers.world.data.climate.extremes}</p>
+                              )}
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      {/* 환경 특성 */}
+                      {project.layers.world.data.environment && (
+                        <>
+                          <hr className="border-base-border" />
+                          <div>
+                            <h3 className="mb-1 text-sm font-medium text-text-primary flex items-center gap-1">
+                              <span className="text-purple-400">✨</span> 환경
+                            </h3>
+                            <div className="text-xs text-text-muted space-y-1">
+                              {project.layers.world.data.environment.dayNightCycle && (
+                                <p><span className="text-text-secondary">낮/밤:</span> {project.layers.world.data.environment.dayNightCycle}</p>
+                              )}
+                              {project.layers.world.data.environment.celestialBodies && (
+                                <p><span className="text-text-secondary">천체:</span> {project.layers.world.data.environment.celestialBodies}</p>
+                              )}
+                              {project.layers.world.data.environment.magicalInfluence && (
+                                <p className="text-purple-300">{project.layers.world.data.environment.magicalInfluence}</p>
+                              )}
+                            </div>
+                          </div>
+                        </>
+                      )}
+
+                      {/* 감각 팔레트 */}
+                      {project.layers.world.data.sensoryPalette && (
+                        <>
+                          <hr className="border-base-border" />
+                          <div>
+                            <h3 className="mb-2 text-sm font-medium text-text-primary flex items-center gap-1">
+                              <span className="text-pink-400">🎨</span> 감각 팔레트
+                            </h3>
+                            <div className="text-xs text-text-muted space-y-2">
+                              {project.layers.world.data.sensoryPalette.colors && project.layers.world.data.sensoryPalette.colors.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  <span className="text-text-secondary">색:</span>
+                                  {project.layers.world.data.sensoryPalette.colors.map((c, i) => (
+                                    <span key={i} className="px-1.5 py-0.5 bg-pink-500/10 rounded text-pink-300">{c}</span>
+                                  ))}
+                                </div>
+                              )}
+                              {project.layers.world.data.sensoryPalette.sounds && project.layers.world.data.sensoryPalette.sounds.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  <span className="text-text-secondary">소리:</span>
+                                  {project.layers.world.data.sensoryPalette.sounds.map((s, i) => (
+                                    <span key={i} className="px-1.5 py-0.5 bg-blue-500/10 rounded text-blue-300">{s}</span>
+                                  ))}
+                                </div>
+                              )}
+                              {project.layers.world.data.sensoryPalette.smells && project.layers.world.data.sensoryPalette.smells.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  <span className="text-text-secondary">냄새:</span>
+                                  {project.layers.world.data.sensoryPalette.smells.map((s, i) => (
+                                    <span key={i} className="px-1.5 py-0.5 bg-green-500/10 rounded text-green-300">{s}</span>
+                                  ))}
+                                </div>
+                              )}
+                              {project.layers.world.data.sensoryPalette.atmosphericKeywords && project.layers.world.data.sensoryPalette.atmosphericKeywords.length > 0 && (
+                                <div className="flex flex-wrap gap-1">
+                                  <span className="text-text-secondary">분위기:</span>
+                                  {project.layers.world.data.sensoryPalette.atmosphericKeywords.map((k, i) => (
+                                    <span key={i} className="px-1.5 py-0.5 bg-purple-500/10 rounded text-purple-300">{k}</span>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </>
                       )}
                     </>
                   ) : (
@@ -2633,6 +2812,18 @@ export default function ProjectConversationPage() {
           </div>
         </div>
       )}
+
+      {/* 에피소드 디렉팅 모달 */}
+      <EpisodeDirectionModal
+        isOpen={showDirectionModal}
+        onClose={() => setShowDirectionModal(false)}
+        onConfirm={(direction) => setCurrentEpisodeDirection(direction)}
+        episodeNumber={project ? project.episodes.length + 1 : 1}
+        heroArc={project?.layers.heroArc.data as HeroArcLayer | null}
+        villainArc={project?.layers.villainArc.data as VillainArcLayer | null}
+        seedsLayer={project?.layers.seeds.data as SeedsLayer | null}
+        existingDirection={currentEpisodeDirection}
+      />
     </div>
   );
 }

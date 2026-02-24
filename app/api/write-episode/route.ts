@@ -1,10 +1,306 @@
 import { NextRequest } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { AUTHOR_PERSONA_PRESETS } from '@/lib/presets/author-personas';
-import type { Episode, Feedback, FeedbackType, MonologueTone, ActiveContext, WritingMemory } from '@/lib/types';
+import type {
+  Episode,
+  Feedback,
+  FeedbackType,
+  MonologueTone,
+  ActiveContext,
+  WritingMemory,
+  WorldLayer,
+  SeedsLayer,
+  RegionDetail,
+  SensoryPalette,
+  NPCSeedInfo,
+  EpisodeDirection,
+  ForcedScene,
+  CharacterDirective,
+  BreadcrumbDirective,
+  CliffhangerType,
+} from '@/lib/types';
 import { getEpisodeFinalContent } from '@/lib/types';
 import { activeContextToPrompt } from '@/lib/utils/active-context';
 import { buildWritingMemoryPrompt } from '@/lib/utils/writing-memory';
+
+// 세계관 세부 정보를 프롬프트용 문자열로 변환
+function buildWorldDetailSection(worldLayer?: WorldLayer): string {
+  if (!worldLayer) return '';
+
+  let result = '';
+
+  // 지역 상세 정보
+  if (worldLayer.regions && worldLayer.regions.length > 0) {
+    result += '\n### 지역별 감각 묘사 가이드\n';
+    for (const region of worldLayer.regions) {
+      result += `\n**${region.name}** (${region.type}):\n`;
+      if (region.atmosphere) {
+        result += `- 분위기: ${region.atmosphere}\n`;
+      }
+      if (region.sensoryDescription) {
+        const sensory = region.sensoryDescription;
+        if (sensory.sight) result += `- 시각: ${sensory.sight}\n`;
+        if (sensory.sound) result += `- 청각: ${sensory.sound}\n`;
+        if (sensory.smell) result += `- 후각: ${sensory.smell}\n`;
+        if (sensory.temperature) result += `- 촉감/온도: ${sensory.temperature}\n`;
+      }
+      if (region.hazards) {
+        result += `- 위험 요소: ${region.hazards}\n`;
+      }
+    }
+  }
+
+  // 기후 정보
+  if (worldLayer.climate) {
+    result += '\n### 기후 특성\n';
+    result += `- 전반적 기후: ${worldLayer.climate.general}\n`;
+    if (worldLayer.climate.seasons) {
+      result += `- 계절 변화: ${worldLayer.climate.seasons}\n`;
+    }
+    if (worldLayer.climate.extremes) {
+      result += `- 극단적 날씨: ${worldLayer.climate.extremes}\n`;
+    }
+  }
+
+  // 환경 정보
+  if (worldLayer.environment) {
+    const env = worldLayer.environment;
+    result += '\n### 환경 특성\n';
+    if (env.dayNightCycle) result += `- 낮/밤: ${env.dayNightCycle}\n`;
+    if (env.celestialBodies) result += `- 천체: ${env.celestialBodies}\n`;
+    if (env.magicalInfluence) result += `- 초자연적 영향: ${env.magicalInfluence}\n`;
+  }
+
+  // 감각 팔레트
+  if (worldLayer.sensoryPalette) {
+    const palette = worldLayer.sensoryPalette;
+    result += '\n### 세계관 감각 팔레트 (묘사 시 참고)\n';
+    if (palette.colors && palette.colors.length > 0) {
+      result += `- 주요 색감: ${palette.colors.join(', ')}\n`;
+    }
+    if (palette.sounds && palette.sounds.length > 0) {
+      result += `- 배경음: ${palette.sounds.join(', ')}\n`;
+    }
+    if (palette.smells && palette.smells.length > 0) {
+      result += `- 냄새: ${palette.smells.join(', ')}\n`;
+    }
+    if (palette.textures && palette.textures.length > 0) {
+      result += `- 질감: ${palette.textures.join(', ')}\n`;
+    }
+    if (palette.atmosphericKeywords && palette.atmosphericKeywords.length > 0) {
+      result += `- 분위기 키워드: ${palette.atmosphericKeywords.join(', ')}\n`;
+    }
+  }
+
+  if (result) {
+    result = '\n=== 세계관 감각 디테일 ===\n' + result + '\n※ 장면 묘사 시 이 감각 정보를 자연스럽게 활용하세요.\n=== 세계관 감각 디테일 끝 ===\n';
+  }
+
+  return result;
+}
+
+// 캐릭터 세부 정보를 프롬프트용 문자열로 변환
+function buildCharacterDetailSection(seedsLayer?: SeedsLayer): string {
+  if (!seedsLayer || !seedsLayer.npcs || seedsLayer.npcs.length === 0) return '';
+
+  const majorNPCs = seedsLayer.npcs.filter(npc =>
+    npc.importance === 'major' || npc.importance === 'supporting'
+  );
+
+  if (majorNPCs.length === 0) return '';
+
+  let result = '\n=== 주요 인물 말투/배경 ===\n';
+
+  for (const npc of majorNPCs) {
+    result += `\n**${npc.name}** (${npc.role}):\n`;
+
+    if (npc.speechPattern) {
+      result += `- 말투: ${npc.speechPattern}\n`;
+    }
+    if (npc.backstory) {
+      result += `- 배경: ${npc.backstory}\n`;
+    }
+    if (npc.relationships) {
+      result += `- 관계: ${npc.relationships}\n`;
+    }
+    if (npc.arc) {
+      result += `- 서사 아크: ${npc.arc}\n`;
+    }
+  }
+
+  result += '\n※ 이 인물들의 대사 작성 시 말투와 배경을 반영하세요.\n=== 주요 인물 말투/배경 끝 ===\n';
+
+  return result;
+}
+
+// 감정 톤 한글 변환
+const TONE_LABELS: Record<string, string> = {
+  tension: '긴장감',
+  relief: '해소/안도',
+  excitement: '흥분/고조',
+  melancholy: '우울/슬픔',
+  warmth: '따뜻함/감동',
+  fear: '공포/두려움',
+  anger: '분노',
+  mystery: '미스터리/의문',
+  romance: '로맨스/설렘',
+  comedy: '코믹/유머',
+  epic: '서사적/웅장함',
+  dark: '어둠/암울함',
+};
+
+// 페이스 한글 변환
+const PACING_LABELS: Record<string, string> = {
+  fast: '빠르게 (사건 위주, 짧은 장면)',
+  normal: '보통 (균형잡힌 전개)',
+  slow: '느리게 (감정/묘사 깊이 파기)',
+};
+
+// 클리프행어 유형 한글 변환
+const CLIFFHANGER_LABELS: Record<string, string> = {
+  crisis: '위기 직전 ("그 순간, 문이 열렸다.")',
+  revelation: '비밀 폭로 ("그녀의 이름은 진짜가 아니었다.")',
+  choice: '선택 강요 ("죽이거나, 죽거나.")',
+  reversal: '예상 뒤집기 ("하지만 그는 웃고 있었다.")',
+  awakening: '능력 각성 힌트 ("손끝에서 뭔가가 일렁였다.")',
+  past_connection: '과거 연결 ("10년 전, 바로 이 자리였다.")',
+  character_entrance: '인물 등장 ("그리고 그가 나타났다.")',
+};
+
+// 에피소드 디렉션을 프롬프트용 문자열로 변환
+function buildEpisodeDirectionSection(direction?: EpisodeDirection): string {
+  if (!direction) return '';
+
+  let result = '\n=== PD 디렉팅 지시 (최우선 적용) ===\n';
+
+  // 감정/분위기
+  result += '\n### 감정/분위기\n';
+  result += `- 주요 톤: ${TONE_LABELS[direction.primaryTone] || direction.primaryTone}\n`;
+  if (direction.secondaryTone) {
+    result += `- 보조 톤: ${TONE_LABELS[direction.secondaryTone] || direction.secondaryTone}\n`;
+  }
+  if (direction.emotionArc) {
+    result += `- 감정 흐름: ${direction.emotionArc}\n`;
+  }
+
+  // 페이스
+  if (direction.pacing) {
+    result += '\n### 전개 속도\n';
+    result += `- ${PACING_LABELS[direction.pacing]}\n`;
+  }
+
+  // 강제 장면
+  if (direction.forcedScenes && direction.forcedScenes.length > 0) {
+    result += '\n### 반드시 포함할 장면 (필수!)\n';
+    for (let i = 0; i < direction.forcedScenes.length; i++) {
+      const scene = direction.forcedScenes[i];
+      result += `${i + 1}. [${scene.type}] ${scene.description}\n`;
+      if (scene.location) result += `   - 장소: ${scene.location}\n`;
+      if (scene.timing) {
+        const timingLabel = { opening: '오프닝', middle: '중반', climax: '클라이맥스', ending: '엔딩' }[scene.timing];
+        result += `   - 위치: ${timingLabel}\n`;
+      }
+      if (scene.mustIncludeDialogue) {
+        result += `   - 포함할 대사: "${scene.mustIncludeDialogue}"\n`;
+      }
+    }
+  }
+
+  // 등장인물 지시
+  if (direction.characterDirectives && direction.characterDirectives.length > 0) {
+    result += '\n### 등장인물 지시\n';
+    for (const cd of direction.characterDirectives) {
+      let directiveText = '';
+      switch (cd.directive) {
+        case 'must_appear':
+          directiveText = '반드시 등장';
+          break;
+        case 'must_not_appear':
+          directiveText = '등장 금지';
+          break;
+        case 'spotlight':
+          directiveText = '주요 인물로 부각';
+          break;
+        case 'background':
+          directiveText = '배경/언급만';
+          break;
+      }
+      result += `- ${cd.characterName}: ${directiveText}\n`;
+      if (cd.emotionalState) {
+        result += `  (감정 상태: ${cd.emotionalState})\n`;
+      }
+      if (cd.interactWith && cd.interactWith.length > 0) {
+        result += `  (상호작용 대상: ${cd.interactWith.join(', ')})\n`;
+      }
+    }
+  }
+
+  // 떡밥 지시
+  if (direction.breadcrumbDirectives && direction.breadcrumbDirectives.length > 0) {
+    result += '\n### 떡밥 지시\n';
+    for (const bd of direction.breadcrumbDirectives) {
+      let actionText = '';
+      switch (bd.action) {
+        case 'plant':
+          actionText = '새로 심기';
+          break;
+        case 'hint':
+          actionText = '힌트 주기';
+          break;
+        case 'advance':
+          actionText = '진전시키기';
+          break;
+        case 'collect':
+          actionText = '회수하기';
+          break;
+      }
+      result += `- [${bd.breadcrumbName}] → ${actionText}\n`;
+      if (bd.description) {
+        result += `  방법: ${bd.description}\n`;
+      }
+    }
+  }
+
+  // 클리프행어 지시
+  if (direction.cliffhangerType || direction.cliffhangerHint) {
+    result += '\n### 클리프행어 지시 (이 지시가 기본 추천보다 우선)\n';
+    if (direction.cliffhangerType) {
+      result += `- 유형: ${CLIFFHANGER_LABELS[direction.cliffhangerType] || direction.cliffhangerType}\n`;
+    }
+    if (direction.cliffhangerHint) {
+      result += `- 힌트: ${direction.cliffhangerHint}\n`;
+    }
+  }
+
+  // 시점 지시
+  if (direction.viewpointCharacter) {
+    result += '\n### 시점 지시\n';
+    result += `- 이 화의 시점 인물: ${direction.viewpointCharacter}\n`;
+    if (direction.viewpointShift !== undefined) {
+      result += `- 시점 전환: ${direction.viewpointShift ? '허용' : '금지'}\n`;
+    }
+  }
+
+  // 자유 지시
+  if (direction.freeDirectives && direction.freeDirectives.length > 0) {
+    result += '\n### 추가 지시사항\n';
+    for (const fd of direction.freeDirectives) {
+      result += `- ${fd}\n`;
+    }
+  }
+
+  // 피해야 할 것
+  if (direction.avoid && direction.avoid.length > 0) {
+    result += '\n### 피해야 할 것 (금지!)\n';
+    for (const avoid of direction.avoid) {
+      result += `- ❌ ${avoid}\n`;
+    }
+  }
+
+  result += '\n※ 위 PD 디렉팅은 기본 규칙보다 우선합니다. 반드시 지켜주세요.\n=== PD 디렉팅 지시 끝 ===\n';
+
+  return result;
+}
 
 export const maxDuration = 60; // Vercel Fluid Compute 활성화
 
@@ -245,7 +541,7 @@ JSON으로만 응답:
 }`;
 }
 
-// 유저 프롬프트 (가변 - 세계관 + 캐릭터 + 이전 화 + 방향 + Active Context + Writing Memory)
+// 유저 프롬프트 (가변 - 세계관 + 캐릭터 + 이전 화 + 방향 + Active Context + Writing Memory + PD 디렉팅)
 function buildUserPrompt(params: {
   episodeNumber: number;
   confirmedLayers?: {
@@ -256,10 +552,15 @@ function buildUserPrompt(params: {
     villainArc?: string;
     ultimateMystery?: string;
   };
+  // 세계관 세부 정보 (PD 디렉팅)
+  worldLayer?: WorldLayer;
+  seedsLayer?: SeedsLayer;
   characterProfiles?: string;
   characterMemories?: string;
   previousEpisodes?: Episode[];
   authorDirection?: string;
+  // 에피소드 레벨 디렉팅 (PD)
+  episodeDirection?: EpisodeDirection;
   isRetry?: boolean;
   previousContent?: string;
   previousCharCount?: number;
@@ -270,10 +571,13 @@ function buildUserPrompt(params: {
   const {
     episodeNumber,
     confirmedLayers,
+    worldLayer,
+    seedsLayer,
     characterProfiles,
     characterMemories,
     previousEpisodes,
     authorDirection,
+    episodeDirection,
     isRetry,
     previousContent,
     previousCharCount,
@@ -281,6 +585,13 @@ function buildUserPrompt(params: {
     activeContext,
     writingMemory
   } = params;
+
+  // 세계관 세부 정보 섹션
+  const worldDetailSection = buildWorldDetailSection(worldLayer);
+  // 캐릭터 세부 정보 섹션
+  const characterDetailSection = buildCharacterDetailSection(seedsLayer);
+  // 에피소드 디렉팅 섹션 (PD 지시)
+  const episodeDirectionSection = buildEpisodeDirectionSection(episodeDirection);
 
   const lastEpisode = previousEpisodes?.[previousEpisodes.length - 1];
   const lastEpisodeFinalContent = lastEpisode ? getEpisodeFinalContent(lastEpisode) : null;
@@ -308,7 +619,7 @@ function buildUserPrompt(params: {
     ? activeContextToPrompt(activeContext)
     : '';
 
-  return `${retryInstruction}${feedbackSection}${writingMemorySection}
+  return `${retryInstruction}${feedbackSection}${writingMemorySection}${episodeDirectionSection}
 ## 제${episodeNumber}화 작성 요청
 
 ${activeContextSection ? `
@@ -322,10 +633,10 @@ ${confirmedLayers?.world || '(미설정)'}
 
 ### 핵심 규칙
 ${confirmedLayers?.coreRules || '(미설정)'}
-
+${worldDetailSection}
 ### 주요 인물
 ${confirmedLayers?.seeds || characterProfiles || '(미설정)'}
-
+${characterDetailSection}
 ### 주인공 서사
 ${confirmedLayers?.heroArc || '(미설정)'}
 
@@ -472,10 +783,13 @@ export async function POST(req: NextRequest) {
       episodeNumber,
       projectConfig,
       confirmedLayers,
+      worldLayer,        // 세계관 세부 정보 (PD 디렉팅)
+      seedsLayer,        // 캐릭터 세부 정보 (PD 디렉팅)
       characterProfiles,
       characterMemories,
       previousEpisodes,
       authorDirection,
+      episodeDirection,  // 에피소드 레벨 디렉팅 (PD)
       seeds,
       recurringFeedback,
       activeContext,
@@ -498,10 +812,13 @@ export async function POST(req: NextRequest) {
     const userPrompt = buildUserPrompt({
       episodeNumber,
       confirmedLayers,
+      worldLayer,        // 세계관 세부 정보
+      seedsLayer,        // 캐릭터 세부 정보
       characterProfiles,
       characterMemories,
       previousEpisodes,
       authorDirection,
+      episodeDirection,  // 에피소드 레벨 디렉팅
       recurringFeedback,
       activeContext,
       writingMemory,

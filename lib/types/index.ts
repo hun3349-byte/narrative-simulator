@@ -1779,3 +1779,121 @@ export interface WritingMemory {
   averageEditAmount: number;  // 평균 편집량 (%)
   directAdoptionRate: number; // 직접 채택률 (%)
 }
+
+// === 에피소드 디렉팅 시스템 (PD 디렉팅) ===
+
+// 감정 톤/분위기 유형
+export type EmotionalTone =
+  | 'tension'        // 긴장감
+  | 'relief'         // 해소/안도
+  | 'excitement'     // 흥분/고조
+  | 'melancholy'     // 우울/슬픔
+  | 'warmth'         // 따뜻함/감동
+  | 'fear'           // 공포/두려움
+  | 'anger'          // 분노
+  | 'mystery'        // 미스터리/의문
+  | 'romance'        // 로맨스/설렘
+  | 'comedy'         // 코믹/유머
+  | 'epic'           // 서사적/웅장함
+  | 'dark';          // 어둠/암울함
+
+// 강제 장면 유형
+export type ForcedSceneType =
+  | 'action'         // 액션/전투
+  | 'dialogue'       // 대화/대립
+  | 'revelation'     // 진실 폭로
+  | 'flashback'      // 과거 회상
+  | 'dream'          // 꿈/환상
+  | 'training'       // 수련/성장
+  | 'travel'         // 이동/여행
+  | 'reunion'        // 재회
+  | 'separation'     // 이별
+  | 'death'          // 죽음/상실
+  | 'awakening'      // 각성
+  | 'betrayal'       // 배신
+  | 'confession'     // 고백/털어놓음
+  | 'discovery';     // 발견
+
+// 강제 장면 설정
+export interface ForcedScene {
+  type: ForcedSceneType;
+  description: string;            // 장면 상황 설명 (예: "주인공이 스승과 재회")
+  location?: string;              // 장소 (선택)
+  timing?: 'opening' | 'middle' | 'climax' | 'ending';  // 장면 위치
+  mustIncludeDialogue?: string;   // 반드시 포함할 대사 (선택)
+}
+
+// 등장인물 지시
+export interface CharacterDirective {
+  characterId: string;            // 캐릭터 ID 또는 이름
+  characterName: string;          // 캐릭터 이름
+  directive: 'must_appear' | 'must_not_appear' | 'spotlight' | 'background';
+  // must_appear: 반드시 등장
+  // must_not_appear: 등장 금지
+  // spotlight: 이 화의 주요 인물로 부각
+  // background: 배경/언급 정도로만
+  screenTime?: 'major' | 'minor'; // 비중 (선택)
+  emotionalState?: string;        // 이 화에서의 감정 상태 (선택)
+  interactWith?: string[];        // 반드시 상호작용할 인물들 (선택)
+}
+
+// 떡밥 지시
+export interface BreadcrumbDirective {
+  breadcrumbId?: string;          // 떡밥 ID (있으면)
+  breadcrumbName: string;         // 떡밥 이름
+  action: 'plant' | 'hint' | 'advance' | 'collect';
+  // plant: 새 떡밥 심기
+  // hint: 힌트 주기
+  // advance: 진전시키기
+  // collect: 회수하기
+  description?: string;           // 어떻게 처리할지 (선택)
+}
+
+// 에피소드 디렉션 (PD가 설정)
+export interface EpisodeDirection {
+  episodeNumber: number;
+
+  // 감정/분위기
+  primaryTone: EmotionalTone;     // 주 감정 톤
+  secondaryTone?: EmotionalTone;  // 보조 감정 톤 (선택)
+  emotionArc?: string;            // 감정 변화 흐름 (예: "긴장 → 폭발 → 허무함")
+
+  // 강제 장면
+  forcedScenes?: ForcedScene[];   // 반드시 포함할 장면들
+
+  // 등장인물 지시
+  characterDirectives?: CharacterDirective[];
+
+  // 떡밥 지시
+  breadcrumbDirectives?: BreadcrumbDirective[];
+
+  // 페이스/구조
+  pacing?: 'fast' | 'normal' | 'slow';  // 전개 속도
+  wordCountTarget?: number;       // 목표 글자 수 (기본 5000~7000)
+
+  // 클리프행어 지시
+  cliffhangerType?: CliffhangerType;  // 지정 클리프행어 유형
+  cliffhangerHint?: string;       // 클리프행어 힌트 (예: "A의 정체가 드러나는 순간")
+
+  // 시점 지시
+  viewpointCharacter?: string;    // 이 화의 시점 인물 (3인칭 시)
+  viewpointShift?: boolean;       // 시점 전환 허용 여부
+
+  // 자유 지시
+  freeDirectives?: string[];      // 추가 지시사항 (자유 텍스트)
+
+  // 금지 사항
+  avoid?: string[];               // 피해야 할 것들 (예: "너무 밝은 분위기", "과도한 액션")
+
+  // 메타
+  createdAt: string;
+  updatedAt: string;
+}
+
+// 에피소드 디렉션 템플릿 (재사용 가능한 패턴)
+export interface EpisodeDirectionTemplate {
+  id: string;
+  name: string;                   // 템플릿 이름 (예: "긴장 고조", "감정 해소")
+  description: string;
+  direction: Omit<EpisodeDirection, 'episodeNumber' | 'createdAt' | 'updatedAt'>;
+}
