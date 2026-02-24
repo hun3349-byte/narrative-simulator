@@ -1173,6 +1173,21 @@ export interface HeroArcLayer {
 
   // 100화 서사 아크
   narrativeArc100?: NarrativeArc100;
+
+  // 캐릭터 불안 3조건
+  anxietyConditions?: AnxietyConditions;
+}
+
+// 캐릭터 불안 3조건
+export interface AnxietyConditions {
+  whatToLose?: string;           // 잃을 것 (가족/동료/명예 등)
+  whatToHide?: string;           // 숨긴 것 (정체/과거/능력의 진실 등)
+  whyMustSucceed?: string;       // 반드시 성공해야 하는 이유
+  anxietyRoadmap?: {
+    early?: string;              // 초반 불안 (1~20화): 생존
+    middle?: string;             // 중반 불안 (21~60화): 관계
+    late?: string;               // 후반 불안 (61~100화): 정체성
+  };
 }
 
 // 배경 인물
