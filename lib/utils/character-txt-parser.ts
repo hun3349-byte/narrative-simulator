@@ -269,7 +269,7 @@ export function toNPCSeedInfo(parsed: ParsedCharacter): NPCSeedInfo {
 }
 
 /**
- * TXT 파일 읽기 및 파싱
+ * TXT/JSON 파일 읽기 및 파싱
  */
 export async function parseCharacterFile(file: File): Promise<ParseResult> {
   return new Promise((resolve, reject) => {
@@ -278,8 +278,16 @@ export async function parseCharacterFile(file: File): Promise<ParseResult> {
     reader.onload = (e) => {
       try {
         const content = e.target?.result as string;
-        const result = parseCharacterTxt(content);
-        resolve(result);
+
+        // JSON 파일인 경우
+        if (file.name.toLowerCase().endsWith('.json') || file.type === 'application/json') {
+          const result = parseCharacterJson(content);
+          resolve(result);
+        } else {
+          // TXT 파일인 경우
+          const result = parseCharacterTxt(content);
+          resolve(result);
+        }
       } catch (error) {
         reject(error);
       }
@@ -291,6 +299,96 @@ export async function parseCharacterFile(file: File): Promise<ParseResult> {
 
     reader.readAsText(file, 'UTF-8');
   });
+}
+
+/**
+ * JSON 파일 내용을 파싱하여 캐릭터 배열로 변환
+ */
+export function parseCharacterJson(content: string): ParseResult {
+  const characters: ParsedCharacter[] = [];
+  const errors: string[] = [];
+
+  try {
+    const data = JSON.parse(content);
+
+    // 배열인 경우
+    if (Array.isArray(data)) {
+      for (let i = 0; i < data.length; i++) {
+        const char = data[i];
+        if (char && typeof char === 'object' && char.name) {
+          characters.push(jsonToCharacter(char, i));
+        }
+      }
+    }
+    // characters 키가 있는 경우
+    else if (data.characters && Array.isArray(data.characters)) {
+      for (let i = 0; i < data.characters.length; i++) {
+        const char = data.characters[i];
+        if (char && typeof char === 'object' && char.name) {
+          characters.push(jsonToCharacter(char, i));
+        }
+      }
+    }
+    // npcs 키가 있는 경우 (SeedsLayer 형식)
+    else if (data.npcs && Array.isArray(data.npcs)) {
+      for (let i = 0; i < data.npcs.length; i++) {
+        const char = data.npcs[i];
+        if (char && typeof char === 'object' && char.name) {
+          characters.push(jsonToCharacter(char, i));
+        }
+      }
+    }
+    // 단일 캐릭터 객체인 경우
+    else if (data && typeof data === 'object' && data.name) {
+      characters.push(jsonToCharacter(data, 0));
+    }
+    else {
+      errors.push('지원하지 않는 JSON 형식입니다. characters, npcs 배열 또는 캐릭터 객체가 필요합니다.');
+    }
+  } catch (e) {
+    errors.push(`JSON 파싱 오류: ${e instanceof Error ? e.message : '알 수 없는 오류'}`);
+  }
+
+  return {
+    success: characters.length > 0,
+    characters,
+    errors,
+  };
+}
+
+/**
+ * JSON 객체를 ParsedCharacter로 변환
+ */
+function jsonToCharacter(obj: Record<string, unknown>, index: number): ParsedCharacter {
+  return {
+    name: String(obj.name || `캐릭터 ${index + 1}`),
+    role: String(obj.role || '미지정'),
+    location: String(obj.location || ''),
+    personality: String(obj.personality || ''),
+    hiddenMotivation: obj.hiddenMotivation ? String(obj.hiddenMotivation) : undefined,
+    appearance: obj.appearance ? String(obj.appearance) : undefined,
+    speechPattern: obj.speechPattern ? String(obj.speechPattern) : undefined,
+    backstory: obj.backstory ? String(obj.backstory) : undefined,
+    faction: obj.faction ? String(obj.faction) : undefined,
+    importance: parseImportance(obj.importance),
+    relationships: obj.relationships ? String(obj.relationships) : undefined,
+    arc: obj.arc ? String(obj.arc) : undefined,
+  };
+}
+
+/**
+ * 비중 값 파싱
+ */
+function parseImportance(value: unknown): 'major' | 'supporting' | 'minor' | undefined {
+  if (!value) return undefined;
+  const str = String(value).toLowerCase();
+  if (str.includes('major') || str.includes('주연') || str.includes('주요')) {
+    return 'major';
+  }
+  if (str.includes('minor') || str.includes('단역') || str.includes('엑스트라')) {
+    return 'minor';
+  }
+  return 'supporting';
 }
 
 /**

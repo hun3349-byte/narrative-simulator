@@ -434,19 +434,59 @@ export default function ProjectConversationPage() {
     await doGenerate();
   }, [project, addMessage, updateLayer]);
 
-  // 파일 업로드 핸들러
+  // 파일 업로드 핸들러 (모바일 호환성 개선)
   const handleFileUpload = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+    const files = event.target.files;
+
+    // 모바일 호환성: files 체크 강화
+    if (!files || files.length === 0) {
+      console.warn('파일이 선택되지 않았습니다');
+      addMessage({
+        role: 'author',
+        content: '파일이 선택되지 않았어. 다시 시도해줘.',
+      });
+      return;
+    }
+
+    const file = files[0];
+    console.log('파일 업로드:', file.name, file.type, file.size);
+
+    // 파일 크기 체크 (10MB 제한)
+    if (file.size > 10 * 1024 * 1024) {
+      addMessage({
+        role: 'author',
+        content: '파일 크기가 너무 커. 10MB 이하 파일을 업로드해줘.',
+      });
+      event.target.value = '';
+      return;
+    }
 
     const reader = new FileReader();
+
+    reader.onerror = () => {
+      console.error('파일 읽기 오류');
+      addMessage({
+        role: 'author',
+        content: '파일을 읽는 중 오류가 발생했어. 다시 시도해줘.',
+      });
+    };
+
     reader.onload = (e) => {
       const content = e.target?.result as string;
+
+      if (!content) {
+        addMessage({
+          role: 'author',
+          content: '파일 내용이 비어있어. 다른 파일을 업로드해줘.',
+        });
+        return;
+      }
+
       setUploadedFileContent(content);
       setUploadedFileName(file.name);
 
       // 파일 내용 미리보기 메시지
-      const isJson = file.name.endsWith('.json');
+      const isJson = file.name.toLowerCase().endsWith('.json') || file.type === 'application/json';
       const preview = content.length > 500 ? content.slice(0, 500) + '...' : content;
 
       addMessage({
@@ -457,7 +497,7 @@ export default function ProjectConversationPage() {
       // JSON 파일이면 바로 적용 여부 묻기
       if (isJson) {
         try {
-          const jsonData = JSON.parse(content);
+          JSON.parse(content);
           addMessage({
             role: 'author',
             content: `파일을 확인했어. 이 데이터를 어떻게 할까?`,
@@ -488,7 +528,8 @@ export default function ProjectConversationPage() {
         });
       }
     };
-    reader.readAsText(file);
+
+    reader.readAsText(file, 'UTF-8');
 
     // input 초기화 (같은 파일 다시 선택 가능하도록)
     event.target.value = '';
@@ -1674,10 +1715,28 @@ export default function ProjectConversationPage() {
     });
   };
 
-  // 캐릭터 TXT 파일 업로드 핸들러
+  // 캐릭터 파일 업로드 핸들러 (TXT/JSON 지원)
   const handleCharacterFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+    const files = e.target.files;
+
+    // 모바일 호환성: files 체크 강화
+    if (!files || files.length === 0) {
+      console.warn('파일이 선택되지 않았습니다');
+      setCharacterUploadErrors(['파일이 선택되지 않았습니다. 다시 시도해주세요.']);
+      setShowCharacterUploadResult(true);
+      return;
+    }
+
+    const file = files[0];
+    console.log('파일 업로드:', file.name, file.type, file.size);
+
+    // 파일 크기 체크 (10MB 제한)
+    if (file.size > 10 * 1024 * 1024) {
+      setCharacterUploadErrors(['파일 크기가 너무 큽니다. 10MB 이하 파일을 업로드해주세요.']);
+      setShowCharacterUploadResult(true);
+      e.target.value = '';
+      return;
+    }
 
     try {
       const result = await parseCharacterFile(file);
@@ -1686,8 +1745,13 @@ export default function ProjectConversationPage() {
       // 기본적으로 모든 캐릭터 선택
       setSelectedParsedCharacters(new Set(result.characters.map((_, i) => i)));
       setShowCharacterUploadResult(true);
+
+      if (result.characters.length === 0 && result.errors.length === 0) {
+        setCharacterUploadErrors(['파일에서 캐릭터를 찾을 수 없습니다. 형식을 확인해주세요.']);
+      }
     } catch (error) {
-      setCharacterUploadErrors([error instanceof Error ? error.message : '파일 파싱 오류']);
+      console.error('파일 파싱 오류:', error);
+      setCharacterUploadErrors([error instanceof Error ? error.message : '파일 파싱 중 오류가 발생했습니다.']);
       setParsedCharacters([]);
       setShowCharacterUploadResult(true);
     }
@@ -2082,13 +2146,24 @@ export default function ProjectConversationPage() {
               </div>
             )}
             <div className="mx-auto flex max-w-2xl gap-2">
-              {/* 파일 업로드 버튼 */}
+              {/* 파일 업로드 버튼 - 모바일 호환성 개선 */}
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".json,.txt"
+                accept=".json,.txt,application/json,text/plain,text/*"
                 onChange={handleFileUpload}
-                className="hidden"
+                style={{
+                  position: 'absolute',
+                  width: '1px',
+                  height: '1px',
+                  padding: 0,
+                  margin: '-1px',
+                  overflow: 'hidden',
+                  clip: 'rect(0, 0, 0, 0)',
+                  whiteSpace: 'nowrap',
+                  border: 0,
+                }}
+                aria-hidden="true"
               />
               <button
                 onClick={handleFileButtonClick}
@@ -2463,7 +2538,7 @@ export default function ProjectConversationPage() {
                         onClick={() => characterFileInputRef.current?.click()}
                         className="flex-1 py-2 border border-dashed border-purple-500/50 rounded-lg text-purple-400 text-sm hover:bg-purple-500/10 transition-colors"
                       >
-                        📄 TXT 업로드
+                        📄 파일 업로드
                       </button>
                     </div>
                     <button
@@ -2473,13 +2548,24 @@ export default function ProjectConversationPage() {
                       예시 템플릿 다운로드 ↓
                     </button>
                   </div>
-                  {/* 숨겨진 파일 인풋 */}
+                  {/* 캐릭터 파일 인풋 - 모바일 호환성 개선 */}
                   <input
                     ref={characterFileInputRef}
                     type="file"
-                    accept=".txt"
+                    accept=".txt,.json,application/json,text/plain,text/*"
                     onChange={handleCharacterFileUpload}
-                    className="hidden"
+                    style={{
+                      position: 'absolute',
+                      width: '1px',
+                      height: '1px',
+                      padding: 0,
+                      margin: '-1px',
+                      overflow: 'hidden',
+                      clip: 'rect(0, 0, 0, 0)',
+                      whiteSpace: 'nowrap',
+                      border: 0,
+                    }}
+                    aria-hidden="true"
                   />
                 </div>
               )}
