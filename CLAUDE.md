@@ -18,9 +18,9 @@
 10. ✅ **모바일 파일 업로드 호환성** - TXT/JSON 모바일 업로드 개선
 11. ✅ **다중 작가 AI 시스템** - 장르/톤/분위기 조합 + 6단계 집필 + 3인 검토 시스템
 12. ✅ **이원화 시뮬레이션 시스템** - 세계 역사(A) + 주인공 시점(B) 분리 시뮬레이션
+13. ✅ **이원화 시뮬레이션 UI 버튼 연결** - 역사A/주인공B 탭 버튼에 API 호출 연결
 
 ### 다음 작업
-- 이원화 시뮬레이션 UI 버튼 동작 연결 (API 호출)
 - 추가 기능 개선 및 사용자 피드백 반영
 
 ### 배포 정보
@@ -36,6 +36,12 @@
 - 프로젝트 정체서(`project-identity.md`)와 최상위 원칙(`supreme-principles.md`)을 모든 설계/구현 판단의 기준으로 삼는다.
 
 ### 최근 업데이트
+- **2026-02-25**: 이원화 시뮬레이션 UI 버튼 API 연결 완료
+  - 역사A 탭: 세계 역사 생성 버튼 → `handleGenerateWorldHistory()` 연결
+  - 주인공B 탭: 전사/성장기 버튼 → `handleSimulatePrehistory()`/`handleSimulateGrowth()` 연결
+  - 입력 필드를 defaultValue에서 controlled input (value + onChange)로 변경
+  - 모바일 바텀 시트에도 동일한 버튼 연결 적용
+  - 로딩 상태(isSimulating)에 따른 버튼 비활성화 및 텍스트 변경
 - **2026-02-25**: 이원화 시뮬레이션 시스템 구현
   - **Simulation A (세계 역사)**: 세계 역사를 사용자 지정 범위와 단위로 시뮬레이션
     - `startYearsBefore`, `endYearsBefore`, `unit` 설정 가능
