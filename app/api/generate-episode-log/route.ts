@@ -99,6 +99,11 @@ function validateAndFillDefaults(log: EpisodeLog, episode: Episode): EpisodeLog 
     miniArcPosition: log.miniArcPosition || ((episode.number - 1) % 5) + 1,
     buildupPhase: log.buildupPhase || calculateBuildupPhase(episode.number),
     generatedAt: log.generatedAt || new Date().toISOString(),
+    // 반복 방지용 추적 필드
+    abilitiesShown: log.abilitiesShown || [],
+    emotionsDominant: log.emotionsDominant || [],
+    narrativePatterns: log.narrativePatterns || [],
+    villainActions: log.villainActions || [],
   };
 }
 
@@ -182,7 +187,12 @@ ${lastLog ? JSON.stringify(lastLog, null, 2) : '(1화입니다)'}
   "dominantMonologueTone": "자조 | 관찰 | 냉정 | 감각 | 메타",
 
   "miniArcPosition": ${((episode.number - 1) % 5) + 1},
-  "buildupPhase": "${calculateBuildupPhase(episode.number)}"
+  "buildupPhase": "${calculateBuildupPhase(episode.number)}",
+
+  "abilitiesShown": ["이번 화에서 드러난 능력/기술 (예: 상처 회복, 부적 반응)"],
+  "emotionsDominant": ["주인공의 주요 감정 표현 (예: 긴장, 놀람, 분노)"],
+  "narrativePatterns": ["사용한 서사 패턴 (예: 위기→구출, 능력발현→주변놀람)"],
+  "villainActions": ["적/장애물이 한 행동 (예: 경고만 함, 실제 공격, 퇴각)"]
 }
 
 ## 분석 규칙
@@ -193,6 +203,10 @@ ${lastLog ? JSON.stringify(lastLog, null, 2) : '(1화입니다)'}
 5. **breadcrumbActivity**: World Bible의 떡밥 목록 참고. 없는 떡밥 언급 금지
 6. **cliffhangerType**: 7유형 중 가장 적합한 것 선택
 7. **unresolvedTensions**: 다음 화에 이어져야 할 긴장만
+8. **abilitiesShown**: 실제 발현된 능력만. "잠재력 암시"는 제외
+9. **emotionsDominant**: 주인공 기준. 최대 3개
+10. **narrativePatterns**: "A→B→C" 형식으로. 반복 방지용이므로 구체적으로
+11. **villainActions**: 적/장애물의 구체적 행동. "위협만 함"도 기록
 
 JSON만 출력하세요. 설명 없이.`;
 }

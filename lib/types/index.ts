@@ -1748,6 +1748,12 @@ export interface EpisodeLog {
   miniArcPosition: number;    // 5화 미니아크 중 몇 번째 화인지 (1~5)
   buildupPhase: 'early' | 'middle' | 'late';
 
+  // 반복 방지용 추적 필드
+  abilitiesShown?: string[];       // 이번 화에서 보여준 능력 ["상처 회복", "부적 반응"]
+  emotionsDominant?: string[];     // 주요 감정 표현 ["놀람", "긴장", "불안"]
+  narrativePatterns?: string[];    // 사용한 서사 패턴 ["위기→능력발현→주변놀람"]
+  villainActions?: string[];       // 적이 한 행동 ["경고만 하고 물러남"]
+
   // 생성 메타
   generatedAt: string;
 }

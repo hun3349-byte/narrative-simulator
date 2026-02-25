@@ -20,6 +20,7 @@
 12. ✅ **이원화 시뮬레이션 시스템** - 세계 역사(A) + 주인공 시점(B) 분리 시뮬레이션
 13. ✅ **이원화 시뮬레이션 UI 버튼 연결** - 역사A/주인공B 탭 버튼에 API 호출 연결
 14. ✅ **설정 모순 수정 요청 기능** - 팩트체크 모순 발견 시 자동 수정 및 비교 UI
+15. ✅ **집필 프롬프트 4-Tier 아키텍처 리팩토링** - LLM 규칙 준수율 향상 + 동적 제약 생성
 
 ### 다음 작업
 - 추가 기능 개선 및 사용자 피드백 반영
@@ -37,6 +38,31 @@
 - 프로젝트 정체서(`project-identity.md`)와 최상위 원칙(`supreme-principles.md`)을 모든 설계/구현 판단의 기준으로 삼는다.
 
 ### 최근 업데이트
+- **2026-02-25**: 집필 프롬프트 4-Tier 아키텍처 리팩토링
+  - **4-Tier 프롬프트 구조** (PROMPT-REFACTOR-INSTRUCTIONS.md 기반):
+    - TIER 0: 절대 규칙 (MUST - 위반 시 전체 무효)
+    - TIER 1: 이번 화 컨텍스트 (화수, 독백 톤, 클리프행어 추천)
+    - TIER 2: 작가 DNA (페르소나, 시점, 문체 핵심)
+    - TIER 3: 참고 규칙 (빌드업, 캐릭터, 연출, 검증)
+  - **MUST 3개 규칙**:
+    - MUST-1: 설명 금지 (캐릭터가 설정을 대사로 설명 금지)
+    - MUST-2: 능력 공개 속도 제한 (에피소드 번호 기반 동적 생성)
+    - MUST-3: 패턴 반복 금지 (이전 화 로그 기반 동적 생성)
+  - **동적 제약 생성**:
+    - `getAbilityConstraint(episodeNumber)`: 화수에 따른 능력 공개 제한
+    - `getPatternBanList(recentLogs)`: 최근 3화 로그 기반 금지 목록
+  - **buildUserPrompt 중복 제거**:
+    - Active Context 있으면 압축 모드 (중복 섹션 제거)
+    - 없으면 레거시 모드 유지
+  - **EpisodeLog 추적 필드 추가**:
+    - `abilitiesShown[]`: 이번 화에서 드러난 능력
+    - `emotionsDominant[]`: 주인공 주요 감정
+    - `narrativePatterns[]`: 사용한 서사 패턴
+    - `villainActions[]`: 적이 한 행동
+  - **수정 파일**:
+    - `app/api/write-episode/route.ts`: buildSystemPrompt 4-Tier 구조로 전면 교체
+    - `app/api/generate-episode-log/route.ts`: 추적 필드 추출 추가
+    - `lib/types/index.ts`: EpisodeLog 타입 확장
 - **2026-02-25**: 설정 모순 수정 요청 기능 구현
   - **팩트체크 모순 발견 시 "수정 요청" 버튼 동작**:
     1. `/api/revise-episode` API에 `mode: 'contradiction'` 추가
