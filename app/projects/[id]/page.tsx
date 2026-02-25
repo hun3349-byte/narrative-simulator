@@ -206,6 +206,9 @@ export default function ProjectConversationPage() {
     updateNPC,
     deleteNPC,
     getCharacterAppearances,
+    setDualSimulationConfig,
+    setProtagonistPrehistory,
+    addTimelineAdvance,
   } = useProjectStore();
 
   // Hydration 상태 - 클라이언트에서 localStorage 로드 완료 전까지 로딩 표시
@@ -257,6 +260,20 @@ export default function ProjectConversationPage() {
 
   // 타임라인 편집 상태
   const [showTimelineEditor, setShowTimelineEditor] = useState(false);
+
+  // 이원화 시뮬레이션 상태
+  const [worldHistorySettings, setWorldHistorySettings] = useState({
+    startYearsBefore: 1000,
+    endYearsBefore: 0,
+    unit: 100,
+  });
+  const [protagonistSettings, setProtagonistSettings] = useState({
+    prehistoryStart: 30,
+    novelStartAge: 18,
+    currentAge: 18,
+    prehistoryUnit: 5,
+  });
+  const [isSimulating, setIsSimulating] = useState<'worldHistory' | 'prehistory' | 'growth' | null>(null);
 
   // 캐릭터 편집 상태
   const [editingCharacter, setEditingCharacter] = useState<{
@@ -1863,6 +1880,268 @@ export default function ProjectConversationPage() {
     URL.revokeObjectURL(url);
   };
 
+  // === 이원화 시뮬레이션 핸들러 ===
+
+  // 세계 역사 생성 (역사A)
+  const handleGenerateWorldHistory = async () => {
+    if (!project || isSimulating) return;
+
+    setIsSimulating('worldHistory');
+    addMessage({
+      role: 'author',
+      content: `세계 역사를 시뮬레이션할게. ${worldHistorySettings.startYearsBefore}년 전부터 ${worldHistorySettings.endYearsBefore === 0 ? '현재' : `${worldHistorySettings.endYearsBefore}년 전`}까지, ${worldHistorySettings.unit}년 단위로.`,
+    });
+
+    try {
+      const response = await fetch('/api/generate-world-history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          genre: project.genre,
+          tone: project.tone,
+          authorPersonaId: project.authorPersona.id,
+          world: project.layers.world.data,
+          coreRules: project.layers.coreRules.data,
+          seeds: project.layers.seeds.data,
+          heroArc: project.layers.heroArc.data,
+          ultimateMystery: project.layers.ultimateMystery.data,
+          startYearsBefore: worldHistorySettings.startYearsBefore,
+          endYearsBefore: worldHistorySettings.endYearsBefore,
+          unit: worldHistorySettings.unit,
+        }),
+      });
+
+      if (!response.ok) throw new Error('세계 역사 생성 실패');
+
+      const data = await response.json();
+
+      if (data.eras) {
+        setWorldHistory(data.eras, project.worldHistory.detailedDecades || []);
+
+        // 이원화 시뮬레이션 설정 저장
+        setDualSimulationConfig({
+          worldHistory: worldHistorySettings,
+          protagonist: protagonistSettings,
+        });
+
+        addMessage({
+          role: 'author',
+          content: data.message || `${data.eras.length}개 시대로 세계 역사를 생성했어. 역사A 탭에서 확인해봐.`,
+        });
+      }
+    } catch (error) {
+      console.error('World history generation error:', error);
+      addMessage({
+        role: 'author',
+        content: '세계 역사 생성 중 문제가 생겼어. 다시 시도해볼까?',
+      });
+    } finally {
+      setIsSimulating(null);
+    }
+  };
+
+  // 전사 시뮬레이션 (주인공B - 구간1)
+  const handleSimulatePrehistory = async () => {
+    if (!project || isSimulating) return;
+
+    const heroArc = project.layers.heroArc.data as HeroArcLayer | null;
+    if (!heroArc) {
+      addMessage({
+        role: 'author',
+        content: '먼저 주인공을 설정해야 전사 시뮬레이션을 할 수 있어.',
+      });
+      return;
+    }
+
+    setIsSimulating('prehistory');
+    addMessage({
+      role: 'author',
+      content: `${heroArc.name}의 전사를 시뮬레이션할게. 출생 ${protagonistSettings.prehistoryStart}년 전부터 출생까지.`,
+    });
+
+    try {
+      const response = await fetch('/api/simulate-prehistory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          protagonistConfig: protagonistSettings,
+          heroArc: heroArc,
+          worldHistoryEras: project.worldHistory.eras,
+          genre: project.genre,
+          tone: project.tone,
+        }),
+      });
+
+      if (!response.ok) throw new Error('전사 시뮬레이션 실패');
+
+      const data = await response.json();
+
+      if (data.events) {
+        setProtagonistPrehistory({
+          events: data.events,
+          generatedAt: data.generatedAt,
+          worldHistoryEraIds: data.worldHistoryEraIds,
+          summary: data.summary,
+        });
+
+        addMessage({
+          role: 'author',
+          content: `전사 시뮬레이션 완료! ${data.events.length}개 사건을 생성했어.\n\n${data.summary}`,
+        });
+      }
+    } catch (error) {
+      console.error('Prehistory simulation error:', error);
+      addMessage({
+        role: 'author',
+        content: '전사 시뮬레이션 중 문제가 생겼어. 다시 시도해볼까?',
+      });
+    } finally {
+      setIsSimulating(null);
+    }
+  };
+
+  // 성장기 시뮬레이션 (주인공B - 구간2)
+  const handleSimulateGrowth = async () => {
+    if (!project || isSimulating) return;
+
+    const heroArc = project.layers.heroArc.data as HeroArcLayer | null;
+    if (!heroArc) {
+      addMessage({
+        role: 'author',
+        content: '먼저 주인공을 설정해야 성장기 시뮬레이션을 할 수 있어.',
+      });
+      return;
+    }
+
+    setIsSimulating('growth');
+    addMessage({
+      role: 'author',
+      content: `${heroArc.name}의 성장기를 시뮬레이션할게. 0세부터 ${protagonistSettings.novelStartAge}세까지.`,
+    });
+
+    // 기존 시뮬레이션 엔진 사용 (SSE)
+    try {
+      // 캐릭터 데이터 생성
+      const heroCharacter: Character = {
+        id: 'hero',
+        name: heroArc.name,
+        alias: '',
+        age: 0,
+        birthYear: 0,
+        status: 'childhood',
+        stats: {
+          combat: 10,
+          intellect: 10,
+          willpower: 10,
+          social: 10,
+          specialStat: { name: '잠재력', value: 50 },
+        },
+        emotionalState: { primary: '평온', intensity: 50, trigger: '출생' },
+        profile: {
+          background: heroArc.origin || '',
+          personality: '',
+          motivation: heroArc.desire || '',
+          abilities: [],
+          weakness: heroArc.fatalWeakness || '',
+          secretGoal: heroArc.ultimateGoal || '',
+        },
+      };
+
+      const heroSeed: CharacterSeed = {
+        id: 'hero-seed',
+        codename: '주인공',
+        name: heroArc.name,
+        birthYear: 0,
+        birthCondition: heroArc.origin || '',
+        initialCondition: heroArc.environment || '',
+        initialEnvironment: heroArc.environment || '',
+        temperament: '성장형',
+        innateTraits: [],
+        latentAbility: '잠재력',
+        latentPotentials: [],
+        physicalTrait: '',
+        wound: heroArc.fatalWeakness || '',
+        roleTendency: 'protagonist',
+        color: '#7B6BA8',
+      };
+
+      // 기존 시뮬레이션 SSE 호출
+      const worldEvents: WorldEvent[] = project.worldHistory.eras.flatMap(era =>
+        (era.keyEvents || []).map((event, idx) => ({
+          year: era.yearRange[0] + idx,
+          event: event,
+          impact: era.factionChanges || '',
+        }))
+      );
+
+      const config: SimulationConfig = {
+        startYear: 0,
+        endYear: protagonistSettings.novelStartAge,
+        eventsPerYear: 3,
+        detailLevel: 'detailed',
+        worldEvents,
+        batchMode: true,
+      };
+
+      const response = await fetch('/api/simulate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          config,
+          characters: [heroCharacter],
+          seeds: [heroSeed],
+          worldEvents,
+        }),
+      });
+
+      if (!response.ok) throw new Error('성장기 시뮬레이션 실패');
+
+      // SSE 스트리밍 처리
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('스트림 오류');
+
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (line.startsWith('data: ')) {
+            try {
+              const data = JSON.parse(line.slice(6));
+              if (data.type === 'final_state') {
+                setCharacters(data.characters || []);
+                if (data.seeds) setSeeds(data.seeds);
+                if (data.profiles) setProfiles(data.profiles);
+              }
+            } catch {
+              // JSON 파싱 실패 무시
+            }
+          }
+        }
+      }
+
+      addMessage({
+        role: 'author',
+        content: `성장기 시뮬레이션 완료! ${heroArc.name}의 0세부터 ${protagonistSettings.novelStartAge}세까지 경험을 생성했어.`,
+      });
+    } catch (error) {
+      console.error('Growth simulation error:', error);
+      addMessage({
+        role: 'author',
+        content: '성장기 시뮬레이션 중 문제가 생겼어. 다시 시도해볼까?',
+      });
+    } finally {
+      setIsSimulating(null);
+    }
+  };
+
   // 세계관 편집 저장 핸들러
   const handleSaveWorldSettings = (data: {
     heroArc?: Partial<HeroArcLayer>;
@@ -2529,7 +2808,8 @@ export default function ProjectConversationPage() {
                           type="number"
                           className="flex-1 px-2 py-1 rounded bg-base-secondary border border-base-border text-text-primary text-xs"
                           placeholder="1000"
-                          defaultValue={project.dualSimulationConfig?.worldHistory?.startYearsBefore || 1000}
+                          value={worldHistorySettings.startYearsBefore}
+                          onChange={(e) => setWorldHistorySettings(prev => ({ ...prev, startYearsBefore: parseInt(e.target.value) || 1000 }))}
                         />
                         <span className="text-text-muted">년 전</span>
                       </div>
@@ -2539,7 +2819,8 @@ export default function ProjectConversationPage() {
                           type="number"
                           className="flex-1 px-2 py-1 rounded bg-base-secondary border border-base-border text-text-primary text-xs"
                           placeholder="0"
-                          defaultValue={project.dualSimulationConfig?.worldHistory?.endYearsBefore || 0}
+                          value={worldHistorySettings.endYearsBefore}
+                          onChange={(e) => setWorldHistorySettings(prev => ({ ...prev, endYearsBefore: parseInt(e.target.value) || 0 }))}
                         />
                         <span className="text-text-muted">년 전</span>
                       </div>
@@ -2547,7 +2828,8 @@ export default function ProjectConversationPage() {
                         <span className="text-text-muted w-16">단위:</span>
                         <select
                           className="flex-1 px-2 py-1 rounded bg-base-secondary border border-base-border text-text-primary text-xs"
-                          defaultValue={project.dualSimulationConfig?.worldHistory?.unit || 100}
+                          value={worldHistorySettings.unit}
+                          onChange={(e) => setWorldHistorySettings(prev => ({ ...prev, unit: parseInt(e.target.value) || 100 }))}
                         >
                           <option value={100}>100년</option>
                           <option value={50}>50년</option>
@@ -2558,9 +2840,11 @@ export default function ProjectConversationPage() {
                     </div>
 
                     <button
-                      className="w-full py-2 rounded-lg bg-amber-500/20 text-amber-400 text-sm hover:bg-amber-500/30 transition-colors"
+                      onClick={handleGenerateWorldHistory}
+                      disabled={isSimulating === 'worldHistory'}
+                      className="w-full py-2 rounded-lg bg-amber-500/20 text-amber-400 text-sm hover:bg-amber-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      세계 역사 생성
+                      {isSimulating === 'worldHistory' ? '생성 중...' : '세계 역사 생성'}
                     </button>
                   </div>
 
@@ -2611,12 +2895,17 @@ export default function ProjectConversationPage() {
                             type="number"
                             className="w-16 px-2 py-1 rounded bg-base-tertiary border border-base-border text-text-primary text-xs"
                             placeholder="30"
-                            defaultValue={project.dualSimulationConfig?.protagonist?.prehistoryStart || 30}
+                            value={protagonistSettings.prehistoryStart}
+                            onChange={(e) => setProtagonistSettings(prev => ({ ...prev, prehistoryStart: parseInt(e.target.value) || 30 }))}
                           />
                           <span className="text-text-muted">년 전 ~ 출생</span>
                         </div>
-                        <button className="w-full py-1.5 rounded bg-purple-500/20 text-purple-400 text-xs hover:bg-purple-500/30 transition-colors">
-                          전사 시뮬레이션
+                        <button
+                          className="w-full py-1.5 rounded bg-purple-500/20 text-purple-400 text-xs hover:bg-purple-500/30 transition-colors disabled:opacity-50"
+                          onClick={handleSimulatePrehistory}
+                          disabled={isSimulating !== null}
+                        >
+                          {isSimulating === 'prehistory' ? '시뮬레이션 중...' : '전사 시뮬레이션'}
                         </button>
                       </div>
 
@@ -2632,12 +2921,17 @@ export default function ProjectConversationPage() {
                             type="number"
                             className="w-16 px-2 py-1 rounded bg-base-tertiary border border-base-border text-text-primary text-xs"
                             placeholder="18"
-                            defaultValue={project.dualSimulationConfig?.protagonist?.novelStartAge || 18}
+                            value={protagonistSettings.novelStartAge}
+                            onChange={(e) => setProtagonistSettings(prev => ({ ...prev, novelStartAge: parseInt(e.target.value) || 18 }))}
                           />
                           <span className="text-text-muted">세</span>
                         </div>
-                        <button className="w-full py-1.5 rounded bg-blue-500/20 text-blue-400 text-xs hover:bg-blue-500/30 transition-colors">
-                          성장기 시뮬레이션
+                        <button
+                          className="w-full py-1.5 rounded bg-blue-500/20 text-blue-400 text-xs hover:bg-blue-500/30 transition-colors disabled:opacity-50"
+                          onClick={handleSimulateGrowth}
+                          disabled={isSimulating !== null}
+                        >
+                          {isSimulating === 'growth' ? '시뮬레이션 중...' : '성장기 시뮬레이션'}
                         </button>
                       </div>
 
@@ -3059,8 +3353,12 @@ export default function ProjectConversationPage() {
                     <span className="text-amber-400">🌍</span>
                     세계 역사 시뮬레이션
                   </h3>
-                  <button className="w-full py-2 rounded-lg bg-amber-500/20 text-amber-400 text-sm hover:bg-amber-500/30 transition-colors">
-                    세계 역사 생성
+                  <button
+                    className="w-full py-2 rounded-lg bg-amber-500/20 text-amber-400 text-sm hover:bg-amber-500/30 transition-colors disabled:opacity-50"
+                    onClick={handleGenerateWorldHistory}
+                    disabled={isSimulating !== null}
+                  >
+                    {isSimulating === 'worldHistory' ? '생성 중...' : '세계 역사 생성'}
                   </button>
                 </div>
                 {/* 타임라인 편집 버튼 */}
@@ -3088,11 +3386,19 @@ export default function ProjectConversationPage() {
                     주인공 시뮬레이션
                   </h3>
                   <div className="space-y-2">
-                    <button className="w-full py-1.5 rounded bg-purple-500/20 text-purple-400 text-xs hover:bg-purple-500/30 transition-colors">
-                      구간 1: 전사 시뮬레이션
+                    <button
+                      className="w-full py-1.5 rounded bg-purple-500/20 text-purple-400 text-xs hover:bg-purple-500/30 transition-colors disabled:opacity-50"
+                      onClick={handleSimulatePrehistory}
+                      disabled={isSimulating !== null}
+                    >
+                      {isSimulating === 'prehistory' ? '시뮬레이션 중...' : '구간 1: 전사 시뮬레이션'}
                     </button>
-                    <button className="w-full py-1.5 rounded bg-blue-500/20 text-blue-400 text-xs hover:bg-blue-500/30 transition-colors">
-                      구간 2: 성장기 시뮬레이션
+                    <button
+                      className="w-full py-1.5 rounded bg-blue-500/20 text-blue-400 text-xs hover:bg-blue-500/30 transition-colors disabled:opacity-50"
+                      onClick={handleSimulateGrowth}
+                      disabled={isSimulating !== null}
+                    >
+                      {isSimulating === 'growth' ? '시뮬레이션 중...' : '구간 2: 성장기 시뮬레이션'}
                     </button>
                   </div>
                 </div>
