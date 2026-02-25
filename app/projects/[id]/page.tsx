@@ -7,7 +7,7 @@ import { PERSONA_ICONS } from '@/lib/presets/author-personas';
 import { WorldTimelinePanel } from '@/components/world-timeline';
 import EpisodeViewer from '@/components/episode/EpisodeViewer';
 import EpisodeDirectionModal from '@/components/episode/EpisodeDirectionModal';
-import type { LayerName, Episode, Character, SimulationConfig, WorldEvent, CharacterSeed, FactCheckResult, BreadcrumbWarning, EpisodeLog, WritingMemory, NPCSeedInfo, SimulationNPC, SeedsLayer, EpisodeDirection, HeroArcLayer, VillainArcLayer, WorldHistoryEra, DetailedDecade } from '@/lib/types';
+import type { LayerName, Episode, Character, SimulationConfig, WorldEvent, CharacterSeed, FactCheckResult, BreadcrumbWarning, EpisodeLog, WritingMemory, NPCSeedInfo, SimulationNPC, SeedsLayer, EpisodeDirection, HeroArcLayer, VillainArcLayer, WorldHistoryEra, DetailedDecade, PrehistoryEvent, TimelineAdvance } from '@/lib/types';
 import { trackBreadcrumbs, generateBreadcrumbInstructions } from '@/lib/utils/breadcrumb-tracker';
 import { buildActiveContext } from '@/lib/utils/active-context';
 import { createEmptyWritingMemory, updateQualityTracker, processFeedback, analyzeEdit, integrateEditPatterns, getWritingMemoryStats } from '@/lib/utils/writing-memory';
@@ -1941,7 +1941,74 @@ export default function ProjectConversationPage() {
     }
   };
 
-  // 전사 시뮬레이션 (주인공B - 구간1)
+  // SSE 스트리밍 fetch 헬퍼 (시뮬레이션용)
+  const streamSimulation = async (
+    url: string,
+    body: Record<string, unknown>,
+    onProgress: (msg: string) => void,
+    maxRetries: number = 3
+  ): Promise<{ type: string; [key: string]: unknown } | null> => {
+    let retryLevel = 0;
+
+    while (retryLevel < maxRetries) {
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ ...body, retryLevel }),
+        });
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const reader = response.body?.getReader();
+        if (!reader) throw new Error('스트림 오류');
+
+        const decoder = new TextDecoder();
+        let buffer = '';
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                if (data.type === 'progress') {
+                  onProgress(data.message);
+                } else if (data.type === 'done') {
+                  return data;
+                } else if (data.type === 'error') {
+                  if (data.retryable && retryLevel < maxRetries - 1) {
+                    throw new Error(data.message || '재시도 필요');
+                  }
+                  return data;
+                }
+              } catch (e) {
+                if (e instanceof SyntaxError) continue;
+                throw e;
+              }
+            }
+          }
+        }
+        return null;
+      } catch (error) {
+        console.error(`Simulation attempt ${retryLevel + 1} failed:`, error);
+        retryLevel++;
+        if (retryLevel < maxRetries) {
+          onProgress(`재시도 중... (${retryLevel}/${maxRetries - 1})`);
+          await new Promise(r => setTimeout(r, 1000));
+        }
+      }
+    }
+    return null;
+  };
+
+  // 전사 시뮬레이션 (주인공B - 구간1) - 분할 실행 + 재시도
   const handleSimulatePrehistory = async () => {
     if (!project || isSimulating) return;
 
@@ -1955,53 +2022,95 @@ export default function ProjectConversationPage() {
     }
 
     setIsSimulating('prehistory');
+
+    const totalYears = protagonistSettings.prehistoryStart;
+    const chunkSize = 10;  // 10년씩 분할
+    const chunks: Array<{ start: number; end: number }> = [];
+
+    // 청크 계산 (예: 30년 → [30-20, 20-10, 10-0])
+    for (let start = totalYears; start > 0; start -= chunkSize) {
+      const end = Math.max(0, start - chunkSize);
+      chunks.push({ start, end });
+    }
+
     addMessage({
       role: 'author',
-      content: `${heroArc.name}의 전사를 시뮬레이션할게. 출생 ${protagonistSettings.prehistoryStart}년 전부터 출생까지.`,
+      content: `${heroArc.name}의 전사를 시뮬레이션할게. 출생 ${totalYears}년 전부터 출생까지. (${chunks.length}단계)`,
     });
 
+    const allEvents: PrehistoryEvent[] = [];
+    let summaries: string[] = [];
+
     try {
-      const response = await fetch('/api/simulate-prehistory', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          protagonistConfig: protagonistSettings,
-          heroArc: heroArc,
-          worldHistoryEras: project.worldHistory.eras,
-          genre: project.genre,
-          tone: project.tone,
-        }),
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+
+        const result = await streamSimulation(
+          '/api/simulate-prehistory',
+          {
+            protagonistConfig: protagonistSettings,
+            heroArc,
+            worldHistoryEras: project.worldHistory.eras,
+            worldBible: project.worldBible,
+            genre: project.genre,
+            tone: project.tone,
+            chunkStart: chunk.start,
+            chunkEnd: chunk.end,
+            previousEvents: allEvents.slice(-5),  // 최근 5개만 컨텍스트로
+          },
+          (msg) => {
+            // 진행률 업데이트 (UI에 반영)
+            addMessage({
+              role: 'author',
+              content: `${msg} (${i + 1}/${chunks.length})`,
+            });
+          }
+        );
+
+        if (result?.type === 'done' && result.events) {
+          allEvents.push(...(result.events as PrehistoryEvent[]));
+          if (result.summary) summaries.push(result.summary as string);
+        } else if (result?.type === 'error') {
+          throw new Error(result.message as string || '시뮬레이션 실패');
+        }
+      }
+
+      // 전체 결과 저장
+      setProtagonistPrehistory({
+        events: allEvents,
+        generatedAt: new Date().toISOString(),
+        worldHistoryEraIds: project.worldHistory.eras.map(e => e.id),
+        summary: summaries.join(' '),
       });
 
-      if (!response.ok) throw new Error('전사 시뮬레이션 실패');
-
-      const data = await response.json();
-
-      if (data.events) {
-        setProtagonistPrehistory({
-          events: data.events,
-          generatedAt: data.generatedAt,
-          worldHistoryEraIds: data.worldHistoryEraIds,
-          summary: data.summary,
-        });
-
-        addMessage({
-          role: 'author',
-          content: `전사 시뮬레이션 완료! ${data.events.length}개 사건을 생성했어.\n\n${data.summary}`,
-        });
-      }
+      addMessage({
+        role: 'author',
+        content: `전사 시뮬레이션 완료! ${allEvents.length}개 사건을 생성했어.`,
+      });
     } catch (error) {
       console.error('Prehistory simulation error:', error);
       addMessage({
         role: 'author',
-        content: '전사 시뮬레이션 중 문제가 생겼어. 다시 시도해볼까?',
+        content: allEvents.length > 0
+          ? `일부 시뮬레이션만 완료됐어. (${allEvents.length}개 사건) 나머지는 범위를 줄여서 다시 시도해봐.`
+          : '전사 시뮬레이션 중 문제가 생겼어. 범위를 줄여서 다시 시도해볼까?',
       });
+
+      // 부분 결과라도 저장
+      if (allEvents.length > 0) {
+        setProtagonistPrehistory({
+          events: allEvents,
+          generatedAt: new Date().toISOString(),
+          worldHistoryEraIds: project.worldHistory.eras.map(e => e.id),
+          summary: summaries.join(' '),
+        });
+      }
     } finally {
       setIsSimulating(null);
     }
   };
 
-  // 성장기 시뮬레이션 (주인공B - 구간2)
+  // 성장기 시뮬레이션 (주인공B - 구간2) - 분할 실행 + 재시도
   const handleSimulateGrowth = async () => {
     if (!project || isSimulating) return;
 
@@ -2015,129 +2124,122 @@ export default function ProjectConversationPage() {
     }
 
     setIsSimulating('growth');
+
+    const endAge = protagonistSettings.novelStartAge;
+    const chunkSize = 5;  // 5년씩 분할
+    const chunks: Array<{ from: number; to: number }> = [];
+
+    // 청크 계산 (예: 0~18세 → [0-5, 5-10, 10-15, 15-18])
+    for (let from = 0; from < endAge; from += chunkSize) {
+      const to = Math.min(endAge, from + chunkSize);
+      chunks.push({ from, to });
+    }
+
     addMessage({
       role: 'author',
-      content: `${heroArc.name}의 성장기를 시뮬레이션할게. 0세부터 ${protagonistSettings.novelStartAge}세까지.`,
+      content: `${heroArc.name}의 성장기를 시뮬레이션할게. 0세부터 ${endAge}세까지. (${chunks.length}단계)`,
     });
 
-    // 기존 시뮬레이션 엔진 사용 (SSE)
+    // 캐릭터 데이터 생성
+    const heroCharacter: Character = {
+      id: 'hero',
+      name: heroArc.name,
+      alias: '',
+      age: 0,
+      birthYear: 0,
+      status: 'childhood',
+      stats: {
+        combat: 10,
+        intellect: 10,
+        willpower: 10,
+        social: 10,
+        specialStat: { name: '잠재력', value: 50 },
+      },
+      emotionalState: { primary: '평온', intensity: 50, trigger: '출생' },
+      profile: {
+        background: heroArc.origin || '',
+        personality: '',
+        motivation: heroArc.desire || '',
+        abilities: [],
+        weakness: heroArc.fatalWeakness || '',
+        secretGoal: heroArc.ultimateGoal || '',
+      },
+    };
+
+    const allAdvances: TimelineAdvance[] = [];
+    let lastMessage = '';
+
     try {
-      // 캐릭터 데이터 생성
-      const heroCharacter: Character = {
-        id: 'hero',
-        name: heroArc.name,
-        alias: '',
-        age: 0,
-        birthYear: 0,
-        status: 'childhood',
-        stats: {
-          combat: 10,
-          intellect: 10,
-          willpower: 10,
-          social: 10,
-          specialStat: { name: '잠재력', value: 50 },
-        },
-        emotionalState: { primary: '평온', intensity: 50, trigger: '출생' },
-        profile: {
-          background: heroArc.origin || '',
-          personality: '',
-          motivation: heroArc.desire || '',
-          abilities: [],
-          weakness: heroArc.fatalWeakness || '',
-          secretGoal: heroArc.ultimateGoal || '',
-        },
-      };
+      for (let i = 0; i < chunks.length; i++) {
+        const chunk = chunks[i];
+        const duration = `${chunk.to - chunk.from}년`;
 
-      const heroSeed: CharacterSeed = {
-        id: 'hero-seed',
-        codename: '주인공',
-        name: heroArc.name,
-        birthYear: 0,
-        birthCondition: heroArc.origin || '',
-        initialCondition: heroArc.environment || '',
-        initialEnvironment: heroArc.environment || '',
-        temperament: '성장형',
-        innateTraits: [],
-        latentAbility: '잠재력',
-        latentPotentials: [],
-        physicalTrait: '',
-        wound: heroArc.fatalWeakness || '',
-        roleTendency: 'protagonist',
-        color: '#7B6BA8',
-      };
-
-      // 기존 시뮬레이션 SSE 호출
-      const worldEvents: WorldEvent[] = project.worldHistory.eras.flatMap(era =>
-        (era.keyEvents || []).map((event, idx) => ({
-          year: era.yearRange[0] + idx,
-          event: event,
-          impact: era.factionChanges || '',
-        }))
-      );
-
-      const config: SimulationConfig = {
-        startYear: 0,
-        endYear: protagonistSettings.novelStartAge,
-        eventsPerYear: 3,
-        detailLevel: 'detailed',
-        worldEvents,
-        batchMode: true,
-      };
-
-      const response = await fetch('/api/simulate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          config,
-          characters: [heroCharacter],
-          seeds: [heroSeed],
-          worldEvents,
-        }),
-      });
-
-      if (!response.ok) throw new Error('성장기 시뮬레이션 실패');
-
-      // SSE 스트리밍 처리
-      const reader = response.body?.getReader();
-      if (!reader) throw new Error('스트림 오류');
-
-      const decoder = new TextDecoder();
-      let buffer = '';
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
-
-        for (const line of lines) {
-          if (line.startsWith('data: ')) {
-            try {
-              const data = JSON.parse(line.slice(6));
-              if (data.type === 'final_state') {
-                setCharacters(data.characters || []);
-                if (data.seeds) setSeeds(data.seeds);
-                if (data.profiles) setProfiles(data.profiles);
-              }
-            } catch {
-              // JSON 파싱 실패 무시
+        const result = await streamSimulation(
+          '/api/advance-timeline',
+          {
+            characterId: 'hero',
+            characterName: heroArc.name,
+            fromAge: chunk.from,
+            toAge: chunk.to,
+            duration,
+            character: heroCharacter,
+            worldHistoryEras: project.worldHistory.eras,
+            worldBible: project.worldBible,
+            recentEpisodes: [],
+            genre: project.genre,
+            tone: project.tone,
+            chunkIndex: i,
+            totalChunks: chunks.length,
+            previousChanges: allAdvances.slice(-2),
+          },
+          (msg) => {
+            if (msg !== lastMessage) {
+              lastMessage = msg;
+              addMessage({
+                role: 'author',
+                content: msg,
+              });
             }
           }
+        );
+
+        if (result?.type === 'done' && result.advance) {
+          allAdvances.push(result.advance as TimelineAdvance);
+          // 캐릭터 상태 업데이트 (다음 청크에 반영)
+          heroCharacter.age = chunk.to;
+          if ((result.advance as TimelineAdvance).changes?.ability) {
+            heroCharacter.profile.abilities.push((result.advance as TimelineAdvance).changes.ability as string);
+          }
+        } else if (result?.type === 'error') {
+          throw new Error(result.message as string || '시뮬레이션 실패');
         }
       }
 
+      // 전체 결과 저장
+      for (const advance of allAdvances) {
+        addTimelineAdvance(advance);
+      }
+
+      // 캐릭터 상태 업데이트
+      setCharacters([heroCharacter]);
+
       addMessage({
         role: 'author',
-        content: `성장기 시뮬레이션 완료! ${heroArc.name}의 0세부터 ${protagonistSettings.novelStartAge}세까지 경험을 생성했어.`,
+        content: `성장기 시뮬레이션 완료! ${heroArc.name}의 0세부터 ${endAge}세까지 ${allAdvances.length}개 성장 단계를 생성했어.`,
       });
     } catch (error) {
       console.error('Growth simulation error:', error);
       addMessage({
         role: 'author',
-        content: '성장기 시뮬레이션 중 문제가 생겼어. 다시 시도해볼까?',
+        content: allAdvances.length > 0
+          ? `일부 시뮬레이션만 완료됐어. (${allAdvances.length}개 단계) 나머지는 범위를 줄여서 다시 시도해봐.`
+          : '성장기 시뮬레이션 중 문제가 생겼어. 범위를 줄여서 다시 시도해볼까?',
       });
+
+      // 부분 결과라도 저장
+      for (const advance of allAdvances) {
+        addTimelineAdvance(advance);
+      }
     } finally {
       setIsSimulating(null);
     }
