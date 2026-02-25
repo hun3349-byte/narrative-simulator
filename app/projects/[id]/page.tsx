@@ -3947,9 +3947,18 @@ export default function ProjectConversationPage() {
             <div className="flex gap-2 border-t border-base-border px-4 py-3">
               <button
                 onClick={async () => {
-                  if (!factCheckResult || !project || !editingEpisodeId) return;
-                  const currentEpisode = project.episodes.find(ep => ep.id === editingEpisodeId);
-                  if (!currentEpisode) return;
+                  if (!factCheckResult || !project) return;
+                  // episodeNumber로 에피소드 찾기 (editingEpisodeId 대신)
+                  const currentEpisode = project.episodes.find(ep => ep.number === factCheckResult.episodeNumber);
+                  if (!currentEpisode) {
+                    console.error('Episode not found for number:', factCheckResult.episodeNumber);
+                    addMessage({
+                      role: 'author',
+                      content: '에피소드를 찾을 수 없어. 다시 시도해줘.',
+                    });
+                    setShowFactCheckModal(false);
+                    return;
+                  }
 
                   setIsFixingContradiction(true);
                   setShowFactCheckModal(false);
@@ -4006,19 +4015,18 @@ export default function ProjectConversationPage() {
               </button>
               <button
                 onClick={() => {
-                  // 무시한 모순 로깅
+                  // 무시한 모순 로깅 (episodeNumber 사용)
                   if (factCheckResult && project) {
-                    const currentEpisode = project.episodes.find(ep => ep.id === editingEpisodeId);
                     setIgnoredContradictions(prev => [
                       ...prev,
                       {
-                        episodeNumber: currentEpisode?.number || 0,
+                        episodeNumber: factCheckResult.episodeNumber,
                         contradictions: factCheckResult.contradictions,
                         ignoredAt: new Date().toISOString(),
                       },
                     ]);
                     console.log('Ignored contradictions:', {
-                      episodeNumber: currentEpisode?.number,
+                      episodeNumber: factCheckResult.episodeNumber,
                       contradictions: factCheckResult.contradictions,
                     });
                   }
