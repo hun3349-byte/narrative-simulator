@@ -105,6 +105,8 @@ interface AuthorChatRequest {
   episodes?: Episode[];
   // 피드백 누적 학습
   recurringFeedback?: Feedback[];
+  // 재생성 시 가이드 메시지 건너뛰기
+  skipGuide?: boolean;
 }
 
 // 집필 요청인지 감지
@@ -1383,8 +1385,9 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 새 레이어 시작 - 환님 먼저 입력 방식
-    if (action === 'generate_layer') {
+    // 새 레이어 시작 - 환님 먼저 입력 방식 (skipGuide가 false일 때만)
+    // skipGuide가 true이면 (재생성 요청) 가이드 메시지를 건너뛰고 바로 제안 생성
+    if (action === 'generate_layer' && !body.skipGuide) {
       // 레이어별 안내 메시지 (환님에게 먼저 아이디어 요청)
       const layerGuideMessages: Record<string, string> = {
         world: `세계 레이어야. 이 이야기가 펼쳐질 세계에 대해 네 생각을 먼저 말해봐.

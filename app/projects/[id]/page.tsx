@@ -424,7 +424,7 @@ export default function ProjectConversationPage() {
   }, [project, addEpisodeLog]);
 
   // 레이어 제안 생성 (스트리밍)
-  const generateLayerProposal = useCallback(async (layer: LayerName) => {
+  const generateLayerProposal = useCallback(async (layer: LayerName, skipGuide: boolean = false) => {
     if (!project || layer === 'novel') return;
 
     setIsLoading(true);
@@ -441,6 +441,7 @@ export default function ProjectConversationPage() {
           viewpoint: project.viewpoint,
           authorPersonaId: project.authorPersona.id,
           direction: project.direction,
+          skipGuide,  // 재생성 시 가이드 메시지 건너뛰기
           previousLayers: {
             world: project.layers.world.data,
             coreRules: project.layers.coreRules.data,
@@ -911,7 +912,7 @@ export default function ProjectConversationPage() {
         role: 'user',
         content: '다시 제안해줘',
       });
-      generateLayerProposal(project.currentLayer);
+      generateLayerProposal(project.currentLayer, true);  // skipGuide: true
     } else if (action === 'start_simulation') {
       // 세계 역사 + World Bible 생성 시작
       setIsLoading(true);
