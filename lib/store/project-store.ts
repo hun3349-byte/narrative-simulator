@@ -28,6 +28,10 @@ import type {
   WorldBible,
   EpisodeLog,
   WritingMemory,
+  AuthorConfig,
+  DualSimulationConfig,
+  ProtagonistPrehistory,
+  TimelineAdvance,
 } from '@/lib/types';
 import { AUTHOR_PERSONA_PRESETS } from '@/lib/presets/author-personas';
 import {
@@ -118,14 +122,24 @@ interface ProjectStore {
   updateWritingMemory: (updates: Partial<WritingMemory>) => void;
   getWritingMemory: () => WritingMemory | undefined;
 
+  // 이원화 시뮬레이션 (Dual Simulation)
+  setDualSimulationConfig: (config: DualSimulationConfig) => void;
+  updateDualSimulationConfig: (updates: Partial<DualSimulationConfig>) => void;
+  setProtagonistPrehistory: (prehistory: ProtagonistPrehistory) => void;
+  addTimelineAdvance: (advance: TimelineAdvance) => void;
+  updateTimelineAdvance: (id: string, updates: Partial<TimelineAdvance>) => void;
+
   // 유틸리티
   reset: () => void;
 }
 
 // 초기 프로젝트 생성 헬퍼
 function createEmptyProject(config: NewProjectConfig): Project {
-  const persona = AUTHOR_PERSONA_PRESETS.find(p => p.id === config.authorPersonaId)
-    || AUTHOR_PERSONA_PRESETS[0];
+  // 레거시: authorPersonaId가 있으면 기존 방식 사용
+  // 새 시스템: authorConfig가 있으면 새 방식 사용
+  const persona = config.authorPersonaId
+    ? (AUTHOR_PERSONA_PRESETS.find(p => p.id === config.authorPersonaId) || AUTHOR_PERSONA_PRESETS[0])
+    : AUTHOR_PERSONA_PRESETS[0]; // authorConfig가 있어도 fallback으로 기본 페르소나 유지
 
   const now = new Date().toISOString();
 
@@ -135,6 +149,7 @@ function createEmptyProject(config: NewProjectConfig): Project {
     tone: config.tone,
     viewpoint: config.viewpoint,
     authorPersona: persona,
+    authorConfig: config.authorConfig, // 새로운 작가 설정
     direction: config.direction,
     createdAt: now,
     updatedAt: now,
@@ -829,6 +844,109 @@ export const useProjectStore = create<ProjectStore>()(
       getWritingMemory: () => {
         const project = get().getCurrentProject();
         return project?.writingMemory;
+      },
+
+      // === 이원화 시뮬레이션 ===
+
+      setDualSimulationConfig: (config) => {
+        const { currentProjectId, projects } = get();
+        if (!currentProjectId) return;
+
+        set({
+          projects: projects.map(p =>
+            p.id === currentProjectId
+              ? { ...p, dualSimulationConfig: config, updatedAt: new Date().toISOString() }
+              : p
+          ),
+        });
+        // Supabase 동기화
+        get().syncCurrentProjectToSupabase();
+      },
+
+      updateDualSimulationConfig: (updates) => {
+        const { currentProjectId, projects } = get();
+        if (!currentProjectId) return;
+
+        set({
+          projects: projects.map(p => {
+            if (p.id !== currentProjectId) return p;
+            const currentConfig = p.dualSimulationConfig || {
+              worldHistory: { startYearsBefore: 500, endYearsBefore: 0, unit: 100 },
+              protagonist: { prehistoryStart: 30, novelStartAge: 15, currentAge: 15, prehistoryUnit: 10 },
+            };
+            return {
+              ...p,
+              dualSimulationConfig: {
+                ...currentConfig,
+                ...updates,
+                worldHistory: updates.worldHistory
+                  ? { ...currentConfig.worldHistory, ...updates.worldHistory }
+                  : currentConfig.worldHistory,
+                protagonist: updates.protagonist
+                  ? { ...currentConfig.protagonist, ...updates.protagonist }
+                  : currentConfig.protagonist,
+              },
+              updatedAt: new Date().toISOString(),
+            };
+          }),
+        });
+        // Supabase 동기화
+        get().syncCurrentProjectToSupabase();
+      },
+
+      setProtagonistPrehistory: (prehistory) => {
+        const { currentProjectId, projects } = get();
+        if (!currentProjectId) return;
+
+        set({
+          projects: projects.map(p =>
+            p.id === currentProjectId
+              ? { ...p, protagonistPrehistory: prehistory, updatedAt: new Date().toISOString() }
+              : p
+          ),
+        });
+        // Supabase 동기화
+        get().syncCurrentProjectToSupabase();
+      },
+
+      addTimelineAdvance: (advance) => {
+        const { currentProjectId, projects } = get();
+        if (!currentProjectId) return;
+
+        set({
+          projects: projects.map(p => {
+            if (p.id !== currentProjectId) return p;
+            const currentAdvances = p.timelineAdvances || [];
+            return {
+              ...p,
+              timelineAdvances: [...currentAdvances, advance],
+              updatedAt: new Date().toISOString(),
+            };
+          }),
+        });
+        // Supabase 동기화
+        get().syncCurrentProjectToSupabase();
+      },
+
+      updateTimelineAdvance: (id, updates) => {
+        const { currentProjectId, projects } = get();
+        if (!currentProjectId) return;
+
+        set({
+          projects: projects.map(p => {
+            if (p.id !== currentProjectId) return p;
+            const currentAdvances = p.timelineAdvances || [];
+            return {
+              ...p,
+              timelineAdvances: currentAdvances.map(adv =>
+                adv.id === id ? { ...adv, ...updates } : adv
+              ),
+              updatedAt: new Date().toISOString(),
+            };
+          }),
+        });
+        // Supabase 동기화
+        get().syncCurrentProjectToSupabase();
       },
 
       // Supabase 동기화: 현재 프로젝트를 Supabase에 저장

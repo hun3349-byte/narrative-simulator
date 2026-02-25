@@ -555,6 +555,70 @@ export interface AuthorPersona {
   references: string[];
 }
 
+// === 다중 작가 AI 시스템 (Multi-Author System) ===
+
+// 장르 타입
+export type GenreType =
+  | 'martial_arts'     // 무협
+  | 'fantasy'          // 판타지
+  | 'modern_fantasy'   // 현대판타지
+  | 'romance'          // 로맨스
+  | 'regression'       // 회귀/환생
+  | 'custom';          // 직접 입력
+
+// 톤 밀도
+export type ToneDensity = 'light' | 'medium' | 'deep';
+
+// 분위기 (복수 선택 가능)
+export type MoodType =
+  | 'humor_sarcasm'    // 유머/자조
+  | 'lyrical'          // 서정적
+  | 'hardboiled'       // 건조/하드보일드
+  | 'philosophical'    // 철학적
+  | 'dark_gritty'      // 다크/그리티
+  | 'hot_blood';       // 열혈
+
+// 대사 스타일
+export type DialogueStyle =
+  | 'short_impact'     // 짧고 강렬
+  | 'realistic'        // 현실적
+  | 'literary'         // 문어체
+  | 'mixed';           // 혼합
+
+// 묘사 밀도
+export type DescriptionDensity = 'minimal' | 'balanced' | 'rich';
+
+// 작가 설정 (새 구조)
+export interface AuthorConfig {
+  genre: GenreType;
+  customGenre?: string;           // genre가 'custom'일 때
+  toneDensity: ToneDensity;
+  moods: MoodType[];              // 복수 선택
+  dialogueStyle: DialogueStyle;
+  descriptionDensity: DescriptionDensity;
+}
+
+// 장르별 페르소나 DNA
+export interface GenrePersonaDNA {
+  id: GenreType;
+  name: string;
+  style: {
+    description: string;          // 문체 설명
+    senses: string;               // 감각 중심 (촉각/시각 등)
+  };
+  combat: {
+    rhythm: string;               // 전투 리듬
+    forbidden: string[];          // 금지 패턴
+    good_example: string;         // 좋은 예
+    bad_example: string;          // 나쁜 예
+  };
+  dialogue: {
+    style: string;                // 대사 스타일
+    allowed: string[];            // 허용 패턴
+  };
+  forbidden: string[];            // 전체 금지 사항
+}
+
 // 스토리 디렉터 설정
 export interface StoryDirectorConfig {
   enabled: boolean;
@@ -913,7 +977,8 @@ export interface SimplifiedProjectConfig {
   genre: string;                    // 장르
   tone: string;                     // 톤
   viewpoint: 'first_person' | 'third_person' | string;  // 시점 (1인칭/3인칭)
-  authorPersonaId: string;          // 작가 페르소나 ID
+  authorPersonaId?: string;         // 작가 페르소나 ID (레거시)
+  authorConfig?: AuthorConfig;      // 새로운 작가 설정
   advancedSettings: {
     simulationRange: [number, number];
     eventDensity: 'low' | 'normal' | 'high';
@@ -1499,6 +1564,7 @@ export interface Project {
   tone: string;
   viewpoint: 'first_person' | 'third_person' | string;
   authorPersona: AuthorPersona;
+  authorConfig?: AuthorConfig;      // 새로운 작가 설정 (장르+톤+분위기 조합)
   direction?: string;               // 초기 방향 (환님 입력)
   createdAt: string;
   updatedAt: string;
@@ -1521,6 +1587,11 @@ export interface Project {
     detailedDecades: DetailedDecade[];
     generatedAt?: string;
   };
+
+  // 이원화 시뮬레이션 (Dual Simulation)
+  dualSimulationConfig?: DualSimulationConfig;      // 시뮬레이션 설정
+  protagonistPrehistory?: ProtagonistPrehistory;    // 주인공 전사 (구간 1)
+  timelineAdvances?: TimelineAdvance[];             // 소설 진행 중 시간 점프 기록
 
   // 대화 메시지
   messages: Message[];
@@ -1572,7 +1643,8 @@ export interface NewProjectConfig {
   genre: string;
   tone: string;
   viewpoint: 'first_person' | 'third_person' | string;
-  authorPersonaId: string;
+  authorPersonaId?: string;         // 레거시: 기존 작가 페르소나 ID
+  authorConfig?: AuthorConfig;      // 새로운 작가 설정 (장르+톤+분위기 조합)
   direction?: string;               // 초기 방향 (선택)
 }
 
@@ -1838,6 +1910,89 @@ export interface WritingMemory {
   totalEpisodes: number;
   averageEditAmount: number;  // 평균 편집량 (%)
   directAdoptionRate: number; // 직접 채택률 (%)
+}
+
+// === 이원화 시뮬레이션 시스템 (Dual Simulation) ===
+
+// 시뮬레이션 A: 세계 역사 설정
+export interface WorldHistorySimulationConfig {
+  startYearsBefore: number;     // 시작 시점 (N년 전), 예: 500
+  endYearsBefore: number;       // 종료 시점 (N년 전), 예: 0 (현재)
+  unit: number;                 // 시뮬레이션 단위 (100년/50년/10년/1년)
+}
+
+// 시뮬레이션 B: 주인공 시점 설정
+export interface ProtagonistSimulationConfig {
+  prehistoryStart: number;      // 전사 시작 (태어나기 N년 전), 예: 30
+  novelStartAge: number;        // 소설 시작 나이, 예: 15
+  currentAge: number;           // 현재 시뮬레이션 나이
+  prehistoryUnit: number;       // 전사 시뮬레이션 단위 (10년/5년/1년)
+}
+
+// 전체 이원화 시뮬레이션 설정
+export interface DualSimulationConfig {
+  worldHistory: WorldHistorySimulationConfig;
+  protagonist: ProtagonistSimulationConfig;
+}
+
+// 주인공 전사 이벤트 (출생 전)
+export interface PrehistoryEvent {
+  id: string;
+  yearsBefore: number;          // 출생 N년 전 (음수면 출생 후)
+  title: string;
+  description: string;
+  worldContext: string;         // 그 시점의 세계 상황 (시뮬A 기반)
+  relatedFigures: {             // 관련 인물 (부모/스승 등)
+    name: string;
+    role: string;               // 아버지, 어머니, 스승, 조력자 등
+    event: string;              // 이 인물에게 일어난 일
+  }[];
+  impact: string;               // 주인공 출생/성장에 미친 영향
+  category: 'family' | 'world' | 'mentor' | 'fate';
+}
+
+// 주인공 전사 시뮬레이션 결과 (구간 1)
+export interface ProtagonistPrehistory {
+  events: PrehistoryEvent[];
+  generatedAt: string;
+  worldHistoryEraIds: string[]; // 참조한 세계 역사 시대 ID들
+  summary: string;              // 전사 요약 (집필 프롬프트용)
+}
+
+// 시뮬레이션 B 구간 3: 소설 진행 중 시간 점프
+export interface TimelineAdvance {
+  id: string;
+  fromAge: number;
+  toAge: number;
+  duration: string;             // "3개월", "1년" 등
+  changes: {
+    physical?: string;          // 신체 변화
+    mental?: string;            // 정신/심리 변화
+    ability?: string;           // 능력 변화
+    relationship?: string;      // 관계 변화
+    worldEvent?: string;        // 그 기간 세계에서 일어난 일
+  };
+  summary: string;              // 점프 기간 요약
+  generatedAt: string;
+}
+
+// 드릴다운된 세계 역사 (하위 기간)
+export interface WorldHistorySubEra {
+  id: string;
+  parentEraId: string;          // 상위 시대 ID
+  yearRange: [number, number];
+  name: string;
+  description: string;
+  keyEvents: string[];
+  factionChanges?: string;
+  notableFigures?: string[];
+  mood?: string;
+}
+
+// 확장된 세계 역사 시대 (드릴다운 지원)
+export interface WorldHistoryEraExtended extends WorldHistoryEra {
+  subEras?: WorldHistorySubEra[];  // 드릴다운된 하위 기간들
+  isDrilledDown: boolean;          // 드릴다운 여부
 }
 
 // === 에피소드 디렉팅 시스템 (PD 디렉팅) ===

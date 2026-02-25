@@ -21,6 +21,7 @@ export interface ProjectRow {
   viewpoint: string;
   direction: string | null;
   author_persona: AuthorPersonaJson;
+  author_config: AuthorConfigJson | null;
   layers: LayersJson;
   layer_status: LayerStatusJson;
   current_layer: string;
@@ -32,6 +33,10 @@ export interface ProjectRow {
   feedback_history: FeedbackJson[];
   messages: MessageJson[];
   writing_memory: WritingMemoryJson | null;
+  // 이원화 시뮬레이션 필드
+  dual_simulation_config: DualSimulationConfigJson | null;
+  protagonist_prehistory: ProtagonistPrehistoryJson | null;
+  timeline_advances: TimelineAdvanceJson[] | null;
   is_public: boolean;
   created_at: string;
   updated_at: string;
@@ -46,6 +51,7 @@ export interface ProjectInsert {
   viewpoint: string;
   direction?: string | null;
   author_persona: AuthorPersonaJson;
+  author_config?: AuthorConfigJson | null;
   layers: LayersJson;
   layer_status: LayerStatusJson;
   current_layer: string;
@@ -57,6 +63,10 @@ export interface ProjectInsert {
   feedback_history?: FeedbackJson[];
   messages?: MessageJson[];
   writing_memory?: WritingMemoryJson | null;
+  // 이원화 시뮬레이션 필드
+  dual_simulation_config?: DualSimulationConfigJson | null;
+  protagonist_prehistory?: ProtagonistPrehistoryJson | null;
+  timeline_advances?: TimelineAdvanceJson[] | null;
   is_public?: boolean;
   created_at?: string;
   updated_at?: string;
@@ -69,6 +79,7 @@ export interface ProjectUpdate {
   viewpoint?: string;
   direction?: string | null;
   author_persona?: AuthorPersonaJson;
+  author_config?: AuthorConfigJson | null;
   layers?: LayersJson;
   layer_status?: LayerStatusJson;
   current_layer?: string;
@@ -80,6 +91,10 @@ export interface ProjectUpdate {
   feedback_history?: FeedbackJson[];
   messages?: MessageJson[];
   writing_memory?: WritingMemoryJson | null;
+  // 이원화 시뮬레이션 필드
+  dual_simulation_config?: DualSimulationConfigJson | null;
+  protagonist_prehistory?: ProtagonistPrehistoryJson | null;
+  timeline_advances?: TimelineAdvanceJson[] | null;
   is_public?: boolean;
   updated_at?: string;
 }
@@ -89,6 +104,16 @@ export interface AuthorPersonaJson {
   id: string;
   name: string;
   style?: unknown;
+}
+
+// 새로운 작가 설정 (다중 작가 시스템)
+export interface AuthorConfigJson {
+  genre: string;
+  customGenre?: string;
+  toneDensity: string;
+  moods: string[];
+  dialogueStyle: string;
+  descriptionDensity: string;
 }
 
 export interface LayersJson {
@@ -213,6 +238,59 @@ export interface MessageJson {
   choices?: unknown[];
   episode?: unknown;
   timestamp: string;
+}
+
+// 이원화 시뮬레이션 설정
+export interface DualSimulationConfigJson {
+  worldHistory: {
+    startYearsBefore: number;
+    endYearsBefore: number;
+    unit: number;
+  };
+  protagonist: {
+    prehistoryStart: number;
+    novelStartAge: number;
+    currentAge: number;
+    prehistoryUnit: number;
+  };
+}
+
+// 주인공 전사 시뮬레이션 결과
+export interface ProtagonistPrehistoryJson {
+  events: {
+    id: string;
+    yearsBefore: number;
+    title: string;
+    description: string;
+    worldContext: string;
+    relatedFigures: {
+      name: string;
+      role: string;
+      event: string;
+    }[];
+    impact: string;
+    category: string;
+  }[];
+  generatedAt: string;
+  worldHistoryEraIds: string[];
+  summary: string;
+}
+
+// 시간 점프 기록
+export interface TimelineAdvanceJson {
+  id: string;
+  fromAge: number;
+  toAge: number;
+  duration: string;
+  changes: {
+    physical?: string;
+    mental?: string;
+    ability?: string;
+    relationship?: string;
+    worldEvent?: string;
+  };
+  summary: string;
+  generatedAt: string;
 }
 
 // Writing Memory (자가진화 피드백 루프)

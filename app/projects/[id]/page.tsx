@@ -217,7 +217,7 @@ export default function ProjectConversationPage() {
   const [showTimeoutMessage, setShowTimeoutMessage] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
   const [retryAction, setRetryAction] = useState<(() => void) | null>(null);
-  const [sideTab, setSideTab] = useState<'world' | 'timeline' | 'character' | 'manuscript'>('world');
+  const [sideTab, setSideTab] = useState<'world' | 'historyA' | 'protagonistB' | 'manuscript'>('world');
   const [editingEpisodeId, setEditingEpisodeId] = useState<string | null>(null);
   const [isRevising, setIsRevising] = useState(false);
   const [showMobilePanel, setShowMobilePanel] = useState(false);
@@ -1311,6 +1311,8 @@ export default function ProjectConversationPage() {
             viewpoint: project.viewpoint,
             authorPersonaId: project.authorPersona?.id,
           },
+          // 새로운 작가 설정 (다중 작가 시스템)
+          authorConfig: project.authorConfig,
           confirmedLayers: {
             world: layerToString(project.layers.world.data),
             coreRules: layerToString(project.layers.coreRules.data),
@@ -1484,7 +1486,7 @@ export default function ProjectConversationPage() {
         });
       }
     } else if (action === 'view_history') {
-      setSideTab('timeline');
+      setSideTab('historyA');
     }
   };
 
@@ -2310,7 +2312,7 @@ export default function ProjectConversationPage() {
           <div className="w-80 lg:w-96 border-l border-base-border bg-base-secondary">
             {/* 탭 */}
             <div className="flex border-b border-base-border">
-              {(['world', 'timeline', 'character', 'manuscript'] as const).map((tab) => (
+              {(['world', 'historyA', 'protagonistB', 'manuscript'] as const).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => setSideTab(tab)}
@@ -2320,15 +2322,15 @@ export default function ProjectConversationPage() {
                       : 'text-text-muted hover:text-text-secondary'
                   }`}
                 >
-                  {tab === 'world' ? '세계' : tab === 'timeline' ? '역사' : tab === 'character' ? '캐릭터' : '원고'}
+                  {tab === 'world' ? '세계' : tab === 'historyA' ? '역사A' : tab === 'protagonistB' ? '주인공B' : '원고'}
                 </button>
               ))}
             </div>
 
             {/* 탭 내용 */}
             <div className="overflow-y-auto p-4" style={{ height: 'calc(100% - 45px)' }}>
-              {/* 세계관 편집 버튼 - 세계/캐릭터 탭에서 표시 */}
-              {(sideTab === 'world' || sideTab === 'character') && (
+              {/* 세계관 편집 버튼 - 세계/주인공B 탭에서 표시 */}
+              {(sideTab === 'world' || sideTab === 'protagonistB') && (
                 <button
                   onClick={() => setShowWorldEditor(true)}
                   className="w-full mb-4 py-2 px-3 rounded-lg border border-dashed border-yellow-500/50 text-yellow-400 text-sm hover:bg-yellow-500/10 transition-colors flex items-center justify-center gap-2"
@@ -2507,8 +2509,61 @@ export default function ProjectConversationPage() {
                 </div>
               )}
 
-              {sideTab === 'timeline' && (
+              {sideTab === 'historyA' && (
                 <div className="space-y-4">
+                  {/* 역사A: 세계 역사 시뮬레이션 - 이원화 시뮬레이션 */}
+                  <div className="rounded-lg bg-base-primary p-3 border border-base-border">
+                    <h3 className="text-sm font-medium text-text-primary mb-2 flex items-center gap-2">
+                      <span className="text-amber-400">🌍</span>
+                      세계 역사 시뮬레이션
+                    </h3>
+                    <p className="text-xs text-text-muted mb-3">
+                      세계의 역사를 시뮬레이션합니다. 시간 범위와 단위를 설정하세요.
+                    </p>
+
+                    {/* 시뮬레이션 범위 설정 */}
+                    <div className="space-y-2 mb-3">
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="text-text-muted w-16">시작:</span>
+                        <input
+                          type="number"
+                          className="flex-1 px-2 py-1 rounded bg-base-secondary border border-base-border text-text-primary text-xs"
+                          placeholder="1000"
+                          defaultValue={project.dualSimulationConfig?.worldHistory?.startYearsBefore || 1000}
+                        />
+                        <span className="text-text-muted">년 전</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="text-text-muted w-16">종료:</span>
+                        <input
+                          type="number"
+                          className="flex-1 px-2 py-1 rounded bg-base-secondary border border-base-border text-text-primary text-xs"
+                          placeholder="0"
+                          defaultValue={project.dualSimulationConfig?.worldHistory?.endYearsBefore || 0}
+                        />
+                        <span className="text-text-muted">년 전</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-xs">
+                        <span className="text-text-muted w-16">단위:</span>
+                        <select
+                          className="flex-1 px-2 py-1 rounded bg-base-secondary border border-base-border text-text-primary text-xs"
+                          defaultValue={project.dualSimulationConfig?.worldHistory?.unit || 100}
+                        >
+                          <option value={100}>100년</option>
+                          <option value={50}>50년</option>
+                          <option value={10}>10년</option>
+                          <option value={1}>1년</option>
+                        </select>
+                      </div>
+                    </div>
+
+                    <button
+                      className="w-full py-2 rounded-lg bg-amber-500/20 text-amber-400 text-sm hover:bg-amber-500/30 transition-colors"
+                    >
+                      세계 역사 생성
+                    </button>
+                  </div>
+
                   {/* 타임라인 편집 버튼 */}
                   <button
                     onClick={() => setShowTimelineEditor(true)}
@@ -2517,6 +2572,8 @@ export default function ProjectConversationPage() {
                     <span>📅</span>
                     <span>역사 타임라인 편집</span>
                   </button>
+
+                  {/* 기존 세계 역사 표시 */}
                   <WorldTimelinePanel
                     eras={project.worldHistory.eras}
                     decades={project.worldHistory.detailedDecades}
@@ -2525,8 +2582,86 @@ export default function ProjectConversationPage() {
                 </div>
               )}
 
-              {sideTab === 'character' && (
+              {sideTab === 'protagonistB' && (
                 <div className="space-y-4">
+                  {/* 주인공B: 주인공 시뮬레이션 - 이원화 시뮬레이션 */}
+                  <div className="rounded-lg bg-base-primary p-3 border border-seojin/30">
+                    <h3 className="text-sm font-medium text-text-primary mb-2 flex items-center gap-2">
+                      <span className="text-seojin">👤</span>
+                      주인공 시뮬레이션
+                    </h3>
+                    <p className="text-xs text-text-muted mb-3">
+                      주인공의 일대기를 3구간으로 시뮬레이션합니다.
+                    </p>
+
+                    {/* 3구간 시뮬레이션 */}
+                    <div className="space-y-3">
+                      {/* 구간 1: 전사 (출생 전) */}
+                      <div className="rounded-lg bg-base-secondary p-2 border border-base-border">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-medium text-purple-400">구간 1: 전사(前史)</span>
+                          {project.protagonistPrehistory && (
+                            <span className="text-xs text-seojin">✓ 완료</span>
+                          )}
+                        </div>
+                        <p className="text-xs text-text-muted mb-2">주인공 출생 전 부모/스승 세대 이야기</p>
+                        <div className="flex items-center gap-2 text-xs mb-2">
+                          <span className="text-text-muted">범위:</span>
+                          <input
+                            type="number"
+                            className="w-16 px-2 py-1 rounded bg-base-tertiary border border-base-border text-text-primary text-xs"
+                            placeholder="30"
+                            defaultValue={project.dualSimulationConfig?.protagonist?.prehistoryStart || 30}
+                          />
+                          <span className="text-text-muted">년 전 ~ 출생</span>
+                        </div>
+                        <button className="w-full py-1.5 rounded bg-purple-500/20 text-purple-400 text-xs hover:bg-purple-500/30 transition-colors">
+                          전사 시뮬레이션
+                        </button>
+                      </div>
+
+                      {/* 구간 2: 성장기 (0세 ~ 소설 시작) */}
+                      <div className="rounded-lg bg-base-secondary p-2 border border-base-border">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-medium text-blue-400">구간 2: 성장기</span>
+                        </div>
+                        <p className="text-xs text-text-muted mb-2">0세부터 소설 시작 시점까지</p>
+                        <div className="flex items-center gap-2 text-xs mb-2">
+                          <span className="text-text-muted">소설 시작:</span>
+                          <input
+                            type="number"
+                            className="w-16 px-2 py-1 rounded bg-base-tertiary border border-base-border text-text-primary text-xs"
+                            placeholder="18"
+                            defaultValue={project.dualSimulationConfig?.protagonist?.novelStartAge || 18}
+                          />
+                          <span className="text-text-muted">세</span>
+                        </div>
+                        <button className="w-full py-1.5 rounded bg-blue-500/20 text-blue-400 text-xs hover:bg-blue-500/30 transition-colors">
+                          성장기 시뮬레이션
+                        </button>
+                      </div>
+
+                      {/* 구간 3: 소설 진행 (시간 점프) */}
+                      <div className="rounded-lg bg-base-secondary p-2 border border-base-border">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-medium text-amber-400">구간 3: 소설 진행</span>
+                        </div>
+                        <p className="text-xs text-text-muted mb-2">소설 중 시간 점프 시뮬레이션</p>
+                        <div className="text-xs text-text-muted">
+                          현재 나이: {project.dualSimulationConfig?.protagonist?.currentAge || project.dualSimulationConfig?.protagonist?.novelStartAge || 18}세
+                        </div>
+                        {project.timelineAdvances && project.timelineAdvances.length > 0 && (
+                          <div className="mt-2 text-xs text-amber-300">
+                            시간 점프 {project.timelineAdvances.length}회 기록됨
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <hr className="border-base-border" />
+
+                  {/* 주인공 정보 */}
                   {project.layers.heroArc.data ? (
                     <div
                       className="rounded-lg bg-base-primary p-3 cursor-pointer hover:bg-base-tertiary transition-colors group"
@@ -2818,7 +2953,7 @@ export default function ProjectConversationPage() {
       {/* 모바일 바텀 탭 바 */}
       {isMobile && (
         <div className="bottom-tab-bar flex justify-around py-2">
-          {(['world', 'timeline', 'character', 'manuscript'] as const).map((tab) => (
+          {(['world', 'historyA', 'protagonistB', 'manuscript'] as const).map((tab) => (
             <button
               key={tab}
               onClick={() => {
@@ -2830,10 +2965,10 @@ export default function ProjectConversationPage() {
               }`}
             >
               <span className="text-lg">
-                {tab === 'world' ? '🌍' : tab === 'timeline' ? '📅' : tab === 'character' ? '👤' : '📝'}
+                {tab === 'world' ? '🌍' : tab === 'historyA' ? '📅' : tab === 'protagonistB' ? '👤' : '📝'}
               </span>
               <span className="text-xs">
-                {tab === 'world' ? '세계' : tab === 'timeline' ? '역사' : tab === 'character' ? '캐릭터' : '원고'}
+                {tab === 'world' ? '세계' : tab === 'historyA' ? '역사A' : tab === 'protagonistB' ? '주인공B' : '원고'}
               </span>
             </button>
           ))}
@@ -2858,7 +2993,7 @@ export default function ProjectConversationPage() {
 
           {/* 탭 헤더 */}
           <div className="flex border-b border-base-border px-4">
-            {(['world', 'timeline', 'character', 'manuscript'] as const).map((tab) => (
+            {(['world', 'historyA', 'protagonistB', 'manuscript'] as const).map((tab) => (
               <button
                 key={tab}
                 onClick={() => setSideTab(tab)}
@@ -2868,7 +3003,7 @@ export default function ProjectConversationPage() {
                     : 'text-text-muted'
                 }`}
               >
-                {tab === 'world' ? '세계' : tab === 'timeline' ? '역사' : tab === 'character' ? '캐릭터' : '원고'}
+                {tab === 'world' ? '세계' : tab === 'historyA' ? '역사A' : tab === 'protagonistB' ? '주인공B' : '원고'}
               </button>
             ))}
           </div>
@@ -2916,8 +3051,18 @@ export default function ProjectConversationPage() {
               </div>
             )}
 
-            {sideTab === 'timeline' && (
+            {sideTab === 'historyA' && (
               <div className="space-y-4">
+                {/* 역사A: 세계 역사 시뮬레이션 (모바일) */}
+                <div className="rounded-lg bg-base-primary p-3 border border-base-border">
+                  <h3 className="text-sm font-medium text-text-primary mb-2 flex items-center gap-2">
+                    <span className="text-amber-400">🌍</span>
+                    세계 역사 시뮬레이션
+                  </h3>
+                  <button className="w-full py-2 rounded-lg bg-amber-500/20 text-amber-400 text-sm hover:bg-amber-500/30 transition-colors">
+                    세계 역사 생성
+                  </button>
+                </div>
                 {/* 타임라인 편집 버튼 */}
                 <button
                   onClick={() => setShowTimelineEditor(true)}
@@ -2934,8 +3079,25 @@ export default function ProjectConversationPage() {
               </div>
             )}
 
-            {sideTab === 'character' && (
+            {sideTab === 'protagonistB' && (
               <div className="space-y-4">
+                {/* 주인공B: 주인공 시뮬레이션 (모바일) */}
+                <div className="rounded-lg bg-base-primary p-3 border border-seojin/30">
+                  <h3 className="text-sm font-medium text-text-primary mb-2 flex items-center gap-2">
+                    <span className="text-seojin">👤</span>
+                    주인공 시뮬레이션
+                  </h3>
+                  <div className="space-y-2">
+                    <button className="w-full py-1.5 rounded bg-purple-500/20 text-purple-400 text-xs hover:bg-purple-500/30 transition-colors">
+                      구간 1: 전사 시뮬레이션
+                    </button>
+                    <button className="w-full py-1.5 rounded bg-blue-500/20 text-blue-400 text-xs hover:bg-blue-500/30 transition-colors">
+                      구간 2: 성장기 시뮬레이션
+                    </button>
+                  </div>
+                </div>
+
+                {/* 주인공 정보 */}
                 {project.layers.heroArc.data ? (
                   <div className="rounded-lg bg-base-primary p-3">
                     <div className="mb-1 text-xs text-seojin">주인공</div>

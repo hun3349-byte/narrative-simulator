@@ -1,6 +1,6 @@
 # Narrative Simulator - 프로젝트 가이드
 
-## 현재 진행 현황 (2026-02-24)
+## 현재 진행 현황 (2026-02-25)
 
 ### 사용자 역할 정의
 **PD (Producer/Director)**: 전체적인 소설의 집필과 세계관, 배경, 등장인물, 상황, 에피소드 전체부분의 디테일한 디렉팅
@@ -16,8 +16,11 @@
 8. ✅ **에피소드 레벨 디렉팅 시스템** - PD 디렉팅 기능 완료
 9. ✅ **세계 역사 타임라인 편집** - 시대/10년 단위 역사 편집 기능
 10. ✅ **모바일 파일 업로드 호환성** - TXT/JSON 모바일 업로드 개선
+11. ✅ **다중 작가 AI 시스템** - 장르/톤/분위기 조합 + 6단계 집필 + 3인 검토 시스템
+12. ✅ **이원화 시뮬레이션 시스템** - 세계 역사(A) + 주인공 시점(B) 분리 시뮬레이션
 
 ### 다음 작업
+- 이원화 시뮬레이션 UI 버튼 동작 연결 (API 호출)
 - 추가 기능 개선 및 사용자 피드백 반영
 
 ### 배포 정보
@@ -33,6 +36,59 @@
 - 프로젝트 정체서(`project-identity.md`)와 최상위 원칙(`supreme-principles.md`)을 모든 설계/구현 판단의 기준으로 삼는다.
 
 ### 최근 업데이트
+- **2026-02-25**: 이원화 시뮬레이션 시스템 구현
+  - **Simulation A (세계 역사)**: 세계 역사를 사용자 지정 범위와 단위로 시뮬레이션
+    - `startYearsBefore`, `endYearsBefore`, `unit` 설정 가능
+    - 드릴다운 기능: 특정 시대를 더 세분화된 단위로 상세화
+    - `/api/generate-world-history` API 확장 (드릴다운 모드 지원)
+  - **Simulation B (주인공 시점)**: 주인공의 일대기를 3구간으로 시뮬레이션
+    - 구간 1: 전사(前史) - 주인공 출생 전 부모/스승 세대
+    - 구간 2: 성장기 - 0세부터 소설 시작 시점까지
+    - 구간 3: 소설 진행 - 시간 점프 시뮬레이션
+  - **새 API**:
+    - `/api/simulate-prehistory`: 주인공 전사 시뮬레이션
+    - `/api/advance-timeline`: 소설 중 시간 점프 시뮬레이션
+  - **새 타입**:
+    - `DualSimulationConfig`, `WorldHistorySimulationConfig`, `ProtagonistSimulationConfig`
+    - `PrehistoryEvent`, `ProtagonistPrehistory`, `TimelineAdvance`, `WorldHistorySubEra`
+  - **스토어 확장**:
+    - `setDualSimulationConfig`, `updateDualSimulationConfig`
+    - `setProtagonistPrehistory`, `addTimelineAdvance`, `updateTimelineAdvance`
+  - **UI 탭 변경**: [세계] [역사] [캐릭터] [원고] → [세계] [역사A] [주인공B] [원고]
+  - **수정 파일**:
+    - `lib/types/index.ts`: 이원화 시뮬레이션 타입 추가
+    - `lib/store/project-store.ts`: 스토어 액션 추가
+    - `lib/supabase/types.ts`, `lib/supabase/db.ts`: Supabase 저장/로드 지원
+    - `app/api/generate-world-history/route.ts`: 사용자 설정 범위 + 드릴다운 지원
+    - `app/api/simulate-prehistory/route.ts`: 신규
+    - `app/api/advance-timeline/route.ts`: 신규
+    - `app/projects/[id]/page.tsx`: 탭 UI 변경 + 시뮬레이션 컨트롤
+- **2026-02-25**: 다중 작가 AI 시스템 구현
+  - 기존 4종 작가 페르소나 선택 → **장르 + 톤 + 분위기 조합** 방식으로 변경
+  - 5개 장르 DNA: 무협, 판타지, 현대판타지, 로맨스, 회귀/환생
+  - 톤 밀도 3단계: 라이트, 미디엄, 딥
+  - 분위기 6종 (복수 선택): 유머/자조, 서정적, 건조/하드보일드, 철학적, 다크/그리티, 열혈
+  - 대사 스타일 4종: 짧고 강렬, 현실적, 문어체, 혼합
+  - 묘사 밀도 3단계: 최소한, 균형, 풍부
+  - **집필 프로세스 4단계 → 6단계 재구성**:
+    - 1단계: 페르소나 장착 (장르 DNA + 톤 로드)
+    - 2단계: 설계관 사전 검토 (개연성/프로필/연속성)
+    - 3단계: 연출관 설계 (장면/호흡/클리프행어/잔향)
+    - 4단계: 초고 집필
+    - 5단계: 3인 합동 검토 (설계관+연출관+시장관)
+    - 6단계: 최종 수정
+  - **3인 검토 체계**:
+    - 설계관 (논리): 캐릭터 행동 일치, 힘 밸런스, 이전 화 모순, 세계관 규칙
+    - 연출관 (몰입): 첫 문단, 문장 호흡, 감각 번역, 잔향, 클리프행어
+    - 시장관 (상업성): 500자 훅, 분량, 보상 지연, 독자 반응, 몰입 4요소
+  - 하위 호환: `inferConfigFromPersonaId()` 함수로 기존 authorPersonaId 자동 변환
+  - 수정 파일:
+    - `lib/types/index.ts`: GenreType, ToneDensity, MoodType, DialogueStyle, DescriptionDensity, AuthorConfig, GenrePersonaDNA 타입 추가
+    - `lib/presets/genre-personas.ts`: 신규 - 장르 DNA, 가이드, 프롬프트 빌더
+    - `app/projects/new/page.tsx`: 새 프로젝트 생성 UI 전면 변경
+    - `lib/store/project-store.ts`: authorConfig 지원
+    - `lib/supabase/types.ts`, `lib/supabase/db.ts`: author_config 필드 추가
+    - `app/api/write-episode/route.ts`: 6단계 + 3인 검토 프롬프트
 - **2026-02-24**: 모바일 파일 업로드 호환성 개선
   - 숨겨진 파일 인풋을 sr-only 패턴으로 변경 (position: absolute, clip)
   - accept 속성에 MIME 타입 추가 (`application/json`, `text/plain`, `text/*`)

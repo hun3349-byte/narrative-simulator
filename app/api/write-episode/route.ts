@@ -1,7 +1,9 @@
 import { NextRequest } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
 import { AUTHOR_PERSONA_PRESETS } from '@/lib/presets/author-personas';
+import { buildAuthorPersonaPrompt, ensureAuthorConfig } from '@/lib/presets/genre-personas';
 import type {
+  AuthorConfig,
   Episode,
   Feedback,
   FeedbackType,
@@ -618,13 +620,19 @@ const CLIFFHANGER_TYPES = [
   '인물 등장',      // "그리고 그가 나타났다."
 ] as const;
 
-// 시스템 프롬프트 (고정 - 작가 페르소나 + 4단계 사고 + 문체 규칙 + v2 강화)
+// 시스템 프롬프트 (6단계 + 3인 검토 시스템)
 function buildSystemPrompt(
   persona: typeof AUTHOR_PERSONA_PRESETS[0] | undefined,
   viewpoint: string,
   episodeNumber: number,
-  previousMonologueTone?: MonologueTone
+  previousMonologueTone?: MonologueTone,
+  authorConfig?: AuthorConfig
 ): string {
+  // 장르 페르소나 (AuthorConfig 기반 - 새 시스템)
+  const genrePersonaSection = authorConfig
+    ? buildAuthorPersonaPrompt(authorConfig)
+    : '';
+
   const viewpointRule = viewpoint === 'first_person'
     ? '1인칭 주인공 시점. 모든 서술을 "나"로. 주인공이 모르는 것은 독자도 모른다. 다른 인물의 속마음은 추측만 가능.'
     : '3인칭 작가 시점. 캐릭터 이름으로 서술. 여러 인물 시점 전환 가능. 인물의 속마음 직접 서술 가능.';
@@ -653,6 +661,7 @@ function buildSystemPrompt(
 ## 작가 정체성
 ${persona?.name || '웹소설 작가'}
 ${persona?.style || ''}
+${genrePersonaSection ? `\n${genrePersonaSection}` : ''}
 
 ## 시점
 ${viewpointRule}
@@ -833,25 +842,33 @@ ${pacingGuide}
 대사 길이: 3줄 이내. 핵심 대사는 1줄.
 대사 뒤 반드시 행동/반응. 대사 탁구 금지.
 
-## 4단계 집필 프로세스
-반드시 아래 4단계를 내부적으로 수행한 후, 최종 본문만 출력하세요.
-중간 과정(1~4단계 메모)은 절대 출력하지 마세요.
+## 6단계 집필 프로세스 + 3인 검토 시스템
+반드시 아래 6단계를 내부적으로 수행한 후, 최종 본문만 출력하세요.
+중간 과정(1~6단계 메모)은 절대 출력하지 마세요.
 
-### 1단계: 감정 감독
-- 주인공 감정의 시작점, 변화점, 폭발점 설계
-- 독자가 느껴야 할 감정 설계
-- 몰입 4요소 확인 (결핍/질문/지연/보상)
-- 캐릭터 불안 3조건 확인
-- 감정은 행동/신체반응으로만 드러낸다
+### 1단계: 페르소나 장착
+- 장르 DNA 로드 (문체/전투/대사 규칙)
+- 톤 밀도 적용 (라이트/미디엄/딥)
+- 분위기 설정 (유머/서정/건조/철학/다크/열혈)
+- 대사 스타일 결정 (짧고 강렬/현실적/문어체/혼합)
+- 묘사 밀도 결정 (최소한/균형/풍부)
 
-### 2단계: 장면 감독
-- 카메라 시점 (클로즈업/와이드)
-- 공간 묘사 (시각, 청각, 후각, 촉각)
-- 긴장 곡선 설계 (3중 긴장 확인)
-- 호흡 속도 결정 (행동=빠르게, 감정=느리게)
+### 2단계: 설계관 사전 검토
+- 캐릭터 행동이 프로필과 일치하는가?
+- 힘의 밸런스가 맞는가?
+- 이전 화와 모순이 없는가?
+- 세계관 규칙 위반 여부 확인
+- 개연성 점검 완료 후 진행
+
+### 3단계: 연출관 설계
+- 카메라 시점 결정 (클로즈업/와이드/전환)
+- 장면별 호흡 속도 설정 (행동=빠르게, 감정=느리게)
+- 클리프행어 유형 선택 (7유형 중 택1)
+- 잔향 포인트 배치 (큰 사건 후 고요)
+- 3중 훅 설계 (오프닝/미드포인트/클로징)
 - 한 장면 800자 이내
 
-### 3단계: 초고 집필
+### 4단계: 초고 집필
 - 설명 최소, 행동 중심
 - 문장 리듬: 짧→중→길→짧 패턴
 - 대사는 짧고 강렬하게, 전후에 표정/동작 묘사
@@ -859,12 +876,35 @@ ${pacingGuide}
 - 선택한 독백 톤 유지
 - 감각 번역 적용 (감정→신체반응)
 
-### 4단계: 수정
+### 5단계: 3인 합동 검토
+내부적으로 3명의 검토관 관점에서 점검하세요.
+
+[설계관 - 논리]
+✅ 캐릭터 행동이 프로필과 일치하는가?
+✅ 힘의 밸런스가 맞는가?
+✅ 이전 화와 모순이 없는가?
+✅ 세계관 규칙 위반 여부
+
+[연출관 - 몰입]
+✅ 첫 문단이 강력한가?
+✅ 문장 호흡에 리듬이 있는가?
+✅ 감각 번역이 되었는가? (감정→신체반응)
+✅ 잔향이 있는가? (큰 사건 후 고요)
+✅ 클리프행어 유형 확인
+
+[시장관 - 상업성]
+✅ 500자 안에 훅이 있는가?
+✅ 분량 적정 여부 (5000~7000자)
+✅ 보상 지연 여부 (3화째 보상 없으면 경고)
+✅ 독자 반응 예상 (고구마/사이다)
+✅ 몰입 4요소 충족 여부 (결핍/질문/지연/보상)
+
+### 6단계: 최종 수정
+- 3인 검토에서 지적된 문제 수정
 - AI스러운 표현 제거 (균일한 문장 길이, 정돈된 나열)
 - 거친 초고 느낌 유지
-- 감정 잔향 삽입 (큰 사건 후 고요)
-- 3중 훅 확인 (오프닝/미드포인트/클로징)
-- 몰입 4요소 최종 검증
+- 감정 잔향 최종 확인
+- 3중 훅 최종 검증
 
 ## 절대 규칙
 1. 분량: 반드시 ${TARGET_MIN_CHAR}자 이상 ${TARGET_MAX_CHAR}자 이하
@@ -1078,10 +1118,12 @@ async function generateEpisode(
   console.log(systemPrompt.substring(0, 500));
   console.log('');
   console.log('=== SYSTEM PROMPT KEYWORDS CHECK ===');
-  console.log('Contains "4단계":', systemPrompt.includes('4단계'));
-  console.log('Contains "감정 감독":', systemPrompt.includes('감정 감독'));
-  console.log('Contains "5000":', systemPrompt.includes('5000'));
-  console.log('Contains "장면 감독":', systemPrompt.includes('장면 감독'));
+  console.log('Contains "6단계":', systemPrompt.includes('6단계'));
+  console.log('Contains "3인 검토":', systemPrompt.includes('3인 검토'));
+  console.log('Contains "페르소나 장착":', systemPrompt.includes('페르소나 장착'));
+  console.log('Contains "설계관":', systemPrompt.includes('설계관'));
+  console.log('Contains "연출관":', systemPrompt.includes('연출관'));
+  console.log('Contains "시장관":', systemPrompt.includes('시장관'));
   console.log('');
   console.log('=== USER PROMPT FIRST 500 ===');
   console.log(userPrompt.substring(0, 500));
@@ -1173,6 +1215,7 @@ export async function POST(req: NextRequest) {
       activeContext,
       writingMemory,
       simulationProfiles,  // 시뮬레이션 파생 캐릭터 프로필
+      authorConfig,        // 새로운 작가 설정 (다중 작가 시스템)
     } = body;
 
     // 에피소드 번호 유효성 검사
@@ -1215,8 +1258,14 @@ export async function POST(req: NextRequest) {
     const lastEpisode = previousEpisodes?.[previousEpisodes.length - 1];
     const previousMonologueTone = (lastEpisode as Episode & { monologueTone?: MonologueTone })?.monologueTone;
 
-    // 시스템 프롬프트 (고정 + 화수/톤 기반 동적 요소)
-    const systemPrompt = buildSystemPrompt(persona, viewpoint, episodeNumber, previousMonologueTone);
+    // AuthorConfig 확인 (없으면 authorPersonaId에서 변환 - 하위 호환)
+    const resolvedAuthorConfig = ensureAuthorConfig(
+      authorConfig as AuthorConfig | undefined,
+      projectConfig?.authorPersonaId as string | undefined
+    );
+
+    // 시스템 프롬프트 (6단계 + 3인 검토 + authorConfig 기반 페르소나)
+    const systemPrompt = buildSystemPrompt(persona, viewpoint, episodeNumber, previousMonologueTone, resolvedAuthorConfig);
 
     // 토큰 예산 모니터링
     const systemTokens = estimateTokens(systemPrompt);

@@ -1,6 +1,6 @@
 import { supabase, isSupabaseEnabled, getBrowserUserId } from './client';
 import type { SharedProjectData, PublicProjectSummary } from './types';
-import type { Project, WorldBible, EpisodeLog, WritingMemory } from '../types';
+import type { Project, WorldBible, EpisodeLog, WritingMemory, AuthorConfig, DualSimulationConfig, ProtagonistPrehistory, TimelineAdvance } from '../types';
 
 // 프로젝트를 Supabase 형식으로 변환 (사용자 스키마에 맞춤)
 function projectToSupabase(project: Project) {
@@ -16,6 +16,15 @@ function projectToSupabase(project: Project) {
       name: project.authorPersona.name,
       style: project.authorPersona.style,
     },
+    // 새로운 작가 설정 (다중 작가 시스템)
+    author_config: project.authorConfig ? {
+      genre: project.authorConfig.genre,
+      customGenre: project.authorConfig.customGenre,
+      toneDensity: project.authorConfig.toneDensity,
+      moods: project.authorConfig.moods,
+      dialogueStyle: project.authorConfig.dialogueStyle,
+      descriptionDensity: project.authorConfig.descriptionDensity,
+    } : null,
     // layers에 추가 정보 포함
     layers: {
       world: project.layers.world.data,
@@ -84,6 +93,10 @@ function projectToSupabase(project: Project) {
     })) || [],
     // 자가진화 피드백 루프
     writing_memory: project.writingMemory || null,
+    // 이원화 시뮬레이션
+    dual_simulation_config: project.dualSimulationConfig || null,
+    protagonist_prehistory: project.protagonistPrehistory || null,
+    timeline_advances: project.timelineAdvances || null,
     // 공개 설정 (기본값: true)
     is_public: project.isPublic ?? true,
     created_at: project.createdAt,
@@ -153,6 +166,7 @@ export async function loadProjectsFromSupabase(): Promise<{ projects: Project[];
         viewpoint: row.viewpoint || '',
         direction: meta.direction || '',
         authorPersona: row.author_persona as Project['authorPersona'],
+        authorConfig: row.author_config ? row.author_config as AuthorConfig : undefined,
         currentLayer: (meta.currentLayer || 'world') as Project['currentLayer'],
         currentPhase: (meta.currentPhase || 'setup') as Project['currentPhase'],
         layers: {
@@ -179,6 +193,10 @@ export async function loadProjectsFromSupabase(): Promise<{ projects: Project[];
         episodeLogs: (row.episode_logs || []) as EpisodeLog[],
         // 자가진화 피드백 루프
         writingMemory: row.writing_memory as WritingMemory | undefined,
+        // 이원화 시뮬레이션
+        dualSimulationConfig: row.dual_simulation_config as DualSimulationConfig | undefined,
+        protagonistPrehistory: row.protagonist_prehistory as ProtagonistPrehistory | undefined,
+        timelineAdvances: (row.timeline_advances || []) as TimelineAdvance[],
         // 공개 설정
         isPublic: row.is_public ?? true,
         createdAt: row.created_at,
