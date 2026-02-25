@@ -7,7 +7,7 @@ import { PERSONA_ICONS } from '@/lib/presets/author-personas';
 import { WorldTimelinePanel } from '@/components/world-timeline';
 import EpisodeViewer from '@/components/episode/EpisodeViewer';
 import EpisodeDirectionModal from '@/components/episode/EpisodeDirectionModal';
-import type { LayerName, Episode, Character, SimulationConfig, WorldEvent, CharacterSeed, FactCheckResult, BreadcrumbWarning, EpisodeLog, WritingMemory, NPCSeedInfo, SimulationNPC, SeedsLayer, EpisodeDirection, HeroArcLayer, VillainArcLayer, WorldHistoryEra, DetailedDecade, PrehistoryEvent, TimelineAdvance } from '@/lib/types';
+import type { LayerName, Episode, Character, SimulationConfig, WorldEvent, CharacterSeed, FactCheckResult, FactCheckContradiction, BreadcrumbWarning, EpisodeLog, WritingMemory, NPCSeedInfo, SimulationNPC, SeedsLayer, EpisodeDirection, HeroArcLayer, VillainArcLayer, WorldHistoryEra, DetailedDecade, PrehistoryEvent, TimelineAdvance } from '@/lib/types';
 import { trackBreadcrumbs, generateBreadcrumbInstructions } from '@/lib/utils/breadcrumb-tracker';
 import { buildActiveContext } from '@/lib/utils/active-context';
 import { createEmptyWritingMemory, updateQualityTracker, processFeedback, analyzeEdit, integrateEditPatterns, getWritingMemoryStats } from '@/lib/utils/writing-memory';
@@ -227,6 +227,18 @@ export default function ProjectConversationPage() {
   const [factCheckResult, setFactCheckResult] = useState<FactCheckResult | null>(null);
   const [breadcrumbWarnings, setBreadcrumbWarnings] = useState<BreadcrumbWarning[]>([]);
   const [showFactCheckModal, setShowFactCheckModal] = useState(false);
+
+  // 모순 수정 비교 상태
+  const [revisionComparison, setRevisionComparison] = useState<{
+    originalContent: string;
+    revisedEpisode: Episode | null;
+    changedParts: { original: string; revised: string; reason: string }[];
+    suggestedWorldBibleUpdates: { field: string; currentValue: string; suggestedValue: string; reason: string }[];
+    authorComment: string;
+  } | null>(null);
+  const [showRevisionModal, setShowRevisionModal] = useState(false);
+  const [isFixingContradiction, setIsFixingContradiction] = useState(false);
+  const [ignoredContradictions, setIgnoredContradictions] = useState<{ episodeNumber: number; contradictions: FactCheckContradiction[]; ignoredAt: string }[]>([]);
   const [uploadedFileContent, setUploadedFileContent] = useState<string | null>(null);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [showAddCharacterModal, setShowAddCharacterModal] = useState(false);
@@ -3934,19 +3946,224 @@ export default function ProjectConversationPage() {
             </div>
             <div className="flex gap-2 border-t border-base-border px-4 py-3">
               <button
-                onClick={() => {
+                onClick={async () => {
+                  if (!factCheckResult || !project || !editingEpisodeId) return;
+                  const currentEpisode = project.episodes.find(ep => ep.id === editingEpisodeId);
+                  if (!currentEpisode) return;
+
+                  setIsFixingContradiction(true);
                   setShowFactCheckModal(false);
-                  // TODO: 수정 요청 로직
+
+                  try {
+                    const response = await fetch('/api/revise-episode', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({
+                        episode: currentEpisode,
+                        feedback: '',
+                        genre: project.genre,
+                        tone: project.tone,
+                        viewpoint: project.viewpoint,
+                        authorPersonaId: project.authorPersona.id,
+                        mode: 'contradiction',
+                        contradictions: factCheckResult.contradictions,
+                      }),
+                    });
+
+                    if (!response.ok) throw new Error('수정 요청 실패');
+
+                    const data = await response.json();
+
+                    if (data.episode) {
+                      setRevisionComparison({
+                        originalContent: data.originalContent || currentEpisode.content,
+                        revisedEpisode: data.episode,
+                        changedParts: data.changedParts || [],
+                        suggestedWorldBibleUpdates: data.suggestedWorldBibleUpdates || [],
+                        authorComment: data.authorComment || '수정했어.',
+                      });
+                      setShowRevisionModal(true);
+                    } else {
+                      addMessage({
+                        role: 'author',
+                        content: data.authorComment || '수정하는 중에 문제가 생겼어. 다시 시도해줘.',
+                      });
+                    }
+                  } catch (error) {
+                    console.error('Contradiction fix error:', error);
+                    addMessage({
+                      role: 'author',
+                      content: '모순 수정 중 오류가 발생했어. 다시 시도해줘.',
+                    });
+                  } finally {
+                    setIsFixingContradiction(false);
+                  }
                 }}
-                className="flex-1 rounded-lg bg-accent-primary px-4 py-2 text-sm text-white hover:bg-accent-primary/90"
+                disabled={isFixingContradiction}
+                className="flex-1 rounded-lg bg-accent-primary px-4 py-2 text-sm text-white hover:bg-accent-primary/90 disabled:opacity-50"
               >
-                수정 요청
+                {isFixingContradiction ? '수정 중...' : '수정 요청'}
               </button>
               <button
-                onClick={() => setShowFactCheckModal(false)}
+                onClick={() => {
+                  // 무시한 모순 로깅
+                  if (factCheckResult && project) {
+                    const currentEpisode = project.episodes.find(ep => ep.id === editingEpisodeId);
+                    setIgnoredContradictions(prev => [
+                      ...prev,
+                      {
+                        episodeNumber: currentEpisode?.number || 0,
+                        contradictions: factCheckResult.contradictions,
+                        ignoredAt: new Date().toISOString(),
+                      },
+                    ]);
+                    console.log('Ignored contradictions:', {
+                      episodeNumber: currentEpisode?.number,
+                      contradictions: factCheckResult.contradictions,
+                    });
+                  }
+                  setShowFactCheckModal(false);
+                  setFactCheckResult(null);
+                }}
                 className="flex-1 rounded-lg bg-base-tertiary px-4 py-2 text-sm text-text-secondary hover:bg-base-border"
               >
                 무시하고 진행
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 모순 수정 비교 모달 */}
+      {showRevisionModal && revisionComparison && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="max-w-4xl w-full bg-base-secondary rounded-xl shadow-xl border border-base-border max-h-[90vh] flex flex-col">
+            <div className="flex items-center justify-between border-b border-base-border px-4 py-3 shrink-0">
+              <h3 className="font-medium text-text-primary flex items-center gap-2">
+                📝 수정 비교
+              </h3>
+              <button
+                onClick={() => {
+                  setShowRevisionModal(false);
+                  setRevisionComparison(null);
+                }}
+                className="text-text-muted hover:text-text-primary"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {/* 작가 코멘트 */}
+              <div className="bg-accent-primary/10 rounded-lg p-3">
+                <div className="text-sm font-medium text-accent-primary mb-1">작가 코멘트</div>
+                <p className="text-sm text-text-secondary">{revisionComparison.authorComment}</p>
+              </div>
+
+              {/* 변경 부분 하이라이트 */}
+              {revisionComparison.changedParts.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium text-text-primary">변경된 부분</h4>
+                  {revisionComparison.changedParts.map((part, i) => (
+                    <div key={i} className="rounded-lg border border-base-border overflow-hidden">
+                      <div className="grid grid-cols-2 gap-px bg-base-border">
+                        <div className="bg-red-500/5 p-3">
+                          <div className="text-xs text-red-400 mb-1">원본</div>
+                          <p className="text-sm text-text-muted line-through">{part.original}</p>
+                        </div>
+                        <div className="bg-green-500/5 p-3">
+                          <div className="text-xs text-green-400 mb-1">수정</div>
+                          <p className="text-sm text-text-primary">{part.revised}</p>
+                        </div>
+                      </div>
+                      <div className="bg-base-tertiary px-3 py-2">
+                        <span className="text-xs text-text-muted">수정 이유: </span>
+                        <span className="text-xs text-text-secondary">{part.reason}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* World Bible 업데이트 제안 */}
+              {revisionComparison.suggestedWorldBibleUpdates.length > 0 && (
+                <div className="space-y-3">
+                  <h4 className="text-sm font-medium text-text-primary flex items-center gap-2">
+                    📚 World Bible 업데이트 제안
+                    <span className="text-xs text-text-muted">(선택사항)</span>
+                  </h4>
+                  {revisionComparison.suggestedWorldBibleUpdates.map((update, i) => (
+                    <div key={i} className="rounded-lg border border-yellow-500/30 bg-yellow-500/5 p-3">
+                      <div className="text-sm font-medium text-yellow-400 mb-2">{update.field}</div>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className="text-text-muted">현재: </span>
+                          <span className="text-text-secondary">{update.currentValue}</span>
+                        </div>
+                        <div>
+                          <span className="text-text-muted">제안: </span>
+                          <span className="text-accent-primary">{update.suggestedValue}</span>
+                        </div>
+                      </div>
+                      <div className="text-xs text-text-muted mt-2">이유: {update.reason}</div>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* 전체 본문 비교 (접기/펼치기) */}
+              <details className="group">
+                <summary className="cursor-pointer text-sm font-medium text-text-primary hover:text-accent-primary">
+                  전체 본문 비교 보기 ▸
+                </summary>
+                <div className="mt-3 grid grid-cols-2 gap-4">
+                  <div className="rounded-lg border border-base-border p-3 max-h-60 overflow-y-auto">
+                    <div className="text-xs text-text-muted mb-2">원본</div>
+                    <p className="text-sm text-text-secondary whitespace-pre-wrap">{revisionComparison.originalContent}</p>
+                  </div>
+                  <div className="rounded-lg border border-accent-primary/30 p-3 max-h-60 overflow-y-auto">
+                    <div className="text-xs text-accent-primary mb-2">수정본</div>
+                    <p className="text-sm text-text-primary whitespace-pre-wrap">{revisionComparison.revisedEpisode?.content}</p>
+                  </div>
+                </div>
+              </details>
+            </div>
+
+            <div className="flex gap-2 border-t border-base-border px-4 py-3 shrink-0">
+              <button
+                onClick={() => {
+                  if (revisionComparison.revisedEpisode && project) {
+                    // 수정본 채택
+                    updateEpisode(revisionComparison.revisedEpisode.id, revisionComparison.revisedEpisode);
+
+                    // Episode Log 업데이트 (모순 수정 반영)
+                    addMessage({
+                      role: 'author',
+                      content: `모순을 수정했어. ${revisionComparison.changedParts.length}개 부분을 고쳤어.`,
+                    });
+
+                    setShowRevisionModal(false);
+                    setRevisionComparison(null);
+                    setFactCheckResult(null);
+                  }
+                }}
+                className="flex-1 rounded-lg bg-accent-primary px-4 py-2 text-sm text-white hover:bg-accent-primary/90"
+              >
+                수정본 채택
+              </button>
+              <button
+                onClick={() => {
+                  setShowRevisionModal(false);
+                  setRevisionComparison(null);
+                  // 원본 유지 - fact check 결과는 남겨둠
+                  addMessage({
+                    role: 'author',
+                    content: '원본을 유지할게. 필요하면 나중에 직접 수정해도 돼.',
+                  });
+                }}
+                className="flex-1 rounded-lg bg-base-tertiary px-4 py-2 text-sm text-text-secondary hover:bg-base-border"
+              >
+                원본 유지
               </button>
             </div>
           </div>

@@ -19,6 +19,7 @@
 11. ✅ **다중 작가 AI 시스템** - 장르/톤/분위기 조합 + 6단계 집필 + 3인 검토 시스템
 12. ✅ **이원화 시뮬레이션 시스템** - 세계 역사(A) + 주인공 시점(B) 분리 시뮬레이션
 13. ✅ **이원화 시뮬레이션 UI 버튼 연결** - 역사A/주인공B 탭 버튼에 API 호출 연결
+14. ✅ **설정 모순 수정 요청 기능** - 팩트체크 모순 발견 시 자동 수정 및 비교 UI
 
 ### 다음 작업
 - 추가 기능 개선 및 사용자 피드백 반영
@@ -36,6 +37,24 @@
 - 프로젝트 정체서(`project-identity.md`)와 최상위 원칙(`supreme-principles.md`)을 모든 설계/구현 판단의 기준으로 삼는다.
 
 ### 최근 업데이트
+- **2026-02-25**: 설정 모순 수정 요청 기능 구현
+  - **팩트체크 모순 발견 시 "수정 요청" 버튼 동작**:
+    1. `/api/revise-episode` API에 `mode: 'contradiction'` 추가
+    2. 모순 데이터를 기반으로 AI가 해당 부분만 수정
+    3. 수정 전/후 비교 모달 표시 (변경 부분 하이라이트)
+    4. [수정본 채택] 또는 [원본 유지] 선택
+    5. World Bible 업데이트 제안 기능 (선택사항)
+  - **"무시하고 진행" 버튼**:
+    - 무시한 모순 로깅 (`ignoredContradictions` 상태)
+    - 콘솔에 무시 기록 출력
+  - **수정 파일**:
+    - `app/api/revise-episode/route.ts`: contradiction 모드 추가
+    - `app/projects/[id]/page.tsx`: 수정 비교 모달 UI + 핸들러
+  - **새 상태 변수**:
+    - `revisionComparison`: 원본/수정본/변경부분/World Bible 제안
+    - `showRevisionModal`: 비교 모달 표시
+    - `isFixingContradiction`: 수정 중 로딩 상태
+    - `ignoredContradictions`: 무시된 모순 로그
 - **2026-02-25**: 이원화 시뮬레이션 UI 버튼 API 연결 완료
   - 역사A 탭: 세계 역사 생성 버튼 → `handleGenerateWorldHistory()` 연결
   - 주인공B 탭: 전사/성장기 버튼 → `handleSimulatePrehistory()`/`handleSimulateGrowth()` 연결

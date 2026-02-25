@@ -5,6 +5,14 @@ import type { Episode } from '@/lib/types';
 
 const client = new Anthropic();
 
+interface FactCheckContradiction {
+  field: string;
+  worldBibleValue: string;
+  episodeValue: string;
+  severity: string;
+  suggestion: string;
+}
+
 interface ReviseEpisodeRequest {
   episode: Episode;
   feedback: string;
@@ -13,8 +21,10 @@ interface ReviseEpisodeRequest {
   viewpoint: string;
   authorPersonaId: string;
   // 부분 수정용
-  mode?: 'full' | 'partial';
+  mode?: 'full' | 'partial' | 'contradiction';
   selectedText?: string;
+  // 모순 수정용
+  contradictions?: FactCheckContradiction[];
 }
 
 export async function POST(req: NextRequest) {
@@ -103,6 +113,120 @@ JSON으로 응답:
       return NextResponse.json({
         episode: null,
         authorComment: '수정하는 중에 문제가 생겼어.',
+      });
+    }
+
+    // 모순 수정 모드
+    const isContradictionMode = body.mode === 'contradiction' && body.contradictions && body.contradictions.length > 0;
+    if (isContradictionMode) {
+      const contradictionList = body.contradictions!.map((c, i) =>
+        `${i + 1}. [${c.severity}] ${c.field}
+   - 세계관 설정: "${c.worldBibleValue}"
+   - 에피소드 내용: "${c.episodeValue}"
+   - 수정 제안: ${c.suggestion}`
+      ).join('\n\n');
+
+      const contradictionPrompt = `당신은 "${persona?.name || '작가'}"입니다.
+
+## 현재 에피소드
+제목: ${body.episode.title}
+번호: ${body.episode.number}화
+
+## 전체 본문
+${body.episode.content}
+
+## 발견된 설정 모순
+아래 모순들을 수정해야 해:
+
+${contradictionList}
+
+## 규칙
+${viewpointRules}
+
+## 서식 절대 규칙
+마크다운 서식 절대 금지. 순수 텍스트만.
+
+## 임무
+위 모순들을 세계관 설정에 맞게 수정해.
+- 모순되는 부분만 최소한으로 수정해
+- 스토리 흐름은 최대한 유지해
+- 수정한 부분을 명확히 표시해
+
+JSON으로 응답:
+{
+  "episode": {
+    "title": "화 제목",
+    "content": "수정된 본문 (줄바꿈은 \\n으로)",
+    "charCount": 글자수,
+    "endHook": "다음 화 훅"
+  },
+  "authorComment": "작가 코멘트 (어떤 부분을 어떻게 고쳤는지)",
+  "changedParts": [
+    {
+      "original": "원본 텍스트",
+      "revised": "수정된 텍스트",
+      "reason": "수정 이유"
+    }
+  ],
+  "suggestedWorldBibleUpdates": [
+    {
+      "field": "수정이 필요한 World Bible 필드",
+      "currentValue": "현재 값",
+      "suggestedValue": "제안 값",
+      "reason": "변경 이유"
+    }
+  ]
+}`;
+
+      const response = await client.messages.create({
+        model: 'claude-sonnet-4-5-20250929',
+        max_tokens: 10000,
+        messages: [{ role: 'user', content: contradictionPrompt }],
+      });
+
+      const text = response.content[0].type === 'text' ? response.content[0].text : '';
+
+      try {
+        // 마크다운 코드 블록 제거
+        let cleanText = text;
+        const codeBlockMatch = text.match(/```(?:json)?\s*([\s\S]*?)```/);
+        if (codeBlockMatch) {
+          cleanText = codeBlockMatch[1].trim();
+        }
+
+        const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          const parsed = JSON.parse(jsonMatch[0]);
+
+          // 에피소드 정보 보완
+          if (parsed.episode) {
+            parsed.episode.id = body.episode.id;
+            parsed.episode.number = body.episode.number;
+            parsed.episode.status = 'drafted';
+            parsed.episode.pov = body.episode.pov;
+            parsed.episode.sourceEventIds = body.episode.sourceEventIds;
+            parsed.episode.charCount = parsed.episode.content?.length || 0;
+            parsed.episode.updatedAt = new Date().toISOString();
+          }
+
+          return NextResponse.json({
+            ...parsed,
+            mode: 'contradiction',
+            originalContent: body.episode.content,
+          });
+        }
+      } catch {
+        return NextResponse.json({
+          episode: null,
+          authorComment: text,
+          mode: 'contradiction',
+        });
+      }
+
+      return NextResponse.json({
+        episode: null,
+        authorComment: '모순 수정 중에 문제가 생겼어.',
+        mode: 'contradiction',
       });
     }
 
