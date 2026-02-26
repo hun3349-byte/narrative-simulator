@@ -27,6 +27,7 @@
 19. ✅ **buildUserPrompt 중복 제거** - 캐릭터 현재 상태/기억 잔상 중복 섹션 삭제 (레거시 모드)
 20. ✅ **개별 에피소드 삭제** - 결과물 페이지에서 에피소드별 삭제 버튼 (호버 시 표시)
 21. ✅ **네트워크 에러 대응 (Task 10)** - SSE heartbeat 추가 + 네트워크 에러 자동 재시도 (최대 1회)
+22. ✅ **TIER 2 대화체/문단 연결 규칙** - 나이/신분 맞춤 말투 + 감정 브릿지 + 전환 패턴 제한
 
 ### 다음 작업
 - 추가 기능 개선 및 사용자 피드백 반영
@@ -44,6 +45,23 @@
 - 프로젝트 정체서(`project-identity.md`)와 최상위 원칙(`supreme-principles.md`)을 모든 설계/구현 판단의 기준으로 삼는다.
 
 ### 최근 업데이트
+- **2026-02-26**: PROMPT-REFACTOR-INSTRUCTIONS6 추가 구현
+  - **TIER 2 대화체 규칙 강화** (`app/api/write-episode/route.ts`):
+    - 캐릭터 나이/신분에 맞는 말투 규칙 추가
+    - 10대 후반 소년, 무림 고수 등 캐릭터 유형별 대화 예시
+    - "왜요?" "뭘요?" 유아적 표현 금지
+    - 상대에 따른 말투 변화 규칙
+  - **TIER 2 문단 연결 규칙 추가**:
+    - 장면 전환 시 감정 브릿지 필수
+    - "그때였다." "그런데 갑자기." 패턴 2회 이상 사용 금지
+    - 서술→대화 단조로운 교대 금지
+  - **기존 작업 확인** (이전 세션에서 완료됨):
+    - Task 1-3 (buildSystemPrompt 4-Tier 구조)
+    - Task 4 (buildUserPrompt 중복 제거)
+    - Task 5 (EpisodeLog 추적 필드)
+    - Task 6 (generate-episode-log 프롬프트)
+    - Task 7 (direction 미반영 버그)
+    - Task 8-10 (Supabase 방어, 리셋 기능, 네트워크 에러)
 - **2026-02-26**: PROMPT-REFACTOR-INSTRUCTIONS5 구현 (Task 10 - 네트워크 에러 대응)
   - **SSE heartbeat 추가** (`app/api/write-episode/route.ts`):
     - 15초마다 `: heartbeat\n\n` 전송하여 Railway/Vercel 연결 유지
