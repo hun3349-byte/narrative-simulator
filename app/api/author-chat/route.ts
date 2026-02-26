@@ -1253,18 +1253,55 @@ export async function POST(req: NextRequest) {
           const systemPrompt = buildWritingSystemPrompt(persona, body.viewpoint);
           const userPrompt = buildWritingUserPrompt(body, episodeNumber);
 
-          // 스트리밍 응답 생성
+          // 스트리밍 응답 생성 (강화된 연결 유지 + 에러 처리)
           const stream = new ReadableStream({
             async start(controller) {
-              const heartbeat = setInterval(() => {
-                try {
-                  controller.enqueue(encoder.encode(': heartbeat\n\n'));
-                } catch { /* stream closed */ }
-              }, 15000);
+              let heartbeat: ReturnType<typeof setInterval> | null = null;
+              let streamClosed = false;
+
+              const safeEnqueue = (data: Uint8Array) => {
+                if (!streamClosed) {
+                  try {
+                    controller.enqueue(data);
+                  } catch {
+                    streamClosed = true;
+                  }
+                }
+              };
+
+              const cleanup = () => {
+                if (heartbeat) {
+                  clearInterval(heartbeat);
+                  heartbeat = null;
+                }
+              };
+
+              const safeClose = () => {
+                cleanup();
+                if (!streamClosed) {
+                  streamClosed = true;
+                  try {
+                    controller.close();
+                  } catch { /* already closed */ }
+                }
+              };
 
               try {
+                // 1. 즉시 연결 확인 메시지 전송 (프록시 버퍼 flush 유도)
+                const connectMsg = JSON.stringify({
+                  type: 'connected',
+                  message: '연결 성공, 작가 AI가 생각을 정리하고 있습니다...'
+                });
+                safeEnqueue(encoder.encode(`data: ${connectMsg}\n\n`));
+
+                // 2. 10초 heartbeat 시작 (Railway/Vercel 타임아웃 방지)
+                heartbeat = setInterval(() => {
+                  safeEnqueue(encoder.encode(': heartbeat\n\n'));
+                }, 10000);
+
                 let fullText = '';
 
+                // 3. Anthropic API 호출 (타임아웃 설정)
                 const streamResponse = client.messages.stream({
                   model: WRITING_MODEL,
                   max_tokens: WRITING_MAX_TOKENS,
@@ -1273,13 +1310,38 @@ export async function POST(req: NextRequest) {
                   messages: [{ role: 'user', content: userPrompt }],
                 });
 
-                for await (const event of streamResponse) {
-                  if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-                    fullText += event.delta.text;
-                    // 텍스트 청크 전송
-                    const chunk = JSON.stringify({ type: 'text', content: event.delta.text });
-                    controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+                // API 응답 타임아웃 (55초 - maxDuration보다 약간 짧게)
+                const timeoutPromise = new Promise<never>((_, reject) => {
+                  setTimeout(() => reject(new Error('AI_RESPONSE_TIMEOUT')), 55000);
+                });
+
+                // 스트리밍 처리
+                const streamPromise = (async () => {
+                  for await (const event of streamResponse) {
+                    if (streamClosed) break;
+                    if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+                      fullText += event.delta.text;
+                      const chunk = JSON.stringify({ type: 'text', content: event.delta.text });
+                      safeEnqueue(encoder.encode(`data: ${chunk}\n\n`));
+                    }
                   }
+                  return fullText;
+                })();
+
+                // 타임아웃 또는 완료 중 먼저 오는 것
+                try {
+                  fullText = await Promise.race([streamPromise, timeoutPromise]);
+                } catch (raceError) {
+                  if (raceError instanceof Error && raceError.message === 'AI_RESPONSE_TIMEOUT') {
+                    const timeoutData = JSON.stringify({
+                      type: 'error',
+                      message: 'AI 응답이 지연되고 있어. 잠시 후 다시 시도해줘.',
+                    });
+                    safeEnqueue(encoder.encode(`data: ${timeoutData}\n\n`));
+                    safeClose();
+                    return;
+                  }
+                  throw raceError;
                 }
 
                 // 최종 파싱 및 결과 전송
@@ -1316,14 +1378,14 @@ export async function POST(req: NextRequest) {
                       nextEpisodePreview: parsed.nextEpisodePreview || '',
                       isEpisode: true,
                     });
-                    controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+                    safeEnqueue(encoder.encode(`data: ${finalData}\n\n`));
                   } else {
                     const finalData = JSON.stringify({
                       type: 'done',
                       message: '에피소드 생성 중 문제가 생겼어.',
                       isEpisode: false,
                     });
-                    controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+                    safeEnqueue(encoder.encode(`data: ${finalData}\n\n`));
                   }
                 } else {
                   const finalData = JSON.stringify({
@@ -1331,20 +1393,21 @@ export async function POST(req: NextRequest) {
                     message: '에피소드 파싱에 실패했어.',
                     isEpisode: false,
                   });
-                  controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+                  safeEnqueue(encoder.encode(`data: ${finalData}\n\n`));
                 }
 
-                clearInterval(heartbeat);
-                controller.close();
+                safeClose();
               } catch (error) {
-                clearInterval(heartbeat);
-                console.error('Streaming error:', error);
+                console.error('Writing streaming error:', error);
+                const errorMessage = error instanceof Error ? error.message : '스트리밍 오류';
                 const errorData = JSON.stringify({
                   type: 'error',
-                  message: error instanceof Error ? error.message : '스트리밍 오류',
+                  message: errorMessage.includes('timeout') || errorMessage.includes('TIMEOUT')
+                    ? 'AI 응답이 지연되고 있어. 다시 시도해줘.'
+                    : `오류가 발생했어: ${errorMessage}`,
                 });
-                controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
-                controller.close();
+                safeEnqueue(encoder.encode(`data: ${errorData}\n\n`));
+                safeClose();
               }
             },
           });
@@ -1373,18 +1436,54 @@ export async function POST(req: NextRequest) {
           };
         }
 
-        // 일반 대화 - 스트리밍
+        // 일반 대화 - 스트리밍 (강화된 연결 유지 + 에러 처리)
         const prompt = buildConversationPrompt(body);
 
         const stream = new ReadableStream({
           async start(controller) {
-            const heartbeat = setInterval(() => {
-              try {
-                controller.enqueue(encoder.encode(': heartbeat\n\n'));
-              } catch { /* stream closed */ }
-            }, 15000);
+            let heartbeat: ReturnType<typeof setInterval> | null = null;
+            let streamClosed = false;
+
+            const safeEnqueue = (data: Uint8Array) => {
+              if (!streamClosed) {
+                try {
+                  controller.enqueue(data);
+                } catch {
+                  streamClosed = true;
+                }
+              }
+            };
+
+            const cleanup = () => {
+              if (heartbeat) {
+                clearInterval(heartbeat);
+                heartbeat = null;
+              }
+            };
+
+            const safeClose = () => {
+              cleanup();
+              if (!streamClosed) {
+                streamClosed = true;
+                try {
+                  controller.close();
+                } catch { /* already closed */ }
+              }
+            };
 
             try {
+              // 1. 즉시 연결 확인 메시지 전송
+              const connectMsg = JSON.stringify({
+                type: 'connected',
+                message: '연결 성공, 작가 AI가 응답을 준비하고 있습니다...'
+              });
+              safeEnqueue(encoder.encode(`data: ${connectMsg}\n\n`));
+
+              // 2. 10초 heartbeat 시작
+              heartbeat = setInterval(() => {
+                safeEnqueue(encoder.encode(': heartbeat\n\n'));
+              }, 10000);
+
               let fullText = '';
 
               const streamResponse = client.messages.stream({
@@ -1393,12 +1492,36 @@ export async function POST(req: NextRequest) {
                 messages: [{ role: 'user', content: prompt }],
               });
 
-              for await (const event of streamResponse) {
-                if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-                  fullText += event.delta.text;
-                  const chunk = JSON.stringify({ type: 'text', content: event.delta.text });
-                  controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+              // API 응답 타임아웃 (55초)
+              const timeoutPromise = new Promise<never>((_, reject) => {
+                setTimeout(() => reject(new Error('AI_RESPONSE_TIMEOUT')), 55000);
+              });
+
+              const streamPromise = (async () => {
+                for await (const event of streamResponse) {
+                  if (streamClosed) break;
+                  if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+                    fullText += event.delta.text;
+                    const chunk = JSON.stringify({ type: 'text', content: event.delta.text });
+                    safeEnqueue(encoder.encode(`data: ${chunk}\n\n`));
+                  }
                 }
+                return fullText;
+              })();
+
+              try {
+                fullText = await Promise.race([streamPromise, timeoutPromise]);
+              } catch (raceError) {
+                if (raceError instanceof Error && raceError.message === 'AI_RESPONSE_TIMEOUT') {
+                  const timeoutData = JSON.stringify({
+                    type: 'error',
+                    message: 'AI 응답이 지연되고 있어. 잠시 후 다시 시도해줘.',
+                  });
+                  safeEnqueue(encoder.encode(`data: ${timeoutData}\n\n`));
+                  safeClose();
+                  return;
+                }
+                throw raceError;
               }
 
               const finalData = JSON.stringify({
@@ -1408,18 +1531,19 @@ export async function POST(req: NextRequest) {
                 isEpisode: false,
                 feedback: feedbackInfo,
               });
-              controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
-              clearInterval(heartbeat);
-              controller.close();
+              safeEnqueue(encoder.encode(`data: ${finalData}\n\n`));
+              safeClose();
             } catch (error) {
-              clearInterval(heartbeat);
               console.error('Conversation streaming error:', error);
+              const errorMessage = error instanceof Error ? error.message : '대화 오류';
               const errorData = JSON.stringify({
                 type: 'error',
-                message: error instanceof Error ? error.message : '대화 오류',
+                message: errorMessage.includes('timeout') || errorMessage.includes('TIMEOUT')
+                  ? 'AI 응답이 지연되고 있어. 다시 시도해줘.'
+                  : `오류가 발생했어: ${errorMessage}`,
               });
-              controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
-              controller.close();
+              safeEnqueue(encoder.encode(`data: ${errorData}\n\n`));
+              safeClose();
             }
           },
         });
@@ -1512,18 +1636,54 @@ export async function POST(req: NextRequest) {
       });
     }
 
-    // 레이어 수정 (revise_layer) - 환님 아이디어 기반으로 확장
+    // 레이어 수정 (revise_layer) - 환님 아이디어 기반으로 확장 (강화된 연결 유지 + 에러 처리)
     const prompt = buildLayerPrompt(body);
 
     const stream = new ReadableStream({
       async start(controller) {
-        const heartbeat = setInterval(() => {
-          try {
-            controller.enqueue(encoder.encode(': heartbeat\n\n'));
-          } catch { /* stream closed */ }
-        }, 15000);
+        let heartbeat: ReturnType<typeof setInterval> | null = null;
+        let streamClosed = false;
+
+        const safeEnqueue = (data: Uint8Array) => {
+          if (!streamClosed) {
+            try {
+              controller.enqueue(data);
+            } catch {
+              streamClosed = true;
+            }
+          }
+        };
+
+        const cleanup = () => {
+          if (heartbeat) {
+            clearInterval(heartbeat);
+            heartbeat = null;
+          }
+        };
+
+        const safeClose = () => {
+          cleanup();
+          if (!streamClosed) {
+            streamClosed = true;
+            try {
+              controller.close();
+            } catch { /* already closed */ }
+          }
+        };
 
         try {
+          // 1. 즉시 연결 확인 메시지 전송
+          const connectMsg = JSON.stringify({
+            type: 'connected',
+            message: '연결 성공, 작가 AI가 레이어를 구상하고 있습니다...'
+          });
+          safeEnqueue(encoder.encode(`data: ${connectMsg}\n\n`));
+
+          // 2. 10초 heartbeat 시작
+          heartbeat = setInterval(() => {
+            safeEnqueue(encoder.encode(': heartbeat\n\n'));
+          }, 10000);
+
           let fullText = '';
 
           const streamResponse = client.messages.stream({
@@ -1532,12 +1692,36 @@ export async function POST(req: NextRequest) {
             messages: [{ role: 'user', content: prompt }],
           });
 
-          for await (const event of streamResponse) {
-            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-              fullText += event.delta.text;
-              const chunk = JSON.stringify({ type: 'text', content: event.delta.text });
-              controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+          // API 응답 타임아웃 (55초)
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error('AI_RESPONSE_TIMEOUT')), 55000);
+          });
+
+          const streamPromise = (async () => {
+            for await (const event of streamResponse) {
+              if (streamClosed) break;
+              if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+                fullText += event.delta.text;
+                const chunk = JSON.stringify({ type: 'text', content: event.delta.text });
+                safeEnqueue(encoder.encode(`data: ${chunk}\n\n`));
+              }
             }
+            return fullText;
+          })();
+
+          try {
+            fullText = await Promise.race([streamPromise, timeoutPromise]);
+          } catch (raceError) {
+            if (raceError instanceof Error && raceError.message === 'AI_RESPONSE_TIMEOUT') {
+              const timeoutData = JSON.stringify({
+                type: 'error',
+                message: 'AI 응답이 지연되고 있어. 잠시 후 다시 시도해줘.',
+              });
+              safeEnqueue(encoder.encode(`data: ${timeoutData}\n\n`));
+              safeClose();
+              return;
+            }
+            throw raceError;
           }
 
           // 파싱
@@ -1576,7 +1760,7 @@ export async function POST(req: NextRequest) {
                 layer: hasValidLayer ? parsed.layer : null,
                 isEpisode: false,
               });
-              controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+              safeEnqueue(encoder.encode(`data: ${finalData}\n\n`));
             } catch {
               const finalData = JSON.stringify({
                 type: 'done',
@@ -1584,7 +1768,7 @@ export async function POST(req: NextRequest) {
                 layer: null,
                 isEpisode: false,
               });
-              controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+              safeEnqueue(encoder.encode(`data: ${finalData}\n\n`));
             }
           } else {
             const finalData = JSON.stringify({
@@ -1593,20 +1777,21 @@ export async function POST(req: NextRequest) {
               layer: null,
               isEpisode: false,
             });
-            controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+            safeEnqueue(encoder.encode(`data: ${finalData}\n\n`));
           }
 
-          clearInterval(heartbeat);
-          controller.close();
+          safeClose();
         } catch (error) {
-          clearInterval(heartbeat);
           console.error('Layer streaming error:', error);
+          const errorMessage = error instanceof Error ? error.message : '레이어 생성 오류';
           const errorData = JSON.stringify({
             type: 'error',
-            message: error instanceof Error ? error.message : '레이어 생성 오류',
+            message: errorMessage.includes('timeout') || errorMessage.includes('TIMEOUT')
+              ? 'AI 응답이 지연되고 있어. 다시 시도해줘.'
+              : `오류가 발생했어: ${errorMessage}`,
           });
-          controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
-          controller.close();
+          safeEnqueue(encoder.encode(`data: ${errorData}\n\n`));
+          safeClose();
         }
       },
     });

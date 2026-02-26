@@ -36,6 +36,7 @@
 28. ✅ **Meta Reader Simulator (Task 3.2)** - 5가지 독자 페르소나 시뮬레이션 댓글 생성
 29. ✅ **Mega Hit Templates (Task 3.3)** - 7가지 인기 장르 황금 공식 템플릿
 30. ✅ **Platform-specific Export (Task 3.4)** - 문피아/네이버시리즈/카카오페이지/리디북스 맞춤 포맷
+31. ✅ **SSE Connection Reset 버그 수정** - author-chat API 연결 안정화 (초기 메시지 + 타임아웃 + 강화된 에러 처리)
 
 ### 다음 작업
 - 추가 기능 개선 및 사용자 피드백 반영
@@ -53,6 +54,16 @@
 - 프로젝트 정체서(`project-identity.md`)와 최상위 원칙(`supreme-principles.md`)을 모든 설계/구현 판단의 기준으로 삼는다.
 
 ### 최근 업데이트
+- **2026-02-26**: SSE Connection Reset 버그 수정 (`app/api/author-chat/route.ts`)
+  - **문제**: `net::ERR_CONNECTION_RESET` 및 `TypeError: network error` 발생
+  - **원인**: Anthropic API 첫 응답 전 연결 타임아웃, heartbeat 지연
+  - **해결**:
+    1. **즉시 연결 확인 메시지**: API 호출 직전에 `type: 'connected'` 이벤트 전송
+    2. **heartbeat 주기 단축**: 15초 → 10초 (Railway/Vercel 타임아웃 방지)
+    3. **API 타임아웃 설정**: 55초 타임아웃 (maxDuration 60초보다 약간 짧게)
+    4. **안전한 스트림 관리**: `safeEnqueue()`, `safeClose()` 헬퍼 함수로 이중 close 방지
+    5. **명확한 에러 메시지**: 타임아웃 시 `AI 응답이 지연되고 있어` 메시지 반환
+  - **적용 범위**: Writing/Conversation/Layer 3개 ReadableStream 모두 수정
 - **2026-02-26**: Architecture Optimization Tasks 완료
   - **Task 2.1: Anthropic Prompt Caching** (`app/api/write-episode/route.ts`):
     - `CachedSystemMessage` 타입 추가 (cache_control 지원)
