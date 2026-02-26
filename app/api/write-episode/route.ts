@@ -1562,12 +1562,18 @@ export async function POST(req: NextRequest) {
           });
           safeEnqueue(encoder.encode(`data: ${connectMsg}\n\n`));
 
-          // 2. 10초 heartbeat 시작 (Railway/Vercel 타임아웃 방지)
+          // 2. 즉시 heartbeat 전송 (연결 유지 확인)
+          safeEnqueue(encoder.encode(': heartbeat\n\n'));
+
+          // 3. 5초 간격 heartbeat 시작 (Railway/Vercel 타임아웃 방지 - 더 공격적)
           heartbeat = setInterval(() => {
             safeEnqueue(encoder.encode(': heartbeat\n\n'));
-          }, 10000);
+          }, 5000);
 
           let fullText = '';
+
+          // 4. Anthropic API 호출 전 추가 heartbeat (프롬프트 처리 동안 연결 유지)
+          safeEnqueue(encoder.encode(': heartbeat\n\n'));
 
           // Anthropic Prompt Caching 적용 - 정적 규칙은 캐시됨
           const streamResponse = client.messages.stream({
@@ -1605,7 +1611,8 @@ export async function POST(req: NextRequest) {
               const timeoutData = JSON.stringify({
                 type: 'error',
                 message: 'AI 응답이 지연되고 있어. 잠시 후 다시 시도해줘.',
-                suggestion: '네트워크 상태를 확인하고 다시 시도해주세요.',
+                suggestion: '프롬프트가 길어 AI가 처리하는 데 시간이 걸리고 있습니다.',
+                retryable: true,
               });
               safeEnqueue(encoder.encode(`data: ${timeoutData}\n\n`));
               safeClose();
@@ -1795,9 +1802,34 @@ export async function POST(req: NextRequest) {
   } catch (error) {
     console.error('Write episode error:', error);
     const encoder = new TextEncoder();
+
+    // 에러 유형에 따른 구체적 메시지
+    let errorMessage = '에피소드 작성 실패';
+    let suggestion = '다시 시도해 주세요.';
+
+    if (error instanceof Error) {
+      const errMsg = error.message.toLowerCase();
+
+      if (errMsg.includes('timeout') || errMsg.includes('ai_response_timeout')) {
+        errorMessage = 'AI 서버 응답 지연';
+        suggestion = 'AI가 응답하는 데 시간이 오래 걸리고 있습니다. 다시 시도해 주세요.';
+      } else if (errMsg.includes('token') || errMsg.includes('context') || errMsg.includes('length')) {
+        errorMessage = '프롬프트 토큰 초과';
+        suggestion = '세계관/캐릭터 데이터를 줄여주세요.';
+      } else if (errMsg.includes('api') || errMsg.includes('key') || errMsg.includes('auth')) {
+        errorMessage = 'API 인증 오류';
+        suggestion = '관리자에게 문의해 주세요.';
+      } else if (errMsg.includes('network') || errMsg.includes('fetch') || errMsg.includes('connect')) {
+        errorMessage = '네트워크 연결 오류';
+        suggestion = '인터넷 연결을 확인하고 다시 시도해 주세요.';
+      }
+    }
+
     const errorData = JSON.stringify({
       type: 'error',
-      message: '에피소드 작성 실패',
+      message: errorMessage,
+      suggestion,
+      retryable: true,
     });
     return new Response(`data: ${errorData}\n\n`, {
       headers: {

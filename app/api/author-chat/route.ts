@@ -1294,14 +1294,20 @@ export async function POST(req: NextRequest) {
                 });
                 safeEnqueue(encoder.encode(`data: ${connectMsg}\n\n`));
 
-                // 2. 10초 heartbeat 시작 (Railway/Vercel 타임아웃 방지)
+                // 2. 즉시 heartbeat 전송 (연결 유지 확인)
+                safeEnqueue(encoder.encode(': heartbeat\n\n'));
+
+                // 3. 5초 간격 heartbeat 시작 (Railway/Vercel 타임아웃 방지 - 더 공격적)
                 heartbeat = setInterval(() => {
                   safeEnqueue(encoder.encode(': heartbeat\n\n'));
-                }, 10000);
+                }, 5000);
 
                 let fullText = '';
 
-                // 3. Anthropic API 호출 (타임아웃 설정)
+                // 4. API 호출 전 추가 heartbeat
+                safeEnqueue(encoder.encode(': heartbeat\n\n'));
+
+                // 5. Anthropic API 호출 (타임아웃 설정)
                 const streamResponse = client.messages.stream({
                   model: WRITING_MODEL,
                   max_tokens: WRITING_MAX_TOKENS,
@@ -1479,12 +1485,18 @@ export async function POST(req: NextRequest) {
               });
               safeEnqueue(encoder.encode(`data: ${connectMsg}\n\n`));
 
-              // 2. 10초 heartbeat 시작
+              // 2. 즉시 heartbeat 전송
+              safeEnqueue(encoder.encode(': heartbeat\n\n'));
+
+              // 3. 5초 간격 heartbeat 시작
               heartbeat = setInterval(() => {
                 safeEnqueue(encoder.encode(': heartbeat\n\n'));
-              }, 10000);
+              }, 5000);
 
               let fullText = '';
+
+              // 4. API 호출 전 추가 heartbeat
+              safeEnqueue(encoder.encode(': heartbeat\n\n'));
 
               const streamResponse = client.messages.stream({
                 model: 'claude-sonnet-4-20250514',  // Railway 배포 - Sonnet 사용
@@ -1679,12 +1691,18 @@ export async function POST(req: NextRequest) {
           });
           safeEnqueue(encoder.encode(`data: ${connectMsg}\n\n`));
 
-          // 2. 10초 heartbeat 시작
+          // 2. 즉시 heartbeat 전송
+          safeEnqueue(encoder.encode(': heartbeat\n\n'));
+
+          // 3. 5초 간격 heartbeat 시작
           heartbeat = setInterval(() => {
             safeEnqueue(encoder.encode(': heartbeat\n\n'));
-          }, 10000);
+          }, 5000);
 
           let fullText = '';
+
+          // 4. API 호출 전 추가 heartbeat
+          safeEnqueue(encoder.encode(': heartbeat\n\n'));
 
           const streamResponse = client.messages.stream({
             model: 'claude-sonnet-4-20250514',  // Railway 배포 - Sonnet 사용

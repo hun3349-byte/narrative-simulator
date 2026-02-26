@@ -16,87 +16,154 @@ import WorldSettingsEditor from '@/components/world/WorldSettingsEditor';
 import TimelineEditor from '@/components/world/TimelineEditor';
 import { CharacterEditModal } from '@/components/character';
 
-// SSE 스트리밍 헬퍼 함수 (타임아웃 및 에러 처리 개선)
+// SSE 스트리밍 헬퍼 함수 (타임아웃 및 에러 처리 개선 + 재시도 로직)
 async function streamingFetch(
   url: string,
   body: unknown,
   onText?: (text: string) => void,
   timeoutMs: number = 180000, // 기본 3분 타임아웃
+  maxRetries: number = 1, // 최대 재시도 횟수
 ): Promise<{ type: string; [key: string]: unknown }> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+  let lastError: Error | null = null;
 
-  try {
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
 
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
-    }
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      });
 
-    const reader = response.body?.getReader();
-    if (!reader) throw new Error('스트림을 읽을 수 없습니다');
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
 
-    const decoder = new TextDecoder();
-    let finalResult: { type: string; [key: string]: unknown } | null = null;
-    let buffer = ''; // 불완전한 SSE 데이터를 위한 버퍼
+      const reader = response.body?.getReader();
+      if (!reader) throw new Error('스트림을 읽을 수 없습니다');
 
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
+      const decoder = new TextDecoder();
+      let finalResult: { type: string; [key: string]: unknown } | null = null;
+      let buffer = ''; // 불완전한 SSE 데이터를 위한 버퍼
+      let receivedAnyData = false; // 데이터 수신 여부 추적
+      let connectionConfirmed = false; // 연결 확인 여부
 
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-      // 마지막 불완전한 라인은 버퍼에 유지
-      buffer = lines.pop() || '';
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
 
-      for (const line of lines) {
-        if (line.startsWith('data: ')) {
-          const dataStr = line.slice(6).trim();
-          if (!dataStr) continue;
+        // 마지막 불완전한 라인은 버퍼에 유지
+        buffer = lines.pop() || '';
 
-          try {
-            const data = JSON.parse(dataStr);
+        for (const line of lines) {
+          // heartbeat 메시지 처리 (연결 유지 확인)
+          if (line.startsWith(': heartbeat') || line.trim() === ':') {
+            receivedAnyData = true;
+            continue;
+          }
 
-            // SSE 데이터 유효성 검사
-            if (typeof data !== 'object' || data === null) {
-              console.warn('Invalid SSE data format:', dataStr);
-              continue;
-            }
+          if (line.startsWith('data: ')) {
+            const dataStr = line.slice(6).trim();
+            if (!dataStr) continue;
 
-            if (data.type === 'text' && onText) {
-              if (typeof data.content === 'string') {
-                onText(data.content);
+            try {
+              const data = JSON.parse(dataStr);
+              receivedAnyData = true;
+
+              // SSE 데이터 유효성 검사
+              if (typeof data !== 'object' || data === null) {
+                console.warn('Invalid SSE data format:', dataStr);
+                continue;
               }
-            } else if (data.type === 'done' || data.type === 'error') {
-              finalResult = data;
+
+              // 연결 확인 메시지 처리
+              if (data.type === 'connected') {
+                connectionConfirmed = true;
+                console.log('SSE connection confirmed:', data.message);
+                continue;
+              }
+
+              if (data.type === 'text' && onText) {
+                if (typeof data.content === 'string') {
+                  onText(data.content);
+                }
+              } else if (data.type === 'done' || data.type === 'error') {
+                finalResult = data;
+              }
+            } catch (parseError) {
+              console.warn('SSE JSON parse error:', parseError);
+              // JSON 파싱 실패는 무시하되 로깅
             }
-          } catch (parseError) {
-            console.warn('SSE JSON parse error:', parseError);
-            // JSON 파싱 실패는 무시하되 로깅
           }
         }
       }
-    }
 
-    if (!finalResult) {
-      throw new Error('응답을 받지 못했습니다');
-    }
+      if (!finalResult) {
+        // 데이터를 전혀 받지 못한 경우 vs 일부만 받은 경우 구분
+        if (!receivedAnyData) {
+          throw new Error('AI_SERVER_NO_RESPONSE');
+        } else if (!connectionConfirmed) {
+          throw new Error('AI_SERVER_CONNECTION_LOST');
+        } else {
+          throw new Error('AI_SERVER_INCOMPLETE_RESPONSE');
+        }
+      }
 
-    return finalResult;
-  } catch (error) {
-    if (error instanceof Error && error.name === 'AbortError') {
-      throw new Error('요청 시간이 초과되었습니다. 다시 시도해 주세요.');
+      clearTimeout(timeoutId);
+      return finalResult;
+
+    } catch (error) {
+      clearTimeout(timeoutId);
+
+      if (error instanceof Error) {
+        lastError = error;
+
+        // AbortError (타임아웃)
+        if (error.name === 'AbortError') {
+          lastError = new Error('AI_SERVER_TIMEOUT');
+        }
+
+        // 재시도 가능한 에러인지 확인
+        const isRetryable =
+          error.message.includes('AI_SERVER') ||
+          error.message.includes('network') ||
+          error.message.includes('fetch') ||
+          error.name === 'AbortError';
+
+        if (isRetryable && attempt < maxRetries) {
+          console.log(`스트리밍 재시도 (${attempt + 1}/${maxRetries})...`);
+          await new Promise(resolve => setTimeout(resolve, 2000)); // 2초 대기 후 재시도
+          continue;
+        }
+      }
+
+      throw error;
     }
-    throw error;
-  } finally {
-    clearTimeout(timeoutId);
   }
+
+  // 모든 재시도 실패
+  if (lastError) {
+    // 사용자 친화적 에러 메시지로 변환
+    const errorMsg = lastError.message;
+    if (errorMsg === 'AI_SERVER_TIMEOUT') {
+      throw new Error('AI 서버 응답 지연. 다시 시도해 주세요.');
+    } else if (errorMsg === 'AI_SERVER_NO_RESPONSE') {
+      throw new Error('AI 서버로부터 응답을 받지 못했습니다. 다시 시도해 주세요.');
+    } else if (errorMsg === 'AI_SERVER_CONNECTION_LOST') {
+      throw new Error('AI 서버 연결이 끊어졌습니다. 다시 시도해 주세요.');
+    } else if (errorMsg === 'AI_SERVER_INCOMPLETE_RESPONSE') {
+      throw new Error('AI 응답이 불완전합니다. 다시 시도해 주세요.');
+    }
+    throw lastError;
+  }
+
+  throw new Error('알 수 없는 오류가 발생했습니다.');
 }
 
 // 모바일 감지 훅

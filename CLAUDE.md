@@ -46,6 +46,12 @@
     - Show Don't Tell 강화 (같은 독백 2회 반복 금지, 행동으로 대체)
     - 타임라인 검증 규칙 (연도/나이 교차 검증 필수)
     - 엑스트라 조우 텐션 규칙 (마이크로 텐션 필수 부여)
+37. ✅ **프론트엔드 타임아웃 수정** - 스트리밍 응답 지연 대응
+    - streamingFetch 재시도 로직 추가 (maxRetries=1)
+    - heartbeat/connected 메시지 추적으로 연결 상태 확인
+    - API heartbeat 간격 10초→5초로 단축
+    - API 호출 전 즉시 heartbeat 다중 전송 (Time-to-First-Byte 최적화)
+    - 에러 유형별 명확한 메시지 반환 (retryable 플래그 포함)
 
 ### 다음 작업
 - 추가 기능 개선 및 사용자 피드백 반영
@@ -63,6 +69,19 @@
 - 프로젝트 정체서(`project-identity.md`)와 최상위 원칙(`supreme-principles.md`)을 모든 설계/구현 판단의 기준으로 삼는다.
 
 ### 최근 업데이트
+- **2026-02-26**: 프론트엔드 타임아웃 및 스트리밍 응답 지연 수정
+  - **streamingFetch 개선** (`app/projects/[id]/page.tsx`)
+    - maxRetries 파라미터 추가 (기본 1회 재시도)
+    - heartbeat/connected 메시지 추적으로 연결 상태 확인
+    - 세분화된 에러 타입: AI_SERVER_NO_RESPONSE, AI_SERVER_CONNECTION_LOST, AI_SERVER_INCOMPLETE_RESPONSE, AI_SERVER_TIMEOUT
+    - 재시도 가능 에러 시 2초 대기 후 자동 재시도
+  - **API heartbeat 강화** (`write-episode`, `author-chat`)
+    - heartbeat 간격 10초 → 5초로 단축
+    - 연결 확인 직후 즉시 heartbeat 전송
+    - API 호출 직전 추가 heartbeat 전송 (TTFB 최적화)
+  - **에러 메시지 개선**
+    - 모든 에러에 retryable 플래그 추가
+    - 에러 유형별 구체적 suggestion 제공
 - **2026-02-26**: Writing Memory 고도화 - 1화 피드백 기반 영구 규칙 추가
   - **외래어 금지 강화** (`app/api/write-episode/route.ts`)
     - 금지 어휘 확장: 리듬, 스트레스, 타이밍, 센스, 컨트롤, 밸런스, 패턴 등
