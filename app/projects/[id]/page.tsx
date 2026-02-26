@@ -376,34 +376,39 @@ export default function ProjectConversationPage() {
   }, [isLoading]);
 
   // 에피소드 작성 후 처리: Episode Log 생성 + Fact Check + 떡밥 경고
-  const handlePostEpisodeCreation = useCallback(async (episode: Episode) => {
+  // 비동기 백그라운드 처리 - 사용자 대기 없이 병렬 실행
+  const handlePostEpisodeCreation = useCallback((episode: Episode) => {
     if (!project) return;
 
-    // 1. Episode Log 자동 생성
-    try {
-      const logResponse = await fetch('/api/generate-episode-log', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          episode,
-          worldBible: project.worldBible,
-          previousLogs: project.episodeLogs?.slice(-3) || [],
-        }),
-      });
+    // 1. Episode Log 생성 (백그라운드)
+    const generateEpisodeLog = async () => {
+      try {
+        const logResponse = await fetch('/api/generate-episode-log', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            episode,
+            worldBible: project.worldBible,
+            previousLogs: project.episodeLogs?.slice(-3) || [],
+          }),
+        });
 
-      if (logResponse.ok) {
-        const logData = await logResponse.json();
-        if (logData.log) {
-          addEpisodeLog(logData.log);
-          console.log(`Episode ${episode.number} log generated`);
+        if (logResponse.ok) {
+          const logData = await logResponse.json();
+          if (logData.log) {
+            addEpisodeLog(logData.log);
+            console.log(`[Background] Episode ${episode.number} log generated`);
+          }
         }
+      } catch (error) {
+        console.error('[Background] Episode log generation failed:', error);
       }
-    } catch (error) {
-      console.error('Episode log generation failed:', error);
-    }
+    };
 
-    // 2. Fact Check 실행
-    if (project.worldBible) {
+    // 2. Fact Check 실행 (백그라운드)
+    const runFactCheck = async () => {
+      if (!project.worldBible) return;
+
       try {
         const factCheckResponse = await fetch('/api/fact-check', {
           method: 'POST',
@@ -424,18 +429,24 @@ export default function ProjectConversationPage() {
                  factCheckData.result.overallSeverity === 'major')) {
               setShowFactCheckModal(true);
             }
+            console.log(`[Background] Fact check completed for episode ${episode.number}`);
           }
         }
       } catch (error) {
-        console.error('Fact check failed:', error);
+        console.error('[Background] Fact check failed:', error);
       }
-    }
+    };
 
-    // 3. 떡밥 경고 업데이트
+    // 3. 떡밥 경고 업데이트 (즉시 실행 - 경량 작업)
     if (project.worldBible?.breadcrumbs) {
       const warnings = trackBreadcrumbs(project.worldBible.breadcrumbs, episode.number);
       setBreadcrumbWarnings(warnings);
     }
+
+    // Episode Log와 Fact Check를 병렬로 백그라운드 실행
+    // Promise.all 사용하지 않고 각각 독립적으로 실행하여 하나가 실패해도 다른 것에 영향 없음
+    generateEpisodeLog();
+    runFactCheck();
   }, [project, addEpisodeLog]);
 
   // 레이어 제안 생성 (스트리밍)

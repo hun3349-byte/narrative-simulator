@@ -1,7 +1,17 @@
 import { NextRequest } from 'next/server';
 import Anthropic from '@anthropic-ai/sdk';
+import type { MessageParam, TextBlockParam } from '@anthropic-ai/sdk/resources/messages';
 import { AUTHOR_PERSONA_PRESETS } from '@/lib/presets/author-personas';
 import { buildAuthorPersonaPrompt, ensureAuthorConfig } from '@/lib/presets/genre-personas';
+
+// Prompt Caching을 위한 시스템 메시지 타입
+type CacheControlBlock = {
+  type: 'text';
+  text: string;
+  cache_control?: { type: 'ephemeral' };
+};
+
+type CachedSystemMessage = CacheControlBlock[];
 import type {
   AuthorConfig,
   Episode,
@@ -869,6 +879,188 @@ JSON으로만 응답:
 }`;
 }
 
+// 정적 시스템 규칙 (캐시 가능 - 변하지 않는 문체/연출 규칙)
+function buildStaticSystemRules(
+  persona: typeof AUTHOR_PERSONA_PRESETS[0] | undefined,
+  viewpoint: string,
+  authorConfig?: AuthorConfig
+): string {
+  const genrePersonaSection = authorConfig
+    ? buildAuthorPersonaPrompt(authorConfig)
+    : '';
+
+  const viewpointRule = viewpoint === 'first_person'
+    ? '1인칭 주인공 시점. "나"로 서술. 주인공이 모르는 것은 독자도 모른다.'
+    : '3인칭 작가 시점. 캐릭터 이름으로 서술. 시점 전환 가능.';
+
+  return `
+████████████████████████████████████████
+  정적 규칙: 문체 & 연출 DNA (모든 화 공통)
+████████████████████████████████████████
+
+=== 작가 정체성 ===
+${persona?.name || '웹소설 작가'}
+${genrePersonaSection ? genrePersonaSection : ''}
+
+=== 시점 ===
+${viewpointRule}
+
+=== 문체 핵심 ===
+- 첫 문장 = 감각 충격/상황 충격/의문 유발 중 하나. 느슨한 시작 금지.
+- 감정은 신체로 번역 (슬픔→턱 떨림, 분노→관자놀이 뜀, 공포→등줄기 서늘)
+- 문장 리듬: 짧→중→길→짧. 같은 길이 3문장 연속 금지.
+- 대사 3줄 이내. 핵심 대사 1줄. 대사 뒤 행동/반응 필수. A-B-A-B 탁구 금지.
+- 큰 사건 후 1~3문장 고요 삽입 (감정 잔향)
+- 긴장 후 반드시 이완 (모닥불, 식사, 걷기 등)
+- 독백에 자조/유머 섞기. 현대적 감각.
+
+=== 대화체 규칙 ===
+- 캐릭터 나이를 반드시 고려. 16세 소년이 "왜요?" "뭘요?"만 반복하면 8세처럼 들린다.
+- 10대 후반: 짧은 문장, 약간의 반항기, 표현 서투름. "...그래서요?" / "알겠습니다."
+- 무림 고수: 짧고 단정. "따라와." / 말 없이 행동.
+- 상대에 따라 말투 변화: 윗사람→존댓말 / 동갑→반말 / 적→침묵
+
+=== 문단 연결 ===
+- 장면 전환 시 감정 브릿지 필수. 앞 감정이 다음 장면에 잔향으로.
+- "그때였다." "그런데 갑자기." 한 화에 2회 이상 금지.
+- 대신: 시간 앵커, 감각 전환, 행동 전환으로 연결.
+
+=== 빌드업 규칙 ===
+- 매 화 "미완의 긴장"으로 끝. 한 화 완결 금지.
+- 긴장 3겹: 즉각 + 중기 + 장기
+- 정보는 한 꺼풀씩. 새 정보 = 새 궁금증.
+- 매 화 최소 1개 보상 (정보/감정/능력/관계)
+
+=== 캐릭터 규칙 ===
+- 주인공: 잃을 것/숨긴 것/반드시 성공해야 할 이유 중 2개 이상
+- 조력자: 숨은 동기. "왜 도와주지?"
+- 적: 말 적게, 행동 잔인하게, 경고 없이 실행. 한 번은 적이 이겨야.
+- "특별하다/대단하다/천재급" 직접 언급 금지
+
+=== 연출 규칙 ===
+- 3중 훅: 오프닝(첫 3줄) + 미드포인트(50%) + 클로징(마지막 2줄)
+- 장면 전환 최대 4회. 전환 시 감정 브릿지.
+- 새 장면 첫 3줄: 누가/어디서/언제 명확히
+
+=== 출력 형식 ===
+JSON으로만 응답:
+{
+  "episode": {
+    "title": "화 제목",
+    "content": "본문 전체 (줄바꿈은 \\n)",
+    "endHook": "마지막 2줄"
+  },
+  "authorComment": "이 화의 핵심 포인트",
+  "nextEpisodePreview": "다음 화 예고",
+  "monologueTone": "사용한 독백 톤"
+}
+`;
+}
+
+// 동적 시스템 규칙 (에피소드별 변동)
+function buildDynamicSystemRules(
+  episodeNumber: number,
+  previousMonologueTone?: MonologueTone,
+  recentLogs?: EpisodeLog[],
+  previousCliffhangerType?: string
+): string {
+  // 이번 화 독백 톤 (이전 화 톤 제외)
+  const availableTones = previousMonologueTone
+    ? MONOLOGUE_TONES.filter(t => t !== previousMonologueTone)
+    : MONOLOGUE_TONES;
+  const suggestedTone = availableTones[episodeNumber % availableTones.length];
+
+  // 이번 화 클리프행어 유형 (이전 화 유형 제외)
+  const availableCliffhangers = previousCliffhangerType
+    ? CLIFFHANGER_TYPES.filter(t => t !== previousCliffhangerType)
+    : CLIFFHANGER_TYPES;
+  const suggestedCliffhanger = availableCliffhangers[(episodeNumber - 1) % availableCliffhangers.length];
+
+  // 구간별 속도
+  let pacingGuide = '';
+  if (episodeNumber <= 10) {
+    pacingGuide = '초반: 빠르게. 설명 최소화.';
+  } else if (episodeNumber <= 50) {
+    pacingGuide = '중반: 깊게. 감정/관계/갈등 파고들기.';
+  } else {
+    pacingGuide = '후반: 폭풍. 쉴 틈 없이.';
+  }
+
+  const abilityConstraint = getAbilityConstraint(episodeNumber);
+  const patternBanList = getPatternBanList(recentLogs);
+
+  return `
+████████████████████████████████████████
+  동적 규칙: 제${episodeNumber}화 전용
+████████████████████████████████████████
+
+=== 절대 규칙 (MUST) ===
+
+[MUST-1] 설명 금지
+캐릭터가 설정/능력/세계관을 대사로 설명하면 안 된다.
+"이건 ~이야", "~하는 것이다" 패턴 절대 금지.
+행동/감각/결과로만 보여줄 것.
+❌ "이건 혈통 추적 부적이야."
+✅ 검은 부적이 이마에 닿았다. 타들어갔다.
+
+[MUST-2] 능력/정체 공개 속도 제한
+${abilityConstraint}
+
+[MUST-3] 같은 패턴 반복 금지
+${patternBanList}
+
+※ MUST 위반 문장이 1개라도 있으면 그 화 전체가 실패.
+
+=== 이번 화 컨텍스트 ===
+독백 톤: "${suggestedTone}" ${previousMonologueTone ? `(직전 "${previousMonologueTone}" 금지)` : ''}
+클리프행어: "${suggestedCliffhanger}" ${previousCliffhangerType ? `(직전 "${previousCliffhangerType}" 금지)` : ''}
+구간: ${pacingGuide}
+
+=== 검증 체크리스트 ===
+□ MUST-1 위반 없음 (설명 대사 0개)
+□ MUST-2 허용 범위 내
+□ MUST-3 직전 화와 다른 패턴
+□ 분량 ${TARGET_MIN_CHAR}~${TARGET_MAX_CHAR}자
+□ 첫 문장이 어그로
+□ 마지막 2줄이 클리프행어
+`;
+}
+
+// 캐시된 시스템 프롬프트 생성 (Anthropic Prompt Caching용)
+function buildCachedSystemPrompt(
+  persona: typeof AUTHOR_PERSONA_PRESETS[0] | undefined,
+  viewpoint: string,
+  episodeNumber: number,
+  previousMonologueTone?: MonologueTone,
+  authorConfig?: AuthorConfig,
+  recentLogs?: EpisodeLog[],
+  previousCliffhangerType?: string
+): CachedSystemMessage {
+  // 정적 규칙 (캐시됨 - 최소 1024 토큰 필요, TTL 5분)
+  const staticRules = buildStaticSystemRules(persona, viewpoint, authorConfig);
+
+  // 동적 규칙 (매번 변경)
+  const dynamicRules = buildDynamicSystemRules(
+    episodeNumber,
+    previousMonologueTone,
+    recentLogs,
+    previousCliffhangerType
+  );
+
+  return [
+    {
+      type: 'text',
+      text: staticRules,
+      cache_control: { type: 'ephemeral' }  // 5분간 캐시
+    },
+    {
+      type: 'text',
+      text: dynamicRules
+      // 캐시 안 함 - 에피소드마다 변경
+    }
+  ];
+}
+
 // 유저 프롬프트 (가변 - 세계관 + 캐릭터 + 이전 화 + 방향 + Active Context + Writing Memory + PD 디렉팅 + 시뮬레이션 프로필)
 function buildUserPrompt(params: {
   episodeNumber: number;
@@ -1211,8 +1403,8 @@ export async function POST(req: NextRequest) {
     const { episodeLogs = [] } = body;
     const recentLogs = episodeLogs.slice(-3) as EpisodeLog[]; // 최근 3화
 
-    // 시스템 프롬프트 (4-Tier Architecture + authorConfig 기반 페르소나)
-    const systemPrompt = buildSystemPrompt(
+    // 캐시된 시스템 프롬프트 (정적 규칙 캐시 + 동적 규칙)
+    const cachedSystemPrompt = buildCachedSystemPrompt(
       persona,
       viewpoint,
       episodeNumber,
@@ -1222,10 +1414,17 @@ export async function POST(req: NextRequest) {
       previousCliffhangerType
     );
 
+    // 레거시 호환용 문자열 시스템 프롬프트 (토큰 계산용)
+    const systemPromptString = cachedSystemPrompt.map(block => block.text).join('\n\n');
+
     // 토큰 예산 모니터링
-    const systemTokens = estimateTokens(systemPrompt);
-    console.log('\n=== TOKEN BUDGET MONITORING ===');
-    console.log(`시스템 프롬프트: ${systemTokens} 토큰 (예산: ${TOKEN_BUDGET.system})`);
+    const systemTokens = estimateTokens(systemPromptString);
+    const staticTokens = estimateTokens(cachedSystemPrompt[0].text);
+    const dynamicTokens = estimateTokens(cachedSystemPrompt[1].text);
+    console.log('\n=== TOKEN BUDGET MONITORING (with Caching) ===');
+    console.log(`시스템 프롬프트 총: ${systemTokens} 토큰 (예산: ${TOKEN_BUDGET.system})`);
+    console.log(`  - 정적 규칙 (캐시됨): ${staticTokens} 토큰`);
+    console.log(`  - 동적 규칙: ${dynamicTokens} 토큰`);
 
     // 유저 프롬프트 (가변)
     const userPrompt = buildUserPrompt({
@@ -1250,6 +1449,7 @@ export async function POST(req: NextRequest) {
     const totalTokens = systemTokens + userTokens;
     console.log(`유저 프롬프트: ${userTokens} 토큰`);
     console.log(`총 입력 토큰: ${totalTokens} (예산: ${TOKEN_BUDGET.TOTAL_MAX})`);
+    console.log(`캐시 절감 예상: 반복 호출 시 ${staticTokens} 토큰 절감 (정적 규칙 캐시)`);
 
     if (totalTokens > TOKEN_BUDGET.TOTAL_MAX) {
       console.warn(`⚠️ 토큰 예산 초과! ${totalTokens} > ${TOKEN_BUDGET.TOTAL_MAX}`);
@@ -1274,11 +1474,12 @@ export async function POST(req: NextRequest) {
         try {
           let fullText = '';
 
+          // Anthropic Prompt Caching 적용 - 정적 규칙은 캐시됨
           const streamResponse = client.messages.stream({
             model: MODEL,
             max_tokens: MAX_TOKENS,
             temperature: TEMPERATURE,
-            system: systemPrompt,
+            system: cachedSystemPrompt as unknown as Anthropic.TextBlockParam[],
             messages: [{ role: 'user', content: userPrompt }],
           });
 

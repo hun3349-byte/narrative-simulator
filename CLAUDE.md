@@ -29,6 +29,13 @@
 21. ✅ **네트워크 에러 대응 (Task 10)** - SSE heartbeat 추가 + 네트워크 에러 자동 재시도 (최대 1회)
 22. ✅ **TIER 2 대화체/문단 연결 규칙** - 나이/신분 맞춤 말투 + 감정 브릿지 + 전환 패턴 제한
 23. ✅ **author-chat heartbeat + 레이어 생성 재시도** - author-chat API 3개 ReadableStream에 heartbeat 추가 + generateLayerProposal 네트워크 에러 자동 재시도
+24. ✅ **Anthropic Prompt Caching (Task 2.1)** - write-episode API에 cache_control 적용, 정적/동적 프롬프트 분리
+25. ✅ **Dynamic Prompt Pruning (Task 2.2)** - 장면 유형별 컨텍스트 가지치기 (battle/romance/mystery 등)
+26. ✅ **Async Background Processing (Task 2.3)** - Episode Log + Fact Check 병렬 백그라운드 실행
+27. ✅ **Commercial Metrics Dashboard (Task 3.1)** - Hooking Score + Tension Curve 분석 시스템
+28. ✅ **Meta Reader Simulator (Task 3.2)** - 5가지 독자 페르소나 시뮬레이션 댓글 생성
+29. ✅ **Mega Hit Templates (Task 3.3)** - 7가지 인기 장르 황금 공식 템플릿
+30. ✅ **Platform-specific Export (Task 3.4)** - 문피아/네이버시리즈/카카오페이지/리디북스 맞춤 포맷
 
 ### 다음 작업
 - 추가 기능 개선 및 사용자 피드백 반영
@@ -46,6 +53,41 @@
 - 프로젝트 정체서(`project-identity.md`)와 최상위 원칙(`supreme-principles.md`)을 모든 설계/구현 판단의 기준으로 삼는다.
 
 ### 최근 업데이트
+- **2026-02-26**: Architecture Optimization Tasks 완료
+  - **Task 2.1: Anthropic Prompt Caching** (`app/api/write-episode/route.ts`):
+    - `CachedSystemMessage` 타입 추가 (cache_control 지원)
+    - `buildStaticSystemRules()` - 캐시 가능한 정적 규칙 (~1000+ 토큰)
+    - `buildDynamicSystemRules()` - 화별 동적 규칙
+    - `buildCachedSystemPrompt()` - 정적/동적 블록 분리
+    - 첫 번째 정적 블록에 `cache_control: { type: 'ephemeral' }` 적용
+  - **Task 2.2: Dynamic Prompt Pruning** (`lib/utils/active-context.ts`):
+    - `SceneType` 타입: battle, romance, mystery, political, daily, growth, exploration, mixed
+    - `detectSceneType()` - EpisodeDirection에서 장면 유형 감지
+    - `pruneWorldBible()` - 장면 유형에 따른 컨텍스트 가지치기
+    - `buildPrunedActiveContext()` - 가지치기된 Active Context 생성
+    - 예: battle 장면 → powerSystem/rules 유지, 관계/일상 축소
+  - **Task 2.3: Async Background Processing** (`app/projects/[id]/page.tsx`):
+    - `handlePostEpisodeCreation()` 비동기 백그라운드로 변경
+    - Episode Log 생성 + Fact Check 병렬 실행
+    - 사용자 대기 없이 백그라운드에서 독립 실행
+    - 실패해도 다른 작업에 영향 없음
+  - **Task 3.1: Commercial Metrics Dashboard** (`lib/utils/commercial-metrics.ts`):
+    - `HookingScore`: 오프닝훅/클리프행어/긴장유지/보상밀도/캐릭터모멘텀 분석
+    - `TensionCurve`: 10개 구간 긴장도 분석, 커브 타입 분류
+    - `CommercialMetrics`: 잔존율/다음화 클릭 확률 예측
+  - **Task 3.2: Meta Reader Simulator** (`lib/utils/reader-simulator.ts`):
+    - 5가지 독자 페르소나: 정주행러, 초고수, 까다로운 평론가, 커플러, 설정덕후
+    - 페르소나별 댓글 템플릿 및 반응 생성
+    - `ReaderReactionSummary`: 감정 점수, 하이라이트, 우려, 이탈 위험
+  - **Task 3.3: Mega Hit Templates** (`lib/presets/mega-hit-templates.ts`):
+    - 7가지 장르 템플릿: 회귀/빙의/아카데미/탑클라이밍/던전/무협/로판
+    - 황금 훅, 플롯 구조, 성공 사례, 흔한 실수
+    - `generateColdStartGuide()`: 1화 아웃라인 자동 생성
+  - **Task 3.4: Platform Export** (`lib/utils/platform-export.ts`):
+    - 5개 플랫폼: 문피아/네이버시리즈/카카오페이지/리디북스/일반
+    - 플랫폼별 분량/포맷팅/제한사항 스펙
+    - `formatForPlatform()`: 자동 포맷 변환 및 검증
+    - `recommendPlatform()`: 분량 기반 플랫폼 추천
 - **2026-02-26**: PROMPT-REFACTOR-INSTRUCTIONS7 구현
   - **author-chat API heartbeat 추가** (`app/api/author-chat/route.ts`):
     - 3개 ReadableStream에 15초 heartbeat 추가 (Writing mode, Conversation, Layer generation)

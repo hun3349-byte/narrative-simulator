@@ -2118,3 +2118,163 @@ export interface EpisodeDirectionTemplate {
   description: string;
   direction: Omit<EpisodeDirection, 'episodeNumber' | 'createdAt' | 'updatedAt'>;
 }
+
+// === Commercial Metrics Dashboard (Task 3.1) ===
+
+export interface HookingScore {
+  episodeNumber: number;
+  overall: number;                    // 종합 점수 (0-100)
+  breakdown: {
+    openingHook: number;              // 오프닝 훅 강도 (0-100)
+    cliffhanger: number;              // 클리프행어 강도 (0-100)
+    tensionMaintenance: number;       // 긴장 유지도 (0-100)
+    rewardDensity: number;            // 보상 밀도 (0-100)
+    characterMomentum: number;        // 캐릭터 모멘텀 (0-100)
+  };
+  flags: {
+    hasStrongOpening: boolean;        // 강한 오프닝
+    hasCliffhanger: boolean;          // 클리프행어 있음
+    hasMajorReveal: boolean;          // 주요 폭로 있음
+    hasEmotionalPeak: boolean;        // 감정 절정 있음
+  };
+  suggestions: string[];              // 개선 제안
+  analyzedAt: string;
+}
+
+export interface TensionPoint {
+  position: number;                   // 0-100 (화 내 위치 %)
+  level: number;                      // 긴장 레벨 (0-100)
+  type: 'rising' | 'peak' | 'falling' | 'valley';
+  description?: string;               // 해당 지점 설명
+}
+
+export interface TensionCurve {
+  episodeNumber: number;
+  points: TensionPoint[];             // 긴장 커브 포인트들
+  averageTension: number;             // 평균 긴장도
+  peakCount: number;                  // 절정 횟수
+  valleyCount: number;                // 저점 횟수
+  curveType: 'steady_rise' | 'roller_coaster' | 'slow_build' | 'front_loaded' | 'back_loaded' | 'flat';
+  recommendation?: string;            // 개선 추천
+}
+
+export interface CommercialMetrics {
+  episodeNumber: number;
+  hookingScore: HookingScore;
+  tensionCurve: TensionCurve;
+  readRetentionEstimate: number;      // 예상 잔존율 (0-100)
+  nextClickProbability: number;       // 다음 화 클릭 확률 (0-100)
+  generatedAt: string;
+}
+
+// === Meta Reader Simulator (Task 3.2) ===
+
+export type ReaderPersonaType = 'casual' | 'hardcore' | 'critic' | 'shipper' | 'worldbuilder';
+
+export interface ReaderPersona {
+  id: string;
+  type: ReaderPersonaType;
+  name: string;                       // 페르소나 이름 (예: "정주행러", "설정덕후")
+  preferences: {
+    pacingPreference: 'fast' | 'moderate' | 'slow';
+    romanceInterest: number;          // 0-100
+    actionInterest: number;           // 0-100
+    mysteryInterest: number;          // 0-100
+    characterDepthImportance: number; // 0-100
+  };
+  reactionStyle: 'enthusiastic' | 'analytical' | 'critical' | 'emotional';
+}
+
+export interface SimulatedComment {
+  id: string;
+  episodeNumber: number;
+  readerPersona: ReaderPersona;
+  content: string;                    // 댓글 내용
+  sentiment: 'positive' | 'neutral' | 'negative' | 'mixed';
+  highlights: string[];               // 언급된 장면/캐릭터
+  concerns: string[];                 // 우려 사항
+  predictions: string[];              // 독자 예측
+  rating?: number;                    // 별점 (1-5)
+  generatedAt: string;
+}
+
+export interface ReaderReactionSummary {
+  episodeNumber: number;
+  overallSentiment: number;           // -100 ~ +100
+  topHighlights: string[];            // 가장 많이 언급된 좋은 점
+  topConcerns: string[];              // 가장 많이 언급된 우려
+  predictedDropoffRisk: number;       // 이탈 위험 (0-100)
+  suggestedImprovements: string[];    // 개선 제안
+  comments: SimulatedComment[];       // 시뮬레이션된 댓글들
+}
+
+// === Mega Hit Templates (Task 3.3) ===
+
+export type MegaHitTemplateCategory = 'regression' | 'possession' | 'academy' | 'tower_climbing' | 'dungeon' | 'murim' | 'romance_fantasy';
+
+export interface MegaHitTemplate {
+  id: string;
+  category: MegaHitTemplateCategory;
+  name: string;                       // 템플릿 이름
+  description: string;                // 설명
+  keyElements: {
+    protagonist: {
+      commonTraits: string[];         // 흔한 주인공 특성
+      goldenHook: string;             // 황금 훅 (핵심 설정)
+      avoidTraits: string[];          // 피해야 할 특성
+    };
+    worldSetup: {
+      essentialRules: string[];       // 필수 세계관 규칙
+      conflictSources: string[];      // 갈등 원천
+    };
+    plotStructure: {
+      openingPattern: string;         // 시작 패턴 (예: "죽음에서 시작")
+      firstArcMilestones: string[];   // 초반 아크 마일스톤
+      tensionEscalation: string[];    // 긴장 상승 패턴
+    };
+    hookPatterns: {
+      chapter1Hook: string;           // 1화 훅
+      chapter5Hook: string;           // 5화 훅 (중독점)
+      arcEndingPattern: string;       // 아크 종료 패턴
+    };
+  };
+  successExamples: string[];          // 성공 사례 (제목만)
+  commonMistakes: string[];           // 흔한 실수
+  estimatedAppeal: number;            // 예상 대중성 (0-100)
+}
+
+// === Platform-specific Export (Task 3.4) ===
+
+export type ExportPlatform = 'munpia' | 'naver_series' | 'kakao_page' | 'ridibooks' | 'general';
+
+export interface PlatformFormatSpec {
+  platform: ExportPlatform;
+  name: string;                       // 플랫폼 이름
+  charCountRange: {
+    min: number;                      // 최소 글자 수
+    max: number;                      // 최대 글자 수
+    recommended: number;              // 권장 글자 수
+  };
+  formatting: {
+    lineBreakStyle: 'single' | 'double' | 'paragraph';
+    dialogueStyle: 'quotation' | 'dash' | 'mixed';
+    emphasisAllowed: boolean;         // 강조 허용 여부
+    imageAllowed: boolean;            // 이미지 허용 여부
+  };
+  requirements: {
+    episodePrefix?: string;           // 에피소드 접두사 (예: "제 N 화")
+    authorNotePosition?: 'top' | 'bottom' | 'none';
+    copyrightNotice?: boolean;
+  };
+  restrictions: string[];             // 제한사항
+}
+
+export interface PlatformExportResult {
+  platform: ExportPlatform;
+  episodeNumber: number;
+  formattedContent: string;           // 플랫폼 맞춤 포맷팅된 내용
+  charCount: number;
+  warnings: string[];                 // 경고 (글자 수 초과 등)
+  isValid: boolean;                   // 플랫폼 요구사항 충족 여부
+  exportedAt: string;
+}
