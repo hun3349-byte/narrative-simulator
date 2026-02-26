@@ -61,6 +61,11 @@
     - **프롬프트 압축 (30%+ 토큰 절감)**: buildSystemPrompt, buildStaticSystemRules, buildDynamicSystemRules 극단적 압축
     - **동적 컨텍스트 가지치기 강화**: 직전 3화→1화, 등장 캐릭터만, 액션 필요 떡밥만
     - **스트리밍 즉시 플러시**: heartbeat 3초 간격, 다중 heartbeat 버스트, status 메시지 전송
+40. ✅ **2화 집필 타임아웃 근본 원인 해결** - 3가지 Root Cause Fix
+    - **내부 55초 타임아웃 제거**: Promise.race 타임아웃 로직 완전 제거 (근본 원인!)
+    - **maxDuration 극대화**: 60초 → 300초 (Railway/Vercel Pro)
+    - **프론트엔드 타임아웃 확장**: 180초 → 300초
+    - **에러 로깅 고도화**: error.message, error.cause, error.stack 상세 출력
 
 ### 다음 작업
 - 추가 기능 개선 및 사용자 피드백 반영
@@ -78,6 +83,19 @@
 - 프로젝트 정체서(`project-identity.md`)와 최상위 원칙(`supreme-principles.md`)을 모든 설계/구현 판단의 기준으로 삼는다.
 
 ### 최근 업데이트
+- **2026-02-26**: 2화 집필 타임아웃 근본 원인 해결
+  - **Root Cause 1 - 내부 타임아웃 제거** (`app/api/write-episode/route.ts`)
+    - 55초 Promise.race 타임아웃 완전 제거
+    - maxDuration이 서버 타임아웃을 관리하므로 내부 타임아웃 불필요
+    - "AI 응답이 지연되고 있어..." 에러의 직접 원인 해결
+  - **Root Cause 2 - maxDuration 극대화**
+    - `export const maxDuration = 60` → `= 300`
+    - Railway는 무제한, Vercel Pro는 300초까지 지원
+  - **Root Cause 3 - 프론트엔드 타임아웃 확장** (`app/projects/[id]/page.tsx`)
+    - `timeoutMs: 180000` → `300000` (3분 → 5분)
+  - **에러 로깅 고도화**
+    - error.type, error.message, error.cause, error.stack 모두 출력
+    - 디버깅 시 정확한 원인 파악 가능
 - **2026-02-26**: 프롬프트 다이어트 및 타임아웃 근본 해결
   - **프롬프트 압축** (`app/api/write-episode/route.ts`)
     - buildSystemPrompt: 4-Tier 구조 → 압축 개조식 (~30% 토큰 절감)

@@ -418,7 +418,9 @@ function buildEpisodeDirectionSection(direction?: EpisodeDirection): string {
   return result;
 }
 
-export const maxDuration = 60; // Vercel Fluid Compute 활성화
+// Vercel/Railway 최대 실행 시간 (Pro 플랜: 300초, Hobby: 60초)
+// Railway는 제한 없음, Vercel Pro는 300초까지 가능
+export const maxDuration = 300;
 
 /**
  * 계층적 캐릭터 컨텍스트 빌드 (토큰 예산 적용)
@@ -1323,41 +1325,21 @@ export async function POST(req: NextRequest) {
             messages: [{ role: 'user', content: userPrompt }],
           });
 
-          // API 응답 타임아웃 (55초 - maxDuration보다 약간 짧게)
-          const timeoutPromise = new Promise<never>((_, reject) => {
-            setTimeout(() => reject(new Error('AI_RESPONSE_TIMEOUT')), 55000);
-          });
+          // ============================================
+          // 내부 타임아웃 제거됨 (Root Cause Fix)
+          // maxDuration=300이 서버 타임아웃을 관리하므로
+          // 별도의 Promise.race 타임아웃 불필요
+          // ============================================
 
-          // 스트리밍 처리
-          const streamPromise = (async () => {
-            for await (const event of streamResponse) {
-              if (streamClosed) break;
-              if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-                fullText += event.delta.text;
-                // 실시간 텍스트 전송
-                const chunk = JSON.stringify({ type: 'text', content: event.delta.text });
-                safeEnqueue(encoder.encode(`data: ${chunk}\n\n`));
-              }
+          // 스트리밍 처리 (타임아웃 없이 완료까지 대기)
+          for await (const event of streamResponse) {
+            if (streamClosed) break;
+            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+              fullText += event.delta.text;
+              // 실시간 텍스트 전송
+              const chunk = JSON.stringify({ type: 'text', content: event.delta.text });
+              safeEnqueue(encoder.encode(`data: ${chunk}\n\n`));
             }
-            return fullText;
-          })();
-
-          // 타임아웃 또는 완료 중 먼저 오는 것
-          try {
-            fullText = await Promise.race([streamPromise, timeoutPromise]);
-          } catch (raceError) {
-            if (raceError instanceof Error && raceError.message === 'AI_RESPONSE_TIMEOUT') {
-              const timeoutData = JSON.stringify({
-                type: 'error',
-                message: 'AI 응답이 지연되고 있어. 잠시 후 다시 시도해줘.',
-                suggestion: '프롬프트가 길어 AI가 처리하는 데 시간이 걸리고 있습니다.',
-                retryable: true,
-              });
-              safeEnqueue(encoder.encode(`data: ${timeoutData}\n\n`));
-              safeClose();
-              return;
-            }
-            throw raceError;
           }
 
           // 파싱
@@ -1482,7 +1464,15 @@ export async function POST(req: NextRequest) {
           // heartbeat 정리 후 스트림 종료
           safeClose();
         } catch (error) {
-          console.error('Write episode streaming error:', error);
+          // ============================================
+          // 에러 로깅 고도화 (디버깅용)
+          // ============================================
+          console.error('=== WRITE EPISODE ERROR ===');
+          console.error('Error type:', error?.constructor?.name);
+          console.error('Error message:', error instanceof Error ? error.message : String(error));
+          console.error('Error cause:', error instanceof Error ? (error as Error & { cause?: unknown }).cause : 'N/A');
+          console.error('Error stack:', error instanceof Error ? error.stack : 'N/A');
+          console.error('===========================');
 
           // 에러 유형에 따른 구체적 메시지
           let errorMessage = '에피소드 작성 오류';
@@ -1539,7 +1529,16 @@ export async function POST(req: NextRequest) {
       },
     });
   } catch (error) {
-    console.error('Write episode error:', error);
+    // ============================================
+    // 최상위 에러 로깅 (API 라우트 레벨)
+    // ============================================
+    console.error('=== WRITE EPISODE ROUTE ERROR ===');
+    console.error('Error type:', error?.constructor?.name);
+    console.error('Error message:', error instanceof Error ? error.message : String(error));
+    console.error('Error cause:', error instanceof Error ? (error as Error & { cause?: unknown }).cause : 'N/A');
+    console.error('Error stack:', error instanceof Error ? error.stack : 'N/A');
+    console.error('=================================');
+
     const encoder = new TextEncoder();
 
     // 에러 유형에 따른 구체적 메시지

@@ -21,7 +21,7 @@ async function streamingFetch(
   url: string,
   body: unknown,
   onText?: (text: string) => void,
-  timeoutMs: number = 180000, // 기본 3분 타임아웃
+  timeoutMs: number = 300000, // 기본 5분 타임아웃 (서버 maxDuration=300과 일치)
   maxRetries: number = 1, // 최대 재시도 횟수
 ): Promise<{ type: string; [key: string]: unknown }> {
   let lastError: Error | null = null;
