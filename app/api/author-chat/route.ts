@@ -468,7 +468,15 @@ ${req.direction ? `- 초기 아이디어: ${req.direction}` : ''}
     world: `${baseContext}
 
 ## 임무
-${req.action === 'generate_layer' ? '세계를 만들어.' : req.userMessage ? `환님 피드백: "${req.userMessage}"\n\n이 피드백에 맞춰 세계를 수정해.` : '피드백에 맞춰 세계를 수정해.'}
+${req.action === 'generate_layer'
+  ? `세계를 만들어.${req.direction ? `
+
+### ⭐ 환님의 초기 아이디어 (반드시 반영!)
+"${req.direction}"
+
+이 아이디어가 세계관의 핵심이야. 이 방향에 맞는 세계를 설계해.
+위 아이디어에 나온 설정/장소/개념을 세계관에 자연스럽게 녹여.` : ''}`
+  : req.userMessage ? `환님 피드백: "${req.userMessage}"\n\n이 피드백에 맞춰 세계를 수정해.` : '피드백에 맞춰 세계를 수정해.'}
 ${req.currentDraft ? `\n현재 초안:\n${JSON.stringify(req.currentDraft, null, 2)}` : ''}
 
 ## 세계 구축 규칙
@@ -499,7 +507,15 @@ JSON으로 응답:
 ${req.previousLayers.world ? JSON.stringify(req.previousLayers.world, null, 2) : '(없음)'}
 
 ## 임무
-${req.action === 'generate_layer' ? '이 세계의 핵심 규칙을 정해.' : req.userMessage ? `환님 피드백: "${req.userMessage}"\n\n이 피드백에 맞춰 규칙을 수정해.` : '피드백에 맞춰 규칙을 수정해.'}
+${req.action === 'generate_layer'
+  ? `이 세계의 핵심 규칙을 정해.${req.direction ? `
+
+### ⭐ 환님의 초기 아이디어 (반드시 반영!)
+"${req.direction}"
+
+이 방향의 이야기가 작동하는 규칙을 만들어.
+아이디어에 나온 능력/힘/시스템을 규칙에 자연스럽게 녹여.` : ''}`
+  : req.userMessage ? `환님 피드백: "${req.userMessage}"\n\n이 피드백에 맞춰 규칙을 수정해.` : '피드백에 맞춰 규칙을 수정해.'}
 ${req.currentDraft ? `\n현재 초안:\n${JSON.stringify(req.currentDraft, null, 2)}` : ''}
 
 ## 규칙 구축 가이드 (V2 강화판)
@@ -605,7 +621,15 @@ ${req.previousLayers.world ? JSON.stringify(req.previousLayers.world, null, 2) :
 ${req.previousLayers.coreRules ? JSON.stringify(req.previousLayers.coreRules, null, 2) : '(없음)'}
 
 ## 임무
-${req.action === 'generate_layer' ? '세계에 살아가는 존재들(씨앗)을 뿌려.' : req.userMessage ? `환님 피드백: "${req.userMessage}"\n\n이 피드백에 맞춰 씨앗을 수정해.` : '피드백에 맞춰 씨앗을 수정해.'}
+${req.action === 'generate_layer'
+  ? `세계에 살아가는 존재들(씨앗)을 뿌려.${req.direction ? `
+
+### ⭐ 환님의 초기 아이디어 (반드시 반영!)
+"${req.direction}"
+
+이 방향에 필요한 세력/종족/인물을 배치해.
+아이디어에 나온 캐릭터/집단이 있다면 반드시 포함해.` : ''}`
+  : req.userMessage ? `환님 피드백: "${req.userMessage}"\n\n이 피드백에 맞춰 씨앗을 수정해.` : '피드백에 맞춰 씨앗을 수정해.'}
 ${req.currentDraft ? `\n현재 초안:\n${JSON.stringify(req.currentDraft, null, 2)}` : ''}
 
 ## 씨앗 가이드 (V2 강화판)
@@ -690,7 +714,15 @@ JSON으로 응답:
 세력들: ${(req.previousLayers.seeds as { factions?: Array<{ name: string }> })?.factions?.map(f => f.name).join(', ') || ''}
 
 ## 임무
-${req.action === 'generate_layer' ? '이 세계에서 태어난 주인공을 만들어.' : req.userMessage ? `환님 피드백: "${req.userMessage}"\n\n이 피드백에 맞춰 주인공을 수정해.` : '피드백에 맞춰 주인공을 수정해.'}
+${req.action === 'generate_layer'
+  ? `이 세계에서 태어난 주인공을 만들어.${req.direction ? `
+
+### ⭐ 환님의 초기 아이디어 (반드시 반영!)
+"${req.direction}"
+
+이 방향이 주인공의 출발점이야.
+아이디어에 나온 주인공 설정/배경/상황을 그대로 반영해.` : ''}`
+  : req.userMessage ? `환님 피드백: "${req.userMessage}"\n\n이 피드백에 맞춰 주인공을 수정해.` : '피드백에 맞춰 주인공을 수정해.'}
 ${req.currentDraft ? `\n현재 초안:\n${JSON.stringify(req.currentDraft, null, 2)}` : ''}
 
 ## 주인공 설계 가이드 (V2 강화판)
@@ -810,7 +842,15 @@ JSON으로 응답:
 주인공 결핍: ${(req.previousLayers.heroArc as { deficiency?: string })?.deficiency || ''}
 
 ## 임무
-${req.action === 'generate_layer' ? '대립 구도를 만들어. 빌런 + 제3세력으로 삼각 구도를 만들어.' : req.userMessage ? `환님 피드백: "${req.userMessage}"\n\n이 피드백에 맞춰 대립 구도를 수정해.` : '피드백에 맞춰 대립 구도를 수정해.'}
+${req.action === 'generate_layer'
+  ? `대립 구도를 만들어. 빌런 + 제3세력으로 삼각 구도를 만들어.${req.direction ? `
+
+### ⭐ 환님의 초기 아이디어 (반드시 반영!)
+"${req.direction}"
+
+이 방향에서 대립할 빌런/세력을 만들어.
+아이디어에 나온 적대 세력/대립 구도가 있다면 그대로 반영해.` : ''}`
+  : req.userMessage ? `환님 피드백: "${req.userMessage}"\n\n이 피드백에 맞춰 대립 구도를 수정해.` : '피드백에 맞춰 대립 구도를 수정해.'}
 ${req.currentDraft ? `\n현재 초안:\n${JSON.stringify(req.currentDraft, null, 2)}` : ''}
 
 ## 대립 구도 설계 가이드 (V2 강화판 — 삼각 구도)
@@ -927,7 +967,15 @@ JSON으로 응답:
 대립 로드맵: ${JSON.stringify((req.previousLayers.villainArc as { conflictRoadmap?: unknown })?.conflictRoadmap) || '없음'}
 
 ## 임무
-${req.action === 'generate_layer' ? '이 이야기의 떡밥 + 독자 감정 설계를 만들어.' : req.userMessage ? `환님 피드백: "${req.userMessage}"\n\n⚠️ 중요: 환님이 말한 떡밥은 그대로 반영해. "현기원이 떡밥"이라고 하면 현기원이 떡밥이야. 다른 걸로 바꾸거나 "따위"라고 무시하면 안 돼. 환님의 아이디어를 100% 수용한 후에 살을 붙여.` : '피드백에 맞춰 떡밥을 수정해.'}
+${req.action === 'generate_layer'
+  ? `이 이야기의 떡밥 + 독자 감정 설계를 만들어.${req.direction ? `
+
+### ⭐ 환님의 초기 아이디어 (반드시 반영!)
+"${req.direction}"
+
+이 방향의 이야기를 관통하는 떡밥을 설계해.
+아이디어에 나온 비밀/반전 요소가 있다면 그것이 궁극의 떡밥이야.` : ''}`
+  : req.userMessage ? `환님 피드백: "${req.userMessage}"\n\n⚠️ 중요: 환님이 말한 떡밥은 그대로 반영해. "현기원이 떡밥"이라고 하면 현기원이 떡밥이야. 다른 걸로 바꾸거나 "따위"라고 무시하면 안 돼. 환님의 아이디어를 100% 수용한 후에 살을 붙여.` : '피드백에 맞춰 떡밥을 수정해.'}
 ${req.currentDraft ? `\n현재 초안:\n${JSON.stringify(req.currentDraft, null, 2)}` : ''}
 
 ## 떡밥 + 감정 설계 가이드 (V2 강화판)

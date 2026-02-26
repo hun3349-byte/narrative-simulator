@@ -1,6 +1,6 @@
 # Narrative Simulator - 프로젝트 가이드
 
-## 현재 진행 현황 (2026-02-25)
+## 현재 진행 현황 (2026-02-26)
 
 ### 사용자 역할 정의
 **PD (Producer/Director)**: 전체적인 소설의 집필과 세계관, 배경, 등장인물, 상황, 에피소드 전체부분의 디테일한 디렉팅
@@ -21,6 +21,7 @@
 13. ✅ **이원화 시뮬레이션 UI 버튼 연결** - 역사A/주인공B 탭 버튼에 API 호출 연결
 14. ✅ **설정 모순 수정 요청 기능** - 팩트체크 모순 발견 시 자동 수정 및 비교 UI
 15. ✅ **집필 프롬프트 4-Tier 아키텍처 리팩토링** - LLM 규칙 준수율 향상 + 동적 제약 생성
+16. ✅ **Direction 미반영 버그 수정** - author-chat 레이어 생성 시 초기 아이디어 반영 강화 + write-episode에 projectDirection 추가
 
 ### 다음 작업
 - 추가 기능 개선 및 사용자 피드백 반영
@@ -38,6 +39,18 @@
 - 프로젝트 정체서(`project-identity.md`)와 최상위 원칙(`supreme-principles.md`)을 모든 설계/구현 판단의 기준으로 삼는다.
 
 ### 최근 업데이트
+- **2026-02-26**: Direction 미반영 버그 수정 + 프롬프트 강화
+  - **author-chat API direction 버그 수정**:
+    - 사용자가 프로젝트 생성 시 입력한 "방향(direction)"이 레이어 생성에 제대로 반영되지 않던 문제 해결
+    - 각 레이어(world, coreRules, seeds, heroArc, villainArc, ultimateMystery) 프롬프트의 "임무" 섹션에 direction 명시적 삽입
+    - 패턴: `환님의 초기 아이디어를 반드시 반영해: "${direction}"`
+  - **write-episode API projectDirection 추가**:
+    - `buildUserPrompt`에 `projectDirection` 파라미터 추가
+    - 매 화 집필 시 "이 소설의 기본 전제" 섹션으로 project.direction 주입
+    - Active Context 모드와 레거시 모드 모두에 적용
+  - **수정 파일**:
+    - `app/api/author-chat/route.ts`: 6개 레이어 프롬프트 수정
+    - `app/api/write-episode/route.ts`: buildUserPrompt 파라미터 및 프롬프트 확장
 - **2026-02-25**: 집필 프롬프트 4-Tier 아키텍처 리팩토링
   - **4-Tier 프롬프트 구조** (PROMPT-REFACTOR-INSTRUCTIONS.md 기반):
     - TIER 0: 절대 규칙 (MUST - 위반 시 전체 무효)

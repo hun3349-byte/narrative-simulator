@@ -877,6 +877,8 @@ function buildUserPrompt(params: {
   writingMemory?: WritingMemory;
   // 시뮬레이션 파생 프로필 (캐릭터 행동 규칙)
   simulationProfiles?: CharacterSimProfile[];
+  // 프로젝트 기본 방향 (환님 설정)
+  projectDirection?: string;
 }): string {
   const {
     episodeNumber,
@@ -894,7 +896,8 @@ function buildUserPrompt(params: {
     recurringFeedback,
     activeContext,
     writingMemory,
-    simulationProfiles
+    simulationProfiles,
+    projectDirection
   } = params;
 
   // 세계관 세부 정보 섹션
@@ -935,11 +938,18 @@ function buildUserPrompt(params: {
   // Active Context가 있으면 중복 섹션 제거
   const hasActiveContext = !!activeContext;
 
+  // 프로젝트 기본 방향 섹션
+  const projectDirectionSection = projectDirection ? `
+### 이 소설의 기본 전제 (환님 설정)
+${projectDirection}
+※ 이 전제를 매 화 유지하세요. 모든 전개는 이 전제 위에서 이루어져야 합니다.
+` : '';
+
   // Active Context 모드: 압축된 정보 사용
   if (hasActiveContext) {
     return `${retryInstruction}${feedbackSection}${writingMemorySection}${episodeDirectionSection}
 ## 제${episodeNumber}화 작성 요청
-
+${projectDirectionSection}
 === 일관성 엔진 (Active Context) ===
 ${activeContextSection}
 === 일관성 엔진 끝 ===
@@ -961,7 +971,7 @@ ${episodeNumber <= 5 ? `
   // 레거시 모드: Active Context 없이 기존 방식 사용
   return `${retryInstruction}${feedbackSection}${writingMemorySection}${episodeDirectionSection}
 ## 제${episodeNumber}화 작성 요청
-
+${projectDirectionSection}
 ### 세계관
 ${confirmedLayers?.world || '(미설정)'}
 
@@ -1219,6 +1229,7 @@ export async function POST(req: NextRequest) {
       activeContext,
       writingMemory,
       simulationProfiles,  // 시뮬레이션 파생 캐릭터 프로필
+      projectDirection: projectConfig?.direction as string | undefined,  // 프로젝트 기본 방향
     });
 
     // 토큰 예산 최종 확인
