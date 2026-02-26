@@ -729,6 +729,22 @@ function buildSystemPrompt(
     ? buildAuthorPersonaPrompt(authorConfig)
     : '';
 
+  // 장르별 금지 어휘 (무협/동양판타지용)
+  const genre = authorConfig?.genre;
+  const isOrientalGenre = genre === 'martial_arts' || (genre === 'fantasy' && authorConfig?.customGenre?.includes('동양'));
+  const forbiddenVocabulary = isOrientalGenre ? `
+금지 어휘 (동양 세계관 어긋남):
+- 외래어 절대 금지: 팁, 오케이, 마스터, 미션, 스킬, 레벨, 퀘스트, 파티, 시스템, 버프, 이벤트, 클래스, 스탯, 아이템
+- 현대적 표현 금지: "제대로 걸렸네", "한 건 했다", "이 정도면 OK", "센스 있네"
+- 대체 표현 사용:
+  ✅ 팁/조언 → 가르침, 충고, 비책
+  ✅ 마스터 → 사부, 스승, 장인, 고수
+  ✅ 레벨/스킬 → 경지, 무공, 무예, 내공, 공력
+  ✅ 시스템/능력 → 체계, 술법, 비급
+  ✅ 파티/팀 → 일행, 동료, 무리
+※ 위 금지 어휘가 본문에 1개라도 있으면 수정할 것.
+` : '';
+
   const viewpointRule = viewpoint === 'first_person'
     ? '1인칭 주인공 시점. "나"로 서술. 주인공이 모르는 것은 독자도 모른다.'
     : '3인칭 작가 시점. 캐릭터 이름으로 서술. 시점 전환 가능.';
@@ -830,7 +846,7 @@ ${genrePersonaSection ? genrePersonaSection : ''}
 - "그때였다." "그런데 갑자기." "바로 그 순간." 패턴을 한 화에 2회 이상 쓰지 마라.
   대신: 시간 앵커("해가 기울었다"), 감각 전환("바람이 방향을 바꿨다"), 행동 전환("검을 내려놓았다")
 - 서술→대화→서술→대화 단조로운 교대 금지. 서술 안에 감각, 대화 안에 행동 넣어 층위를 만들 것.
-
+${forbiddenVocabulary}
 ████████████████████████████████████████
   TIER 3: 참고 규칙 (지키면 좋은 것)
 ████████████████████████████████████████
@@ -852,10 +868,21 @@ ${genrePersonaSection ? genrePersonaSection : ''}
 - 장면 전환 최대 4회. 전환 시 감정 브릿지.
 - 새 장면 첫 3줄: 누가/어디서/언제 명확히
 
+[반복 제거 — 한 화 내 미시적 중복 금지 (중요)]
+- 같은 위기→구출 패턴 2회 이상 금지 (예: 습격→구해줌→또 습격→또 구해줌)
+- 같은 감정 비트 반복 금지 (예: 놀람→안도→놀람→안도)
+- 같은 대사 구조 반복 금지 (예: "...하지 마." / "...그러지 마." / "...멈춰.")
+- 주인공이 같은 내면 갈등을 2번 이상 반추하지 않게
+- 같은 능력/기술을 한 화에서 2회 이상 사용하면 변주 필요 (다른 상황, 다른 결과)
+- 같은 배경 묘사 반복 금지 (예: "바람이 불었다"를 여러 번)
+❌ 패턴 예시: 위기1→힘 발휘→해결 → 위기2→힘 발휘→해결 (같은 박자)
+✅ 대안: 위기1→실패→퇴각 → 위기2→다른 방식으로 접근→불완전한 성공
+
 [검증 — 출력 전 자가 체크]
 □ MUST-1 위반 문장 없는가? (설명 대사 0개)
 □ MUST-2 허용 범위 내인가? (능력 발현 횟수)
 □ MUST-3 직전 화와 같은 패턴 아닌가?
+□ 한 화 내 같은 상황 패턴 반복 없는가? (위기→구출, 감정 비트 등)
 □ 분량 ${TARGET_MIN_CHAR}~${TARGET_MAX_CHAR}자인가?
 □ 첫 문장이 어그로인가?
 □ 마지막 2줄이 클리프행어인가?
@@ -1459,19 +1486,52 @@ export async function POST(req: NextRequest) {
     }
     console.log('=== TOKEN BUDGET MONITORING END ===\n');
 
-    // 스트리밍 응답 생성
+    // 스트리밍 응답 생성 (강화된 연결 유지 + 에러 처리)
     const stream = new ReadableStream({
       async start(controller) {
-        // 연결 유지용 heartbeat (15초마다) - Railway/Vercel 타임아웃 방지
-        const heartbeat = setInterval(() => {
-          try {
-            controller.enqueue(encoder.encode(': heartbeat\n\n'));
-          } catch {
-            // stream closed - ignore
+        let heartbeat: ReturnType<typeof setInterval> | null = null;
+        let streamClosed = false;
+
+        const safeEnqueue = (data: Uint8Array) => {
+          if (!streamClosed) {
+            try {
+              controller.enqueue(data);
+            } catch {
+              streamClosed = true;
+            }
           }
-        }, 15000);
+        };
+
+        const cleanup = () => {
+          if (heartbeat) {
+            clearInterval(heartbeat);
+            heartbeat = null;
+          }
+        };
+
+        const safeClose = () => {
+          cleanup();
+          if (!streamClosed) {
+            streamClosed = true;
+            try {
+              controller.close();
+            } catch { /* already closed */ }
+          }
+        };
 
         try {
+          // 1. 즉시 연결 확인 메시지 전송 (프록시 버퍼 flush 유도)
+          const connectMsg = JSON.stringify({
+            type: 'connected',
+            message: '연결 성공, 작가 AI가 집필을 시작합니다...'
+          });
+          safeEnqueue(encoder.encode(`data: ${connectMsg}\n\n`));
+
+          // 2. 10초 heartbeat 시작 (Railway/Vercel 타임아웃 방지)
+          heartbeat = setInterval(() => {
+            safeEnqueue(encoder.encode(': heartbeat\n\n'));
+          }, 10000);
+
           let fullText = '';
 
           // Anthropic Prompt Caching 적용 - 정적 규칙은 캐시됨
@@ -1483,13 +1543,40 @@ export async function POST(req: NextRequest) {
             messages: [{ role: 'user', content: userPrompt }],
           });
 
-          for await (const event of streamResponse) {
-            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-              fullText += event.delta.text;
-              // 실시간 텍스트 전송
-              const chunk = JSON.stringify({ type: 'text', content: event.delta.text });
-              controller.enqueue(encoder.encode(`data: ${chunk}\n\n`));
+          // API 응답 타임아웃 (55초 - maxDuration보다 약간 짧게)
+          const timeoutPromise = new Promise<never>((_, reject) => {
+            setTimeout(() => reject(new Error('AI_RESPONSE_TIMEOUT')), 55000);
+          });
+
+          // 스트리밍 처리
+          const streamPromise = (async () => {
+            for await (const event of streamResponse) {
+              if (streamClosed) break;
+              if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+                fullText += event.delta.text;
+                // 실시간 텍스트 전송
+                const chunk = JSON.stringify({ type: 'text', content: event.delta.text });
+                safeEnqueue(encoder.encode(`data: ${chunk}\n\n`));
+              }
             }
+            return fullText;
+          })();
+
+          // 타임아웃 또는 완료 중 먼저 오는 것
+          try {
+            fullText = await Promise.race([streamPromise, timeoutPromise]);
+          } catch (raceError) {
+            if (raceError instanceof Error && raceError.message === 'AI_RESPONSE_TIMEOUT') {
+              const timeoutData = JSON.stringify({
+                type: 'error',
+                message: 'AI 응답이 지연되고 있어. 잠시 후 다시 시도해줘.',
+                suggestion: '네트워크 상태를 확인하고 다시 시도해주세요.',
+              });
+              safeEnqueue(encoder.encode(`data: ${timeoutData}\n\n`));
+              safeClose();
+              return;
+            }
+            throw raceError;
           }
 
           // 파싱
@@ -1534,7 +1621,7 @@ export async function POST(req: NextRequest) {
                   authorComment,
                   nextEpisodePreview: parsed.nextEpisodePreview || '',
                 });
-                controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+                safeEnqueue(encoder.encode(`data: ${finalData}\n\n`));
               } else {
                 // episode 키 없음 - raw 텍스트 사용
                 const episode = {
@@ -1558,7 +1645,7 @@ export async function POST(req: NextRequest) {
                   authorComment: '파싱 부분 실패 - 원본 텍스트 사용',
                   nextEpisodePreview: '',
                 });
-                controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+                safeEnqueue(encoder.encode(`data: ${finalData}\n\n`));
               }
             } catch {
               // JSON 파싱 실패 - raw 텍스트 사용
@@ -1583,7 +1670,7 @@ export async function POST(req: NextRequest) {
                 authorComment: '파싱 실패 - 원본 텍스트 사용',
                 nextEpisodePreview: '',
               });
-              controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+              safeEnqueue(encoder.encode(`data: ${finalData}\n\n`));
             }
           } else {
             // JSON 없음 - raw 텍스트 사용
@@ -1608,12 +1695,11 @@ export async function POST(req: NextRequest) {
               authorComment: 'JSON 없음 - 원본 텍스트 사용',
               nextEpisodePreview: '',
             });
-            controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+            safeEnqueue(encoder.encode(`data: ${finalData}\n\n`));
           }
 
           // heartbeat 정리 후 스트림 종료
-          clearInterval(heartbeat);
-          controller.close();
+          safeClose();
         } catch (error) {
           console.error('Write episode streaming error:', error);
 
@@ -1657,10 +1743,9 @@ export async function POST(req: NextRequest) {
               overBudget: totalTokens > TOKEN_BUDGET.TOTAL_MAX,
             },
           });
-          controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
+          safeEnqueue(encoder.encode(`data: ${errorData}\n\n`));
           // heartbeat 정리 후 스트림 종료
-          clearInterval(heartbeat);
-          controller.close();
+          safeClose();
         }
       },
     });

@@ -37,6 +37,10 @@
 29. ✅ **Mega Hit Templates (Task 3.3)** - 7가지 인기 장르 황금 공식 템플릿
 30. ✅ **Platform-specific Export (Task 3.4)** - 문피아/네이버시리즈/카카오페이지/리디북스 맞춤 포맷
 31. ✅ **SSE Connection Reset 버그 수정** - author-chat API 연결 안정화 (초기 메시지 + 타임아웃 + 강화된 에러 처리)
+32. ✅ **UI 다시 시도 버튼 수정** - isLoading 상태에서도 retry 관련 버튼 클릭 가능하도록 수정
+33. ✅ **write-episode API 타임아웃 수정** - safeEnqueue/safeClose 패턴 적용, SSE 연결 안정화
+34. ✅ **외래어 금지 규칙 추가** - 무협/동양판타지 장르에서 현대 외래어(팁, 오케이, 마스터 등) 사용 금지
+35. ✅ **상황 중복 연출 금지** - TIER 3에 한 화 내 미시적 패턴 반복 금지 규칙 추가
 
 ### 다음 작업
 - 추가 기능 개선 및 사용자 피드백 반영
@@ -54,6 +58,23 @@
 - 프로젝트 정체서(`project-identity.md`)와 최상위 원칙(`supreme-principles.md`)을 모든 설계/구현 판단의 기준으로 삼는다.
 
 ### 최근 업데이트
+- **2026-02-26**: 4가지 버그 수정 및 집필 퀄리티 고도화
+  - **Fix 1: UI 다시 시도 버튼** (`app/projects/[id]/page.tsx`)
+    - `handleChoiceClick`에서 retry 관련 액션은 isLoading 상태와 무관하게 허용
+    - 버튼 렌더링 시 retry 액션은 disabled 제외
+  - **Fix 2: write-episode API 타임아웃** (`app/api/write-episode/route.ts`)
+    - 모든 `controller.enqueue` → `safeEnqueue` 변경
+    - 모든 `clearInterval(heartbeat); controller.close();` → `safeClose()` 변경
+    - author-chat API와 동일한 SSE 안정화 패턴 적용
+  - **Fix 3: 외래어 금지 규칙** (`app/api/write-episode/route.ts`)
+    - TIER 2에 장르별 금지 어휘 섹션 추가
+    - 무협/동양판타지: 팁, 오케이, 마스터, 미션, 스킬, 레벨 등 현대 외래어 금지
+    - 대체 표현 가이드 제공 (팁→가르침, 마스터→사부 등)
+  - **Fix 4: 상황 중복 연출 금지** (`app/api/write-episode/route.ts`)
+    - TIER 3에 [반복 제거] 섹션 추가
+    - 같은 위기→구출 패턴 2회 이상 금지
+    - 같은 감정 비트/대사 구조/능력 사용 반복 금지
+    - 검증 체크리스트에 반복 패턴 확인 항목 추가
 - **2026-02-26**: SSE Connection Reset 버그 수정 (`app/api/author-chat/route.ts`)
   - **문제**: `net::ERR_CONNECTION_RESET` 및 `TypeError: network error` 발생
   - **원인**: Anthropic API 첫 응답 전 연결 타임아웃, heartbeat 지연

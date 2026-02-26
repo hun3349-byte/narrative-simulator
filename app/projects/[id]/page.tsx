@@ -892,7 +892,17 @@ export default function ProjectConversationPage() {
 
   // 선택지 클릭
   const handleChoiceClick = async (action: string) => {
-    if (!project || isLoading) return;
+    if (!project) return;
+
+    // 재시도 관련 액션은 isLoading 상태와 무관하게 허용 (에러 복구용)
+    const retryableActions = ['retry', 'write_next_episode', 'run_simulation', 'start_simulation'];
+    if (isLoading && !retryableActions.includes(action)) return;
+
+    // 재시도 시 로딩 상태 초기화
+    if (retryableActions.includes(action)) {
+      setIsLoading(false);
+      setLastError(null);
+    }
 
     // 파일 관련 액션
     if (action === 'apply_file_to_layer' && uploadedFileContent) {
@@ -2780,16 +2790,20 @@ export default function ProjectConversationPage() {
                     {/* 선택지 - 모바일 터치 영역 확대 */}
                     {message.choices && message.choices.length > 0 && (
                       <div className="mt-3 flex flex-wrap gap-2">
-                        {message.choices.map((choice, idx) => (
-                          <button
-                            key={idx}
-                            onClick={() => handleChoiceClick(choice.action)}
-                            disabled={isLoading}
-                            className="rounded-lg bg-base-tertiary px-4 py-2.5 md:px-3 md:py-1.5 text-sm text-text-secondary transition-colors hover:bg-base-border disabled:opacity-50 min-h-[44px] md:min-h-0"
-                          >
-                            {choice.label}
-                          </button>
-                        ))}
+                        {message.choices.map((choice, idx) => {
+                          // 재시도 관련 버튼은 항상 활성화
+                          const isRetryAction = ['retry', 'write_next_episode', 'run_simulation', 'start_simulation'].includes(choice.action);
+                          return (
+                            <button
+                              key={idx}
+                              onClick={() => handleChoiceClick(choice.action)}
+                              disabled={isLoading && !isRetryAction}
+                              className="rounded-lg bg-base-tertiary px-4 py-2.5 md:px-3 md:py-1.5 text-sm text-text-secondary transition-colors hover:bg-base-border disabled:opacity-50 min-h-[44px] md:min-h-0"
+                            >
+                              {choice.label}
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
