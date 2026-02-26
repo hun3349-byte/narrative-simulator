@@ -990,13 +990,6 @@ ${confirmedLayers?.villainArc || '(미설정)'}
 ### 숨겨진 떡밥
 ${confirmedLayers?.ultimateMystery || '(미설정)'}
 이 떡밥의 흔적을 본문에 자연스럽게 깔되, 독자가 알아채지 못하게.
-
-### 캐릭터 현재 상태
-${characterProfiles || '(없음)'}
-
-### 기억 잔상
-${characterMemories || '(없음)'}
-※ 이 경험들을 직접 언급하지 말고, 행동/반응/망설임에 자연스럽게 반영하세요.
 ${characterBehaviorRulesSection}
 
 ### 이전 화 (문체 참고)

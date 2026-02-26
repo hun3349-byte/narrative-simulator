@@ -131,6 +131,8 @@ interface ProjectStore {
 
   // 유틸리티
   reset: () => void;
+  resetEpisodes: () => void;  // 에피소드만 초기화 (설정 유지)
+  resetProject: () => void;   // 프로젝트 완전 리셋 (세계관부터 다시)
 }
 
 // 초기 프로젝트 생성 헬퍼
@@ -1005,6 +1007,77 @@ export const useProjectStore = create<ProjectStore>()(
           projects: [],
           currentProjectId: null,
         });
+      },
+
+      resetEpisodes: () => {
+        const { currentProjectId, projects } = get();
+        if (!currentProjectId) return;
+
+        const updatedProjects = projects.map(p =>
+          p.id === currentProjectId
+            ? {
+                ...p,
+                episodes: [],
+                episodeLogs: [],
+                writingMemory: undefined,
+                feedbackHistory: [],
+                // currentPhase는 'novel'로 유지 (세계관 설정은 그대로)
+                updatedAt: new Date().toISOString(),
+              }
+            : p
+        );
+
+        set({ projects: updatedProjects });
+
+        // Supabase 동기화
+        const project = updatedProjects.find(p => p.id === currentProjectId);
+        if (project && isSupabaseEnabled) {
+          saveProjectToSupabase(project).catch(err => console.warn('Supabase sync failed:', err));
+        }
+      },
+
+      resetProject: () => {
+        const { currentProjectId, projects } = get();
+        if (!currentProjectId) return;
+
+        const updatedProjects = projects.map(p =>
+          p.id === currentProjectId
+            ? {
+                ...p,
+                layers: {
+                  world: { status: 'pending' as const, data: null },
+                  coreRules: { status: 'pending' as const, data: null },
+                  seeds: { status: 'pending' as const, data: null },
+                  heroArc: { status: 'pending' as const, data: null },
+                  villainArc: { status: 'pending' as const, data: null },
+                  ultimateMystery: { status: 'pending' as const, data: null },
+                },
+                currentLayer: 'world' as const,
+                currentPhase: 'setup' as const,
+                episodes: [],
+                episodeLogs: [],
+                writingMemory: undefined,
+                feedbackHistory: [],
+                messages: [],
+                worldBible: undefined,
+                worldHistory: { eras: [], detailedDecades: [] },
+                characters: [],
+                seeds: [],
+                memoryStacks: {},
+                profiles: {},
+                npcPool: { npcs: [], maxActive: 30 },
+                updatedAt: new Date().toISOString(),
+              }
+            : p
+        );
+
+        set({ projects: updatedProjects });
+
+        // Supabase 동기화
+        const project = updatedProjects.find(p => p.id === currentProjectId);
+        if (project && isSupabaseEnabled) {
+          saveProjectToSupabase(project).catch(err => console.warn('Supabase sync failed:', err));
+        }
       },
     }),
     {

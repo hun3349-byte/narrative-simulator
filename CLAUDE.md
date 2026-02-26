@@ -23,6 +23,8 @@
 15. ✅ **집필 프롬프트 4-Tier 아키텍처 리팩토링** - LLM 규칙 준수율 향상 + 동적 제약 생성
 16. ✅ **Direction 미반영 버그 수정** - author-chat 레이어 생성 시 초기 아이디어 반영 강화 + write-episode에 projectDirection 추가
 17. ✅ **Supabase author_config 방어 코드** - DB 컬럼 누락 시 해당 필드 제외 후 재시도 로직 추가
+18. ✅ **에피소드 초기화/프로젝트 리셋 기능** - resetEpisodes(), resetProject() 스토어 함수 + 프로젝트 관리 드롭다운 UI
+19. ✅ **buildUserPrompt 중복 제거** - 캐릭터 현재 상태/기억 잔상 중복 섹션 삭제 (레거시 모드)
 
 ### 다음 작업
 - 추가 기능 개선 및 사용자 피드백 반영
@@ -40,6 +42,23 @@
 - 프로젝트 정체서(`project-identity.md`)와 최상위 원칙(`supreme-principles.md`)을 모든 설계/구현 판단의 기준으로 삼는다.
 
 ### 최근 업데이트
+- **2026-02-26**: PROMPT-REFACTOR-INSTRUCTIONS4 구현
+  - **에피소드 초기화/프로젝트 리셋 기능 (작업 9)**:
+    - `resetEpisodes()`: 에피소드만 삭제 (세계관/캐릭터 설정 유지)
+    - `resetProject()`: 프로젝트 완전 리셋 (세계관부터 다시)
+    - 프로젝트 페이지 헤더에 ⚙️ 프로젝트 관리 드롭다운 추가
+  - **buildUserPrompt 중복 제거 (작업 4)**:
+    - 레거시 모드에서 "캐릭터 현재 상태", "기억 잔상" 중복 섹션 삭제
+  - **이미 완료된 작업 확인**:
+    - 작업 1-3 (buildSystemPrompt 4-Tier 구조): 이전 세션에서 완료
+    - 작업 5 (EpisodeLog 추적 필드): 이전 세션에서 완료
+    - 작업 6 (generate-episode-log 프롬프트): 이전 세션에서 완료
+    - 작업 7 (direction 미반영 버그): 이전 세션에서 완료
+    - 작업 8 (Supabase 방어 코드): 이번 세션 시작 시 완료
+  - **수정 파일**:
+    - `lib/store/project-store.ts`: resetEpisodes, resetProject 함수 추가
+    - `app/projects/[id]/page.tsx`: 프로젝트 관리 드롭다운 UI
+    - `app/api/write-episode/route.ts`: 중복 섹션 제거
 - **2026-02-26**: Supabase author_config 방어 코드 추가
   - `saveProjectToSupabase()` 함수에 방어 로직 추가
   - `author_config` 컬럼이 DB에 없을 때 발생하는 에러 핸들링

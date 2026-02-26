@@ -209,6 +209,8 @@ export default function ProjectConversationPage() {
     setDualSimulationConfig,
     setProtagonistPrehistory,
     addTimelineAdvance,
+    resetEpisodes,
+    resetProject,
   } = useProjectStore();
 
   // Hydration 상태 - 클라이언트에서 localStorage 로드 완료 전까지 로딩 표시
@@ -224,6 +226,7 @@ export default function ProjectConversationPage() {
   const [editingEpisodeId, setEditingEpisodeId] = useState<string | null>(null);
   const [isRevising, setIsRevising] = useState(false);
   const [showMobilePanel, setShowMobilePanel] = useState(false);
+  const [showProjectMenu, setShowProjectMenu] = useState(false);
   const [factCheckResult, setFactCheckResult] = useState<FactCheckResult | null>(null);
   const [breadcrumbWarnings, setBreadcrumbWarnings] = useState<BreadcrumbWarning[]>([]);
   const [showFactCheckModal, setShowFactCheckModal] = useState(false);
@@ -2490,12 +2493,75 @@ export default function ProjectConversationPage() {
             )}
           </div>
         </div>
-        <button
-          onClick={() => router.push(`/projects/${projectId}/result`)}
-          className="rounded-lg bg-base-tertiary min-w-[44px] min-h-[44px] px-3 md:px-4 py-2 text-sm text-text-secondary hover:bg-base-border flex items-center justify-center flex-shrink-0"
-        >
-          {isMobile ? '📄' : '결과물 →'}
-        </button>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {/* 프로젝트 관리 드롭다운 */}
+          <div className="relative">
+            <button
+              onClick={() => setShowProjectMenu(!showProjectMenu)}
+              className="rounded-lg bg-base-tertiary min-w-[44px] min-h-[44px] px-3 py-2 text-sm text-text-secondary hover:bg-base-border flex items-center justify-center"
+              title="프로젝트 관리"
+            >
+              ⚙️
+            </button>
+            {showProjectMenu && (
+              <>
+                {/* 배경 클릭 시 닫기 */}
+                <div
+                  className="fixed inset-0 z-40"
+                  onClick={() => setShowProjectMenu(false)}
+                />
+                <div className="absolute right-0 top-full mt-2 w-56 rounded-lg border border-base-border bg-base-secondary shadow-lg z-50">
+                  <div className="p-2 text-xs text-text-muted border-b border-base-border">
+                    프로젝트 관리
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (window.confirm('모든 에피소드를 삭제하시겠습니까?\n세계관/캐릭터 설정은 유지됩니다.\n이 작업은 되돌릴 수 없습니다.')) {
+                        resetEpisodes();
+                        addMessage({ role: 'author', content: '에피소드가 초기화되었습니다. 1화부터 다시 시작하세요.' });
+                        setShowProjectMenu(false);
+                      }
+                    }}
+                    className="w-full px-3 py-2 text-left text-sm text-text-primary hover:bg-base-tertiary flex items-center gap-2"
+                  >
+                    📝 에피소드 초기화
+                    <span className="text-xs text-text-muted">(설정 유지)</span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (window.confirm('프로젝트를 완전히 리셋하시겠습니까?\n세계관, 캐릭터, 에피소드가 모두 삭제됩니다.\n장르/톤/시점 설정만 유지됩니다.\n이 작업은 되돌릴 수 없습니다.')) {
+                        resetProject();
+                        setShowProjectMenu(false);
+                      }
+                    }}
+                    className="w-full px-3 py-2 text-left text-sm text-text-primary hover:bg-base-tertiary flex items-center gap-2"
+                  >
+                    🔄 프로젝트 리셋
+                    <span className="text-xs text-text-muted">(세계관부터)</span>
+                  </button>
+                  <div className="border-t border-base-border" />
+                  <button
+                    onClick={() => {
+                      if (window.confirm('프로젝트를 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.')) {
+                        router.push('/projects');
+                        // 삭제는 프로젝트 목록에서 처리
+                      }
+                    }}
+                    className="w-full px-3 py-2 text-left text-sm text-red-400 hover:bg-base-tertiary flex items-center gap-2"
+                  >
+                    🗑️ 프로젝트 삭제
+                  </button>
+                </div>
+              </>
+            )}
+          </div>
+          <button
+            onClick={() => router.push(`/projects/${projectId}/result`)}
+            className="rounded-lg bg-base-tertiary min-w-[44px] min-h-[44px] px-3 md:px-4 py-2 text-sm text-text-secondary hover:bg-base-border flex items-center justify-center"
+          >
+            {isMobile ? '📄' : '결과물 →'}
+          </button>
+        </div>
       </header>
 
       {/* 레이어 진행 바 - 모바일: 아이콘만, 현재 단계만 텍스트 */}
