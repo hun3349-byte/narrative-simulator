@@ -71,10 +71,27 @@
     - TTFB(Time-to-First-Byte) 로깅 추가 (디버깅용)
     - 스트림 이벤트 카운트 및 총 시간 로깅
 
-### 다음 작업 (2026-02-27 계속)
-- **🔴 타임아웃 이슈 진단 중** - SDK 스트리밍 방식 변경 후 테스트 필요
+### 🚀 내일 시작 시 (2026-02-28)
 
-#### 시도한 해결책
+**현재 상태**: SDK 스트리밍 방식 변경 완료 → Railway 배포됨 → **테스트 필요**
+
+**즉시 해야 할 일:**
+1. https://narrative-simulator-production.up.railway.app 접속
+2. 2화 집필 시도
+3. 결과 확인:
+   - ✅ 성공 → 타임아웃 해결됨
+   - ❌ 실패 → Railway 로그 확인 후 아래 해결책 순서대로 시도
+
+**Railway 로그 확인 방법:**
+- Railway Dashboard → 프로젝트 → Deployments → 최신 배포 → Logs
+- 검색: `WRITE EPISODE ERROR` 또는 `TTFB`
+
+---
+
+### 타임아웃 이슈 진행 현황
+- **🔴 상태**: SDK 스트리밍 방식 변경 후 테스트 필요
+
+#### 시도한 해결책 (7개)
 1. ✅ 내부 55초 Promise.race 타임아웃 제거
 2. ✅ maxDuration 60초 → 300초 확장
 3. ✅ 프론트엔드 타임아웃 180초 → 300초 확장
@@ -83,17 +100,21 @@
 6. ✅ heartbeat 간격 5초 → 3초, 다중 버스트 전송
 7. ✅ **SDK 스트리밍 방식 변경**: `stream()` → `create({ stream: true })` (2026-02-27)
 
-#### 다음 시도할 해결책 (효과 없으면)
-1. **Railway 로그 확인**: 실제 서버에서 어떤 에러가 발생하는지 확인
-2. **프롬프트 추가 축소**: 시스템 프롬프트를 더 극단적으로 줄여 TTFB 단축
-3. **모델 변경 테스트**: claude-sonnet-4 → claude-haiku-4 (속도 우선)
-4. **분량 목표 축소**: 5000자 → 3000자 (응답 시간 단축)
+#### 다음 시도할 해결책 (효과 없으면 순서대로)
+1. **Railway 로그 확인**: 정확한 에러 메시지 파악
+2. **프롬프트 추가 축소**: 시스템 프롬프트 더 줄이기
+3. **모델 변경**: claude-sonnet-4 → claude-haiku-4 (속도 우선)
+4. **분량 축소**: 5000자 → 3000자
 
-#### 디버깅 필요 정보
-- Railway 서버 로그에서 정확한 에러 메시지 확인 필요
-- `=== WRITE EPISODE ERROR ===` 로그 확인 (error.cause 포함)
-- `=== FIRST CHUNK RECEIVED (TTFB: ...)ms ===` 로그로 응답 시간 측정
-- Anthropic API 응답 시간 측정 필요
+#### 새로 추가된 디버깅 로그
+```
+=== STARTING ANTHROPIC STREAM (create method) ===
+=== STREAM CREATED (Nms) ===
+=== FIRST CHUNK RECEIVED (TTFB: Nms) ===  ← 이게 핵심! 너무 크면 문제
+=== STREAM COMPLETED ===
+Total events: N
+Total time: Nms
+```
 
 ### 배포 정보
 - **플랫폼**: Railway
