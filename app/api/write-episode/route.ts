@@ -1316,14 +1316,23 @@ export async function POST(req: NextRequest) {
           safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: 'status', message: 'AI 집필 시작...' })}\n\n`));
           safeEnqueue(encoder.encode(': heartbeat\n\n'));
 
-          // Anthropic Prompt Caching 적용 - 정적 규칙은 캐시됨
-          const streamResponse = client.messages.stream({
+          // ============================================
+          // SDK 스트리밍 방식 변경: stream() → create({ stream: true })
+          // 더 낮은 레벨의 스트리밍으로 버퍼링 동작이 다름
+          // ============================================
+          console.log('=== STARTING ANTHROPIC STREAM (create method) ===');
+          const startTime = Date.now();
+
+          const streamResponse = await client.messages.create({
             model: MODEL,
             max_tokens: MAX_TOKENS,
             temperature: TEMPERATURE,
             system: cachedSystemPrompt as unknown as Anthropic.TextBlockParam[],
             messages: [{ role: 'user', content: userPrompt }],
+            stream: true,
           });
+
+          console.log(`=== STREAM CREATED (${Date.now() - startTime}ms) ===`);
 
           // ============================================
           // 내부 타임아웃 제거됨 (Root Cause Fix)
@@ -1331,9 +1340,20 @@ export async function POST(req: NextRequest) {
           // 별도의 Promise.race 타임아웃 불필요
           // ============================================
 
+          let eventCount = 0;
+          let firstChunkTime: number | null = null;
+
           // 스트리밍 처리 (타임아웃 없이 완료까지 대기)
           for await (const event of streamResponse) {
             if (streamClosed) break;
+            eventCount++;
+
+            // 첫 번째 이벤트 시간 기록 (TTFB)
+            if (!firstChunkTime) {
+              firstChunkTime = Date.now();
+              console.log(`=== FIRST CHUNK RECEIVED (TTFB: ${firstChunkTime - startTime}ms) ===`);
+            }
+
             if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
               fullText += event.delta.text;
               // 실시간 텍스트 전송
@@ -1341,6 +1361,12 @@ export async function POST(req: NextRequest) {
               safeEnqueue(encoder.encode(`data: ${chunk}\n\n`));
             }
           }
+
+          console.log(`=== STREAM COMPLETED ===`);
+          console.log(`Total events: ${eventCount}`);
+          console.log(`Total time: ${Date.now() - startTime}ms`);
+          console.log(`Full text length: ${fullText.length}`);
+          console.log(`========================`)
 
           // 파싱
           let cleanText = fullText;

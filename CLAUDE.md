@@ -66,9 +66,34 @@
     - **maxDuration 극대화**: 60초 → 300초 (Railway/Vercel Pro)
     - **프론트엔드 타임아웃 확장**: 180초 → 300초
     - **에러 로깅 고도화**: error.message, error.cause, error.stack 상세 출력
+41. ✅ **Anthropic SDK 스트리밍 방식 변경** - `client.messages.stream()` → `client.messages.create({ stream: true })`
+    - 더 낮은 레벨의 스트리밍 API 사용 (버퍼링 동작 차이)
+    - TTFB(Time-to-First-Byte) 로깅 추가 (디버깅용)
+    - 스트림 이벤트 카운트 및 총 시간 로깅
 
-### 다음 작업
-- 추가 기능 개선 및 사용자 피드백 반영
+### 다음 작업 (2026-02-27 계속)
+- **🔴 타임아웃 이슈 진단 중** - SDK 스트리밍 방식 변경 후 테스트 필요
+
+#### 시도한 해결책
+1. ✅ 내부 55초 Promise.race 타임아웃 제거
+2. ✅ maxDuration 60초 → 300초 확장
+3. ✅ 프론트엔드 타임아웃 180초 → 300초 확장
+4. ✅ 프롬프트 30%+ 토큰 압축
+5. ✅ 동적 컨텍스트 가지치기 (3화→1화, 캐릭터 5명 제한)
+6. ✅ heartbeat 간격 5초 → 3초, 다중 버스트 전송
+7. ✅ **SDK 스트리밍 방식 변경**: `stream()` → `create({ stream: true })` (2026-02-27)
+
+#### 다음 시도할 해결책 (효과 없으면)
+1. **Railway 로그 확인**: 실제 서버에서 어떤 에러가 발생하는지 확인
+2. **프롬프트 추가 축소**: 시스템 프롬프트를 더 극단적으로 줄여 TTFB 단축
+3. **모델 변경 테스트**: claude-sonnet-4 → claude-haiku-4 (속도 우선)
+4. **분량 목표 축소**: 5000자 → 3000자 (응답 시간 단축)
+
+#### 디버깅 필요 정보
+- Railway 서버 로그에서 정확한 에러 메시지 확인 필요
+- `=== WRITE EPISODE ERROR ===` 로그 확인 (error.cause 포함)
+- `=== FIRST CHUNK RECEIVED (TTFB: ...)ms ===` 로그로 응답 시간 측정
+- Anthropic API 응답 시간 측정 필요
 
 ### 배포 정보
 - **플랫폼**: Railway
@@ -83,6 +108,15 @@
 - 프로젝트 정체서(`project-identity.md`)와 최상위 원칙(`supreme-principles.md`)을 모든 설계/구현 판단의 기준으로 삼는다.
 
 ### 최근 업데이트
+- **2026-02-27**: Anthropic SDK 스트리밍 방식 변경
+  - **SDK 메서드 변경** (`app/api/write-episode/route.ts`)
+    - `client.messages.stream()` → `client.messages.create({ stream: true })`
+    - 더 낮은 레벨의 스트리밍 API 사용 (버퍼링 동작 차이 기대)
+  - **디버깅 로그 추가**
+    - TTFB(Time-to-First-Byte) 측정: `=== FIRST CHUNK RECEIVED (TTFB: ...ms) ===`
+    - 스트림 이벤트 카운트: `Total events: N`
+    - 총 응답 시간: `Total time: Nms`
+  - **테스트 필요**: 변경 후 2화 집필 타임아웃 해결 여부 확인
 - **2026-02-26**: 2화 집필 타임아웃 근본 원인 해결
   - **Root Cause 1 - 내부 타임아웃 제거** (`app/api/write-episode/route.ts`)
     - 55초 Promise.race 타임아웃 완전 제거
