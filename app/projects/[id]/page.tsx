@@ -1269,73 +1269,73 @@ export default function ProjectConversationPage() {
       // 누적 피드백 가져오기
       const recurringFeedback = getRecurringFeedback();
 
+      // 캐릭터 프로필 문자열 생성 (seeds에서) - try 블록 밖으로 이동 (재시도 시 재사용)
+      const seedsData = project.layers.seeds.data;
+      let characterProfiles = '';
+      let characterMemories = '';
+
+      if (seedsData && typeof seedsData === 'object') {
+        const seeds = (seedsData as { npcs?: Array<{ name: string; role: string; description?: string }> }).npcs || [];
+        characterProfiles = seeds.map((s: { name: string; role: string; description?: string }) =>
+          `- ${s.name}: ${s.role}${s.description ? ` - ${s.description}` : ''}`
+        ).join('\n');
+      }
+
+      // 확정된 레이어들을 문자열로 변환 - try 블록 밖으로 이동 (재시도 시 재사용)
+      const layerToString = (data: unknown): string => {
+        if (!data) return '';
+        if (typeof data === 'string') return data;
+        return JSON.stringify(data, null, 2);
+      };
+
+      // Active Context 조립 (World Bible이 있을 때만) - try 블록 밖으로 이동 (재시도 시 재사용)
+      const activeContext = project.worldBible ? buildActiveContext({
+        worldBible: project.worldBible,
+        episodeLogs: project.episodeLogs || [],
+        episodes: project.episodes,
+        feedbackHistory: project.feedbackHistory || [],
+        currentEpisodeNumber: nextNumber,
+      }) : undefined;
+
+      // 에피소드 디렉션 기반 추가 지시 생성 - try 블록 밖으로 이동 (재시도 시 재사용)
+      let directionText = `${nextNumber}화`;
+      if (currentEpisodeDirection && currentEpisodeDirection.episodeNumber === nextNumber) {
+        directionText += ` [톤: ${currentEpisodeDirection.primaryTone}]`;
+        if (currentEpisodeDirection.emotionArc) {
+          directionText += ` [감정흐름: ${currentEpisodeDirection.emotionArc}]`;
+        }
+        if (currentEpisodeDirection.pacing) {
+          directionText += ` [속도: ${currentEpisodeDirection.pacing}]`;
+        }
+        if (currentEpisodeDirection.forcedScenes && currentEpisodeDirection.forcedScenes.length > 0) {
+          directionText += ` [필수장면: ${currentEpisodeDirection.forcedScenes.map(s => s.description).join(', ')}]`;
+        }
+        if (currentEpisodeDirection.characterDirectives && currentEpisodeDirection.characterDirectives.length > 0) {
+          const mustAppear = currentEpisodeDirection.characterDirectives
+            .filter(d => d.directive === 'must_appear' || d.directive === 'spotlight')
+            .map(d => d.characterName);
+          const mustNotAppear = currentEpisodeDirection.characterDirectives
+            .filter(d => d.directive === 'must_not_appear')
+            .map(d => d.characterName);
+          if (mustAppear.length > 0) {
+            directionText += ` [필수등장: ${mustAppear.join(', ')}]`;
+          }
+          if (mustNotAppear.length > 0) {
+            directionText += ` [등장금지: ${mustNotAppear.join(', ')}]`;
+          }
+        }
+        if (currentEpisodeDirection.freeDirectives && currentEpisodeDirection.freeDirectives.length > 0) {
+          directionText += ` [추가지시: ${currentEpisodeDirection.freeDirectives.join('; ')}]`;
+        }
+        if (currentEpisodeDirection.avoid && currentEpisodeDirection.avoid.length > 0) {
+          directionText += ` [금지: ${currentEpisodeDirection.avoid.join(', ')}]`;
+        }
+      } else {
+        directionText += ` - ${project.direction || '자유롭게 전개'}`;
+      }
+
       try {
-        // 캐릭터 프로필 문자열 생성 (seeds에서)
-        const seedsData = project.layers.seeds.data;
-        let characterProfiles = '';
-        let characterMemories = '';
-
-        if (seedsData && typeof seedsData === 'object') {
-          const seeds = (seedsData as { npcs?: Array<{ name: string; role: string; description?: string }> }).npcs || [];
-          characterProfiles = seeds.map((s: { name: string; role: string; description?: string }) =>
-            `- ${s.name}: ${s.role}${s.description ? ` - ${s.description}` : ''}`
-          ).join('\n');
-        }
-
-        // 확정된 레이어들을 문자열로 변환
-        const layerToString = (data: unknown): string => {
-          if (!data) return '';
-          if (typeof data === 'string') return data;
-          return JSON.stringify(data, null, 2);
-        };
-
-        // Active Context 조립 (World Bible이 있을 때만)
-        const activeContext = project.worldBible ? buildActiveContext({
-          worldBible: project.worldBible,
-          episodeLogs: project.episodeLogs || [],
-          episodes: project.episodes,
-          feedbackHistory: project.feedbackHistory || [],
-          currentEpisodeNumber: nextNumber,
-        }) : undefined;
-
-        // 에피소드 디렉션 기반 추가 지시 생성
-        let directionText = `${nextNumber}화`;
-        if (currentEpisodeDirection && currentEpisodeDirection.episodeNumber === nextNumber) {
-          directionText += ` [톤: ${currentEpisodeDirection.primaryTone}]`;
-          if (currentEpisodeDirection.emotionArc) {
-            directionText += ` [감정흐름: ${currentEpisodeDirection.emotionArc}]`;
-          }
-          if (currentEpisodeDirection.pacing) {
-            directionText += ` [속도: ${currentEpisodeDirection.pacing}]`;
-          }
-          if (currentEpisodeDirection.forcedScenes && currentEpisodeDirection.forcedScenes.length > 0) {
-            directionText += ` [필수장면: ${currentEpisodeDirection.forcedScenes.map(s => s.description).join(', ')}]`;
-          }
-          if (currentEpisodeDirection.characterDirectives && currentEpisodeDirection.characterDirectives.length > 0) {
-            const mustAppear = currentEpisodeDirection.characterDirectives
-              .filter(d => d.directive === 'must_appear' || d.directive === 'spotlight')
-              .map(d => d.characterName);
-            const mustNotAppear = currentEpisodeDirection.characterDirectives
-              .filter(d => d.directive === 'must_not_appear')
-              .map(d => d.characterName);
-            if (mustAppear.length > 0) {
-              directionText += ` [필수등장: ${mustAppear.join(', ')}]`;
-            }
-            if (mustNotAppear.length > 0) {
-              directionText += ` [등장금지: ${mustNotAppear.join(', ')}]`;
-            }
-          }
-          if (currentEpisodeDirection.freeDirectives && currentEpisodeDirection.freeDirectives.length > 0) {
-            directionText += ` [추가지시: ${currentEpisodeDirection.freeDirectives.join('; ')}]`;
-          }
-          if (currentEpisodeDirection.avoid && currentEpisodeDirection.avoid.length > 0) {
-            directionText += ` [금지: ${currentEpisodeDirection.avoid.join(', ')}]`;
-          }
-        } else {
-          directionText += ` - ${project.direction || '자유롭게 전개'}`;
-        }
-
-        // 스트리밍 호출
+        // 스트리밍 호출 (파라미터는 try 블록 밖에서 이미 준비됨)
         const data = await streamingFetch('/api/write-episode', {
           episodeNumber: nextNumber,
           projectConfig: {
@@ -1390,11 +1390,80 @@ export default function ProjectConversationPage() {
         }
       } catch (error) {
         console.error('Write episode error:', error);
-        addMessage({
-          role: 'author',
-          content: '에피소드 작성 중 문제가 생겼어.',
-          choices: [{ label: '다시 시도', action: 'write_next_episode' }],
-        });
+        const errorMessage = error instanceof Error ? error.message : '';
+
+        // network error / timeout 시 자동 재시도 (최대 1회)
+        if (errorMessage.includes('network') || errorMessage.includes('timeout') || errorMessage.includes('abort') || errorMessage.includes('fetch')) {
+          addMessage({
+            role: 'author',
+            content: '네트워크 오류가 발생했어. 자동으로 다시 시도할게.',
+          });
+
+          // 3초 후 재시도
+          await new Promise(resolve => setTimeout(resolve, 3000));
+
+          try {
+            // 동일한 API 호출 재시도 (간소화된 파라미터 사용)
+            const retryData = await streamingFetch('/api/write-episode', {
+              episodeNumber: nextNumber,
+              projectConfig: {
+                genre: project.genre,
+                tone: project.tone,
+                viewpoint: project.viewpoint,
+                authorPersonaId: project.authorPersona?.id,
+              },
+              authorConfig: project.authorConfig,
+              confirmedLayers: {
+                world: layerToString(project.layers.world.data),
+                coreRules: layerToString(project.layers.coreRules.data),
+                seeds: layerToString(project.layers.seeds.data),
+                heroArc: layerToString(project.layers.heroArc.data),
+                villainArc: layerToString(project.layers.villainArc.data),
+                ultimateMystery: layerToString(project.layers.ultimateMystery.data),
+              },
+              worldLayer: project.layers.world.data,
+              seedsLayer: project.layers.seeds.data,
+              episodeDirection: currentEpisodeDirection?.episodeNumber === nextNumber ? currentEpisodeDirection : undefined,
+              characterProfiles,
+              characterMemories,
+              authorDirection: directionText,
+              previousEpisodes: project.episodes.slice(-3),
+              recurringFeedback,
+              activeContext,
+              writingMemory: getWritingMemory(),
+            });
+
+            if (retryData.type === 'error') {
+              throw new Error(retryData.message as string);
+            }
+
+            if (retryData.episode) {
+              const episode = retryData.episode as Episode;
+              addEpisode(episode);
+              handlePostEpisodeCreation(episode);
+              setEditingEpisodeId(episode.id);
+              addMessage({
+                role: 'author',
+                content: (retryData.authorComment as string) || `${nextNumber}화 초안이야. 읽어봐.`,
+              });
+            } else {
+              throw new Error('재시도 실패');
+            }
+          } catch (retryErr) {
+            console.error('Retry failed:', retryErr);
+            addMessage({
+              role: 'author',
+              content: '재시도도 실패했어. 잠시 후 다시 시도해줘.',
+              choices: [{ label: '다시 시도', action: 'write_next_episode' }],
+            });
+          }
+        } else {
+          addMessage({
+            role: 'author',
+            content: `문제가 생겼어. (${errorMessage || '알 수 없는 오류'})`,
+            choices: [{ label: '다시 시도', action: 'write_next_episode' }],
+          });
+        }
       } finally {
         setIsLoading(false);
       }

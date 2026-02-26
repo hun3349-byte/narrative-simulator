@@ -25,6 +25,8 @@
 17. ✅ **Supabase author_config 방어 코드** - DB 컬럼 누락 시 해당 필드 제외 후 재시도 로직 추가
 18. ✅ **에피소드 초기화/프로젝트 리셋 기능** - resetEpisodes(), resetProject() 스토어 함수 + 프로젝트 관리 드롭다운 UI
 19. ✅ **buildUserPrompt 중복 제거** - 캐릭터 현재 상태/기억 잔상 중복 섹션 삭제 (레거시 모드)
+20. ✅ **개별 에피소드 삭제** - 결과물 페이지에서 에피소드별 삭제 버튼 (호버 시 표시)
+21. ✅ **네트워크 에러 대응 (Task 10)** - SSE heartbeat 추가 + 네트워크 에러 자동 재시도 (최대 1회)
 
 ### 다음 작업
 - 추가 기능 개선 및 사용자 피드백 반영
@@ -42,6 +44,19 @@
 - 프로젝트 정체서(`project-identity.md`)와 최상위 원칙(`supreme-principles.md`)을 모든 설계/구현 판단의 기준으로 삼는다.
 
 ### 최근 업데이트
+- **2026-02-26**: PROMPT-REFACTOR-INSTRUCTIONS5 구현 (Task 10 - 네트워크 에러 대응)
+  - **SSE heartbeat 추가** (`app/api/write-episode/route.ts`):
+    - 15초마다 `: heartbeat\n\n` 전송하여 Railway/Vercel 연결 유지
+    - 스트림 종료/에러 시 `clearInterval(heartbeat)` 정리
+  - **네트워크 에러 자동 재시도** (`app/projects/[id]/page.tsx`):
+    - `write_next_episode` 핸들러에 에러 감지 로직 추가
+    - network/timeout/abort/fetch 에러 시 3초 후 자동 재시도 (최대 1회)
+    - 재시도 실패 시 수동 재시도 버튼 표시
+    - API 호출 파라미터를 try 블록 밖으로 이동하여 재사용
+- **2026-02-26**: 개별 에피소드 삭제 기능
+  - 결과물 페이지 (`app/projects/[id]/result/page.tsx`)에 에피소드별 삭제 버튼 추가
+  - 호버 시 ✕ 버튼 표시, 클릭 시 확인 후 삭제
+  - 삭제 후 현재 인덱스 자동 조정
 - **2026-02-26**: PROMPT-REFACTOR-INSTRUCTIONS4 구현
   - **에피소드 초기화/프로젝트 리셋 기능 (작업 9)**:
     - `resetEpisodes()`: 에피소드만 삭제 (세계관/캐릭터 설정 유지)

@@ -1242,6 +1242,15 @@ export async function POST(req: NextRequest) {
     // 스트리밍 응답 생성
     const stream = new ReadableStream({
       async start(controller) {
+        // 연결 유지용 heartbeat (15초마다) - Railway/Vercel 타임아웃 방지
+        const heartbeat = setInterval(() => {
+          try {
+            controller.enqueue(encoder.encode(': heartbeat\n\n'));
+          } catch {
+            // stream closed - ignore
+          }
+        }, 15000);
+
         try {
           let fullText = '';
 
@@ -1381,6 +1390,8 @@ export async function POST(req: NextRequest) {
             controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
           }
 
+          // heartbeat 정리 후 스트림 종료
+          clearInterval(heartbeat);
           controller.close();
         } catch (error) {
           console.error('Write episode streaming error:', error);
@@ -1426,6 +1437,8 @@ export async function POST(req: NextRequest) {
             },
           });
           controller.enqueue(encoder.encode(`data: ${errorData}\n\n`));
+          // heartbeat 정리 후 스트림 종료
+          clearInterval(heartbeat);
           controller.close();
         }
       },
