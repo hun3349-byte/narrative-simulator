@@ -493,20 +493,15 @@ export function updateQualityTracker(
 }
 
 /**
- * 영구 규칙 (100% 신뢰도) - 1화 피드백 기반 학습된 필수 규칙
+ * 영구 규칙 (100% 신뢰도) - 1~2화 피드백 기반 학습된 필수 규칙
  * 이 규칙들은 모든 화에 항상 적용됨
  */
 const PERMANENT_RULES = [
+  // === 1화 피드백 기반 ===
   {
     id: 'perm-show-dont-tell',
     category: 'style' as const,
     rule: '같은 내면 독백 2회 이상 반복 금지 ("나는 평범하게 살고 싶다" 같은 정체성 독백을 속마음으로 두 번 말하지 마라). 대신 무의식적 행동으로 보여라 (단전의 기운을 억누르는 손, 칼자루로 향하다 거두는 손).',
-    confidence: 100,
-  },
-  {
-    id: 'perm-timeline-check',
-    category: 'structure' as const,
-    rule: '과거 회상/연도 언급 시 World Bible의 타임라인과 반드시 교차 검증. "3년 전 마부 시작" + "17년 전 멸문" = 14년 공백 같은 논리적 충돌 금지.',
     confidence: 100,
   },
   {
@@ -519,6 +514,31 @@ const PERMANENT_RULES = [
     id: 'perm-emotion-action',
     category: 'style' as const,
     rule: '감정을 직접 서술하지 마라 ("분노했다", "슬펐다" 금지). 신체 반응으로 번역하라 (이를 악물었다, 손이 떨렸다, 숨이 거칠어졌다).',
+    confidence: 100,
+  },
+  // === 2화 피드백 기반 ===
+  {
+    id: 'perm-timeline-strict',
+    category: 'structure' as const,
+    rule: '과거 시점/햇수를 언급할 때 절대 자의적으로 숫자를 뱉지 마라. 반드시 World Bible과 이전 화 로그에 기록된 공식 타임라인(예: "17년 전 멸문")을 최우선으로 교차 검증하라. 임의의 숫자(30년, 20년 등) 출력 금지.',
+    confidence: 100,
+  },
+  {
+    id: 'perm-no-script-style',
+    category: 'style' as const,
+    rule: '대본/지문 같은 건조한 단문 나열 절대 금지. "진무혁이 고개를 든다." "문이 벌컥 열린다." 같은 뼈대만 있는 문장 금지. 모든 행동/상황에 시각, 청각, 촉각 중 최소 1가지 감각 디테일을 반드시 덧붙여라. (예: "가파른 산길을 오르는 마차 바퀴가 거칠게 자갈을 튕겨내는 소리")',
+    confidence: 100,
+  },
+  {
+    id: 'perm-smooth-transition',
+    category: 'structure' as const,
+    rule: '"---" 구분선만 긋고 뜬금없이 과거 회상이나 다른 장소로 점프하는 1차원적 전환 금지. 현재 씬의 마지막 묘사(시선, 냄새, 바람, 소리)를 자연스러운 트리거(매개체)로 삼아 다음 씬으로 오버랩(Overlap)되도록 연결하라.',
+    confidence: 100,
+  },
+  {
+    id: 'perm-hidden-master-voice',
+    category: 'dialogue' as const,
+    rule: '힘숨찐(정체를 숨긴 고수) 주인공이 의심받을 때, 당황하며 길고 궁색하게 변명하는 대사 패턴 금지. 능청스럽고 무심하게, 아주 짧은 너스레로 상황을 가볍게 흘려버려라. (예: "예전 늙은 양반들 시중을 들다 보니 입에 허세가 좀 붙었나 봅니다")',
     confidence: 100,
   },
 ];
