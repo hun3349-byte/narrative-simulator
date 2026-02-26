@@ -1256,6 +1256,12 @@ export async function POST(req: NextRequest) {
           // 스트리밍 응답 생성
           const stream = new ReadableStream({
             async start(controller) {
+              const heartbeat = setInterval(() => {
+                try {
+                  controller.enqueue(encoder.encode(': heartbeat\n\n'));
+                } catch { /* stream closed */ }
+              }, 15000);
+
               try {
                 let fullText = '';
 
@@ -1328,8 +1334,10 @@ export async function POST(req: NextRequest) {
                   controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
                 }
 
+                clearInterval(heartbeat);
                 controller.close();
               } catch (error) {
+                clearInterval(heartbeat);
                 console.error('Streaming error:', error);
                 const errorData = JSON.stringify({
                   type: 'error',
@@ -1370,6 +1378,12 @@ export async function POST(req: NextRequest) {
 
         const stream = new ReadableStream({
           async start(controller) {
+            const heartbeat = setInterval(() => {
+              try {
+                controller.enqueue(encoder.encode(': heartbeat\n\n'));
+              } catch { /* stream closed */ }
+            }, 15000);
+
             try {
               let fullText = '';
 
@@ -1395,8 +1409,10 @@ export async function POST(req: NextRequest) {
                 feedback: feedbackInfo,
               });
               controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
+              clearInterval(heartbeat);
               controller.close();
             } catch (error) {
+              clearInterval(heartbeat);
               console.error('Conversation streaming error:', error);
               const errorData = JSON.stringify({
                 type: 'error',
@@ -1501,6 +1517,12 @@ export async function POST(req: NextRequest) {
 
     const stream = new ReadableStream({
       async start(controller) {
+        const heartbeat = setInterval(() => {
+          try {
+            controller.enqueue(encoder.encode(': heartbeat\n\n'));
+          } catch { /* stream closed */ }
+        }, 15000);
+
         try {
           let fullText = '';
 
@@ -1574,8 +1596,10 @@ export async function POST(req: NextRequest) {
             controller.enqueue(encoder.encode(`data: ${finalData}\n\n`));
           }
 
+          clearInterval(heartbeat);
           controller.close();
         } catch (error) {
+          clearInterval(heartbeat);
           console.error('Layer streaming error:', error);
           const errorData = JSON.stringify({
             type: 'error',

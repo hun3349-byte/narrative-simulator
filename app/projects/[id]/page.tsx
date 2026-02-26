@@ -492,6 +492,66 @@ export default function ProjectConversationPage() {
       } catch (error) {
         console.error('Layer proposal error:', error);
         const errorMsg = error instanceof Error ? error.message : '알 수 없는 오류';
+
+        // network/timeout 에러 시 1회 자동 재시도
+        if (errorMsg.includes('응답을 받지 못') || errorMsg.includes('network') || errorMsg.includes('timeout') || errorMsg.includes('fetch') || errorMsg.includes('abort')) {
+          console.log('레이어 생성 자동 재시도...');
+          addMessage({
+            role: 'author',
+            content: '네트워크 오류가 발생했어. 자동으로 다시 시도할게.',
+          });
+
+          await new Promise(resolve => setTimeout(resolve, 2000));
+
+          try {
+            const retryData = await streamingFetch('/api/author-chat', {
+              projectId: project.id,
+              action: 'generate_layer',
+              layer,
+              genre: project.genre,
+              tone: project.tone,
+              viewpoint: project.viewpoint,
+              authorPersonaId: project.authorPersona.id,
+              direction: project.direction,
+              skipGuide,
+              previousLayers: {
+                world: project.layers.world.data,
+                coreRules: project.layers.coreRules.data,
+                seeds: project.layers.seeds.data,
+                heroArc: project.layers.heroArc.data,
+                villainArc: project.layers.villainArc.data,
+                ultimateMystery: project.layers.ultimateMystery.data,
+              },
+            });
+
+            if (retryData.type === 'error') {
+              throw new Error(retryData.message as string);
+            }
+
+            if (retryData.message) {
+              const isWaitingForUser = retryData.waitingForUserInput === true;
+              addMessage({
+                role: 'author',
+                content: retryData.message as string,
+                layerData: retryData.layer as unknown,
+                choices: isWaitingForUser ? undefined : [
+                  { label: '확정', action: 'confirm_layer' },
+                  { label: '다시 제안해줘', action: 'regenerate' },
+                ],
+              });
+
+              if (retryData.layer) {
+                updateLayer(layer, retryData.layer as Record<string, unknown>);
+              }
+            }
+            return; // 재시도 성공 시 종료
+          } catch (retryError) {
+            console.error('Layer proposal retry failed:', retryError);
+            // 재시도 실패 시 아래로 진행
+          }
+        }
+
+        // 재시도 실패 또는 다른 에러
         setLastError(errorMsg);
         setRetryAction(() => () => generateLayerProposal(layer));
         addMessage({

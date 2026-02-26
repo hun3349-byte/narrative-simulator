@@ -28,6 +28,7 @@
 20. ✅ **개별 에피소드 삭제** - 결과물 페이지에서 에피소드별 삭제 버튼 (호버 시 표시)
 21. ✅ **네트워크 에러 대응 (Task 10)** - SSE heartbeat 추가 + 네트워크 에러 자동 재시도 (최대 1회)
 22. ✅ **TIER 2 대화체/문단 연결 규칙** - 나이/신분 맞춤 말투 + 감정 브릿지 + 전환 패턴 제한
+23. ✅ **author-chat heartbeat + 레이어 생성 재시도** - author-chat API 3개 ReadableStream에 heartbeat 추가 + generateLayerProposal 네트워크 에러 자동 재시도
 
 ### 다음 작업
 - 추가 기능 개선 및 사용자 피드백 반영
@@ -45,6 +46,15 @@
 - 프로젝트 정체서(`project-identity.md`)와 최상위 원칙(`supreme-principles.md`)을 모든 설계/구현 판단의 기준으로 삼는다.
 
 ### 최근 업데이트
+- **2026-02-26**: PROMPT-REFACTOR-INSTRUCTIONS7 구현
+  - **author-chat API heartbeat 추가** (`app/api/author-chat/route.ts`):
+    - 3개 ReadableStream에 15초 heartbeat 추가 (Writing mode, Conversation, Layer generation)
+    - 각 스트림 종료/에러 시 `clearInterval(heartbeat)` 정리
+    - Railway/Vercel 타임아웃 방지
+  - **generateLayerProposal 자동 재시도** (`app/projects/[id]/page.tsx`):
+    - 네트워크/timeout 에러 시 2초 후 자동 재시도 (최대 1회)
+    - 재시도 실패 시 수동 재시도 버튼 표시
+    - "씨앗 레이어 확정 후 에러" 문제 해결
 - **2026-02-26**: PROMPT-REFACTOR-INSTRUCTIONS6 추가 구현
   - **TIER 2 대화체 규칙 강화** (`app/api/write-episode/route.ts`):
     - 캐릭터 나이/신분에 맞는 말투 규칙 추가
