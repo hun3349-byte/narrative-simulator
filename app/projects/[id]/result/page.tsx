@@ -9,7 +9,7 @@ export default function ProjectResultPage() {
   const params = useParams();
   const projectId = params.id as string;
 
-  const { getCurrentProject, selectProject } = useProjectStore();
+  const { getCurrentProject, selectProject, deleteEpisode } = useProjectStore();
 
   // Hydration 상태 - localStorage 로드 완료 전까지 로딩 표시
   const [isHydrated, setIsHydrated] = useState(false);
@@ -184,30 +184,51 @@ export default function ProjectResultPage() {
           <div className="space-y-2">
             {project.episodes.length > 0 ? (
               project.episodes.map((ep, idx) => (
-                <button
+                <div
                   key={ep.id}
-                  onClick={() => setCurrentEpisodeIndex(idx)}
-                  className={`block w-full rounded-lg p-3 text-left transition-colors ${
+                  className={`group relative rounded-lg p-3 transition-colors ${
                     idx === currentEpisodeIndex
                       ? 'bg-seojin/10 border border-seojin'
                       : 'bg-base-primary hover:bg-base-tertiary'
                   }`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className={`text-sm ${idx === currentEpisodeIndex ? 'font-medium text-text-primary' : 'text-text-secondary'}`}>
-                      {ep.number}화
-                    </span>
-                    <span className={`text-xs ${ep.status === 'final' ? 'text-green-400' : 'text-text-muted'}`}>
-                      {ep.status === 'final' ? '✓' : ep.status === 'drafted' ? '📝' : '📋'}
-                    </span>
-                  </div>
-                  <div className="mt-1 truncate text-xs text-text-muted">
-                    {ep.title}
-                  </div>
-                  <div className="mt-1 text-xs text-text-muted">
-                    {ep.charCount.toLocaleString()}자
-                  </div>
-                </button>
+                  <button
+                    onClick={() => setCurrentEpisodeIndex(idx)}
+                    className="block w-full text-left"
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className={`text-sm ${idx === currentEpisodeIndex ? 'font-medium text-text-primary' : 'text-text-secondary'}`}>
+                        {ep.number}화
+                      </span>
+                      <span className={`text-xs ${ep.status === 'final' ? 'text-green-400' : 'text-text-muted'}`}>
+                        {ep.status === 'final' ? '✓' : ep.status === 'drafted' ? '📝' : '📋'}
+                      </span>
+                    </div>
+                    <div className="mt-1 truncate text-xs text-text-muted">
+                      {ep.title}
+                    </div>
+                    <div className="mt-1 text-xs text-text-muted">
+                      {ep.charCount.toLocaleString()}자
+                    </div>
+                  </button>
+                  {/* 삭제 버튼 - 호버 시 표시 */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (window.confirm(`${ep.number}화 "${ep.title}"을(를) 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.`)) {
+                        deleteEpisode(ep.id);
+                        // 삭제 후 인덱스 조정
+                        if (currentEpisodeIndex >= project.episodes.length - 1) {
+                          setCurrentEpisodeIndex(Math.max(0, project.episodes.length - 2));
+                        }
+                      }
+                    }}
+                    className="absolute right-2 top-2 hidden rounded bg-red-500/80 px-2 py-1 text-xs text-white hover:bg-red-600 group-hover:block"
+                    title="에피소드 삭제"
+                  >
+                    ✕
+                  </button>
+                </div>
               ))
             ) : (
               <div className="p-4 text-center text-sm text-text-muted">
