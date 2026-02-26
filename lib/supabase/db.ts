@@ -119,6 +119,22 @@ export async function saveProjectToSupabase(project: Project): Promise<{ success
       .upsert(data as any, { onConflict: 'id' });
 
     if (error) {
+      // author_config 컬럼 누락 에러 시 해당 필드 제거하고 재시도
+      if (error.message?.includes('author_config')) {
+        console.warn('author_config 컬럼 없음 — 해당 필드 제외 후 재시도');
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
+        const { author_config, ...dataWithout } = data as Record<string, unknown>;
+        const { error: retryError } = await supabase
+          .from('projects')
+          .upsert(dataWithout as any, { onConflict: 'id' });
+
+        if (retryError) {
+          console.error('Supabase save retry error:', retryError);
+          return { success: false, error: retryError.message };
+        }
+        return { success: true };
+      }
+
       console.error('Supabase save error:', error);
       return { success: false, error: error.message };
     }

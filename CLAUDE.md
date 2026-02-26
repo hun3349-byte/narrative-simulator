@@ -22,6 +22,7 @@
 14. ✅ **설정 모순 수정 요청 기능** - 팩트체크 모순 발견 시 자동 수정 및 비교 UI
 15. ✅ **집필 프롬프트 4-Tier 아키텍처 리팩토링** - LLM 규칙 준수율 향상 + 동적 제약 생성
 16. ✅ **Direction 미반영 버그 수정** - author-chat 레이어 생성 시 초기 아이디어 반영 강화 + write-episode에 projectDirection 추가
+17. ✅ **Supabase author_config 방어 코드** - DB 컬럼 누락 시 해당 필드 제외 후 재시도 로직 추가
 
 ### 다음 작업
 - 추가 기능 개선 및 사용자 피드백 반영
@@ -39,6 +40,11 @@
 - 프로젝트 정체서(`project-identity.md`)와 최상위 원칙(`supreme-principles.md`)을 모든 설계/구현 판단의 기준으로 삼는다.
 
 ### 최근 업데이트
+- **2026-02-26**: Supabase author_config 방어 코드 추가
+  - `saveProjectToSupabase()` 함수에 방어 로직 추가
+  - `author_config` 컬럼이 DB에 없을 때 발생하는 에러 핸들링
+  - 에러 메시지에 'author_config' 포함 시 해당 필드 제외하고 재시도
+  - **수정 파일**: `lib/supabase/db.ts`
 - **2026-02-26**: Direction 미반영 버그 수정 + 프롬프트 강화
   - **author-chat API direction 버그 수정**:
     - 사용자가 프로젝트 생성 시 입력한 "방향(direction)"이 레이어 생성에 제대로 반영되지 않던 문제 해결
