@@ -57,6 +57,10 @@
     - 대본체 탈피: 건조한 단문 금지, 감각 묘사 필수
     - 장면 전환 오버랩: "---" 점프 금지, 감각 트리거로 자연스러운 연결
     - 힘숨찐 대사 톤: 궁색한 변명 금지, 짧은 너스레로 여유롭게
+39. ✅ **프롬프트 다이어트 및 타임아웃 근본 해결** - 3단계 최적화
+    - **프롬프트 압축 (30%+ 토큰 절감)**: buildSystemPrompt, buildStaticSystemRules, buildDynamicSystemRules 극단적 압축
+    - **동적 컨텍스트 가지치기 강화**: 직전 3화→1화, 등장 캐릭터만, 액션 필요 떡밥만
+    - **스트리밍 즉시 플러시**: heartbeat 3초 간격, 다중 heartbeat 버스트, status 메시지 전송
 
 ### 다음 작업
 - 추가 기능 개선 및 사용자 피드백 반영
@@ -74,6 +78,19 @@
 - 프로젝트 정체서(`project-identity.md`)와 최상위 원칙(`supreme-principles.md`)을 모든 설계/구현 판단의 기준으로 삼는다.
 
 ### 최근 업데이트
+- **2026-02-26**: 프롬프트 다이어트 및 타임아웃 근본 해결
+  - **프롬프트 압축** (`app/api/write-episode/route.ts`)
+    - buildSystemPrompt: 4-Tier 구조 → 압축 개조식 (~30% 토큰 절감)
+    - buildStaticSystemRules/buildDynamicSystemRules: 캐싱용 압축 버전
+    - 중복 규칙 통합, 설명투 제거, 핵심만 유지
+  - **동적 컨텍스트 가지치기** (`lib/utils/active-context.ts`)
+    - activeContextToPrompt: 압축 포맷 (각 섹션 1줄)
+    - buildPrunedActiveContext: 직전 3화→1화, 떡밥 액션 필요한 것만
+    - 세력 정보 2줄 제한, 캐릭터 5명 제한
+  - **스트리밍 즉시 플러시** (`app/api/write-episode/route.ts`)
+    - heartbeat 간격 5초→3초
+    - 연결 즉시 다중 heartbeat 버스트
+    - status 메시지 전송 ("프롬프트 준비 중...", "AI 집필 시작...")
 - **2026-02-26**: 2화 피드백 기반 Writing Memory 및 집필 규칙 고도화
   - **타임라인 엄격화** (영구 규칙 추가)
     - 과거 시점/햇수 자의적 출력 금지

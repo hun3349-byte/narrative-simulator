@@ -714,7 +714,11 @@ function getPatternBanList(recentLogs?: EpisodeLog[]): string {
   return lines.length > 0 ? lines.join('\n') : '(제한 없음)';
 }
 
-// 시스템 프롬프트 (4-Tier Architecture)
+// ============================================
+// 압축된 시스템 프롬프트 (토큰 30%+ 절감)
+// ============================================
+
+// 시스템 프롬프트 (압축 버전)
 function buildSystemPrompt(
   persona: typeof AUTHOR_PERSONA_PRESETS[0] | undefined,
   viewpoint: string,
@@ -724,395 +728,98 @@ function buildSystemPrompt(
   recentLogs?: EpisodeLog[],
   previousCliffhangerType?: string
 ): string {
-  // 장르 페르소나 (AuthorConfig 기반)
-  const genrePersonaSection = authorConfig
-    ? buildAuthorPersonaPrompt(authorConfig)
-    : '';
+  const genrePersonaSection = authorConfig ? buildAuthorPersonaPrompt(authorConfig) : '';
 
-  // 장르별 금지 어휘 (무협/동양판타지용) - 절대 규칙
+  // 외래어 금지 (무협/동양판타지만)
   const genre = authorConfig?.genre;
   const isOrientalGenre = genre === 'martial_arts' || (genre === 'fantasy' && authorConfig?.customGenre?.includes('동양'));
-  const forbiddenVocabulary = isOrientalGenre ? `
-████ 외래어 절대 금지 (위반 시 전체 무효) ████
+  const forbiddenVocab = isOrientalGenre ? `
+[외래어 금지] 팁→가르침, 스킬→무공, 레벨→경지, 마스터→사부, 타이밍→틈/찰나, 리듬→박자, 스트레스→심화` : '';
 
-[금지 어휘 목록]
-- 게임/현대 용어: 팁, 스킬, 레벨, 퀘스트, 미션, 파티, 시스템, 버프, 디버프, 이벤트, 클래스, 스탯, 아이템, 보스, 몹, 던전
-- 외래어: 오케이, 마스터, 리듬, 스트레스, 타이밍, 센스, 포인트, 체크, 컨트롤, 밸런스, 패턴, 루틴
-- 현대적 표현: "제대로 걸렸네", "한 건 했다", "이 정도면 OK", "센스 있네", "타이밍이 좋다"
+  const viewpointRule = viewpoint === 'first_person' ? '1인칭 "나"' : '3인칭';
 
-[필수 대체 표현 — 반드시 이렇게 바꿀 것]
-- 팁/조언 → 가르침, 충고, 비책, 귀띔
-- 돈/보상 → 은자(銀子), 냥, 수고비, 사례금
-- 리듬/박자 → 박자, 호흡, 운율, 운치
-- 스트레스/압박 → 심화(心火), 울화, 번민, 심기(心氣)
-- 마스터 → 사부, 스승, 장인, 고수, 대가
-- 타이밍 → 시기, 틈, 기회, 찰나
-- 레벨/경지 → 경지, 성, 층, 품
-- 스킬/능력 → 무공, 무예, 내공, 공력, 술법, 비급
-- 시스템/체계 → 체계, 법도, 이치
-- 파티/팀 → 일행, 동료, 무리, 패거리
-- 컨트롤 → 절제, 억제, 다스림
-- 밸런스 → 균형, 조화, 안배
-- 패턴 → 수법, 초식, 투로
-
-※ 위 금지 어휘가 본문에 1개라도 있으면 해당 문장을 반드시 수정할 것.
-※ 의심 가는 단어는 무조건 한자어/고어로 대체.
-` : '';
-
-  const viewpointRule = viewpoint === 'first_person'
-    ? '1인칭 주인공 시점. "나"로 서술. 주인공이 모르는 것은 독자도 모른다.'
-    : '3인칭 작가 시점. 캐릭터 이름으로 서술. 시점 전환 가능.';
-
-  // 이번 화 독백 톤 (이전 화 톤 제외)
-  const availableTones = previousMonologueTone
-    ? MONOLOGUE_TONES.filter(t => t !== previousMonologueTone)
-    : MONOLOGUE_TONES;
-  const suggestedTone = availableTones[episodeNumber % availableTones.length];
-
-  // 이번 화 클리프행어 유형 (이전 화 유형 제외)
-  const availableCliffhangers = previousCliffhangerType
-    ? CLIFFHANGER_TYPES.filter(t => t !== previousCliffhangerType)
-    : CLIFFHANGER_TYPES;
-  const suggestedCliffhanger = availableCliffhangers[(episodeNumber - 1) % availableCliffhangers.length];
+  // 톤/클리프행어 (직전 것 제외)
+  const tones = previousMonologueTone ? MONOLOGUE_TONES.filter(t => t !== previousMonologueTone) : MONOLOGUE_TONES;
+  const suggestedTone = tones[episodeNumber % tones.length];
+  const cliffs = previousCliffhangerType ? CLIFFHANGER_TYPES.filter(t => t !== previousCliffhangerType) : CLIFFHANGER_TYPES;
+  const suggestedCliff = cliffs[(episodeNumber - 1) % cliffs.length];
 
   // 구간별 속도
-  let pacingGuide = '';
-  if (episodeNumber <= 10) {
-    pacingGuide = '초반: 빠르게. 설명 최소화. 다음 장면으로 밀어붙여라.';
-  } else if (episodeNumber <= 50) {
-    pacingGuide = '중반: 깊게. 감정/관계/갈등 파고들기. 밀도 높이기.';
-  } else {
-    pacingGuide = '후반: 폭풍. 쉴 틈 없이. 감정 정점만 쉼표로.';
-  }
+  const pacing = episodeNumber <= 10 ? '빠르게' : episodeNumber <= 50 ? '깊게' : '폭풍';
 
-  // MUST-2, MUST-3 동적 생성
+  // 동적 제약
   const abilityConstraint = getAbilityConstraint(episodeNumber);
-  const patternBanList = getPatternBanList(recentLogs);
+  const patternBan = getPatternBanList(recentLogs);
 
-  return `
-████████████████████████████████████████
-  TIER 0: 절대 규칙 (MUST — 위반 시 전체 무효)
-████████████████████████████████████████
+  return `═══ 절대 규칙 (MUST) ═══
+[M1] 설명 대사 금지. "이건 ~이야" 패턴 0개. 행동/감각으로만.
+[M2] 능력 제한: ${abilityConstraint}
+[M3] 패턴 금지: ${patternBan}
 
-[MUST-1] 설명 금지
-캐릭터가 설정/능력/세계관을 대사로 설명하면 안 된다.
-"이건 ~이야", "~하는 것이다", "~라고 한다" 패턴 절대 금지.
-행동/감각/결과로만 보여줄 것.
+═══ ${episodeNumber}화 설정 ═══
+시점:${viewpointRule} | 톤:"${suggestedTone}" | 클리프:"${suggestedCliff}" | 속도:${pacing}
+${forbiddenVocab}
+═══ 작가 DNA ═══
+${persona?.name || '웹소설 작가'}${genrePersonaSection ? '\n' + genrePersonaSection : ''}
 
-❌ "이건 혈통 추적 부적이야. 네가 누구 혈통인지 알아보는 거지."
-✅ 검은 부적이 이마에 닿았다. 타들어갔다. 재도 남지 않았다.
+═══ 문체 (핵심만) ═══
+• 첫문장=어그로(감각/상황/의문) • 감정→신체 • 리듬:짧중길짧
+• 대사≤3줄, 핵심1줄, 뒤에 행동 • 사건 후 1~3문장 고요
+• 독백=자조/유머 • 16세≠8세 말투 • 고수=짧고 단정
+• 전환시 감정브릿지 • "그때였다" 2회↑금지
 
-❌ "이건 강제 각성 부적이야. 숨겨진 힘을 끄집어내는 거지."
-✅ 부적이 빛났다. 질문은 없었다.
+═══ 필수 규칙 ═══
+• 타임라인: 이전화 숫자 그대로(17년전→17년전). 확신없으면 "오래전"
+• 전환: "---"만 긋고 점프 금지. 감각트리거로 오버랩
+• 문체: 건조한 단문 금지. 모든 행동에 감각1개↑
+• 힘숨찐: 궁색변명 금지. 짧은 너스레로 흘려라
+• 반복: 같은 위기→구출 2회↑금지. 같은 능력 2회시 변주
+• 엑스트라: 그냥 지나감 금지. 마이크로 텐션 부여
+• 빌드업: 미완의 긴장으로 끝. 정보 한꺼풀씩
+• 적: 말적게, 경고없이 실행, 한번은 적이 이겨야
 
-[MUST-2] 능력/정체 공개 속도 제한
-${abilityConstraint}
-
-[MUST-3] 같은 패턴 반복 금지
-${patternBanList}
-
-※ 위 3개 규칙을 위반한 문장이 1개라도 있으면 그 화 전체가 실패다.
-※ 완성 후 자가 검증: MUST 3개를 다시 읽고, 위반 문장을 찾아 수정하라.
-
-████████████████████████████████████████
-  TIER 1: 이번 화 컨텍스트
-████████████████████████████████████████
-
-제${episodeNumber}화
-이번 화 독백 톤: "${suggestedTone}" ${previousMonologueTone ? `(직전 "${previousMonologueTone}" 금지)` : ''}
-이번 화 클리프행어: "${suggestedCliffhanger}" ${previousCliffhangerType ? `(직전 "${previousCliffhangerType}" 금지)` : ''}
-구간: ${pacingGuide}
-
-████████████████████████████████████████
-  TIER 2: 작가 DNA
-████████████████████████████████████████
-
-${persona?.name || '웹소설 작가'}
-${genrePersonaSection ? genrePersonaSection : ''}
-
-시점: ${viewpointRule}
-
-문체 핵심:
-- 첫 문장 = 감각 충격/상황 충격/의문 유발 중 하나. 느슨한 시작 금지.
-- 감정은 신체로 번역 (슬픔→턱 떨림, 분노→관자놀이 뜀, 공포→등줄기 서늘)
-- 문장 리듬: 짧→중→길→짧. 같은 길이 3문장 연속 금지.
-- 대사 3줄 이내. 핵심 대사 1줄. 대사 뒤 행동/반응 필수. A-B-A-B 탁구 금지.
-- 큰 사건 후 1~3문장 고요 삽입 (감정 잔향)
-- 긴장 후 반드시 이완 (모닥불, 식사, 걷기 등)
-- 독백에 자조/유머 섞기. 현대적 감각.
-
-대화체 — 나이/신분/경험에 맞는 말투 (중요):
-- 캐릭터 나이를 반드시 고려. 16세 소년이 "왜요?" "뭘요?"만 반복하면 8세처럼 들린다.
-- 10대 후반 소년: 짧은 문장, 약간의 반항기, 상황 파악은 빠르지만 표현은 서투름
-  ❌ "왜요?" "뭘요?" "어떻게 하죠?" (유아적)
-  ❌ "이거 제대로 걸렸네." (성인 자조 — 16세 경험 없는 소년이 쓰지 않는 표현)
-  ✅ "...그래서요?" / "알겠습니다." / 대답 대신 행동으로 반응
-- 무림 고수: 짧고 단정. 불필요한 말 안 함.
-  ❌ "이 아이는 내가 보호한다." / "나를 도와주면 너를 가르쳐주마." (설명적)
-  ✅ "따라와." / 말 없이 앞장서며 걷는다.
-- 같은 캐릭터도 상대에 따라 말투 변화:
-  윗사람 → 존댓말, 조심스러움 / 동갑·아래 → 반말, 솔직함 / 적 → 침묵 또는 최소한
-
-문단 연결 — 장면 간 감정 흐름 유지 (중요):
-- 장면 전환 시 감정 브릿지 필수. 앞 장면의 감정이 다음 장면에 잔향으로 이어져야 한다.
-  ❌ [긴장 끝] → [빈 줄] → [갑자기 새 상황 설명] (감정 단절)
-  ✅ [긴장 끝] → [빈 줄] → [이전 감정의 여운으로 시작] (연결)
-- "그때였다." "그런데 갑자기." "바로 그 순간." 패턴을 한 화에 2회 이상 쓰지 마라.
-  대신: 시간 앵커("해가 기울었다"), 감각 전환("바람이 방향을 바꿨다"), 행동 전환("검을 내려놓았다")
-- 서술→대화→서술→대화 단조로운 교대 금지. 서술 안에 감각, 대화 안에 행동 넣어 층위를 만들 것.
-${forbiddenVocabulary}
-████████████████████████████████████████
-  TIER 3: 참고 규칙 (지키면 좋은 것)
-████████████████████████████████████████
-
-[빌드업]
-- 매 화 "미완의 긴장"으로 끝. 한 화 완결 금지.
-- 긴장 3겹: 즉각(지금 위협) + 중기(이 아크 문제) + 장기(시리즈 미스터리)
-- 정보는 한 꺼풀씩. 새 정보 = 새 궁금증.
-- 매 화 최소 1개 보상 (정보/감정/능력/관계 중 택1)
-
-[캐릭터]
-- 주인공: 잃을 것/숨긴 것/반드시 성공해야 할 이유 중 2개 이상
-- 조력자: 숨은 동기. "왜 도와주지?" 의심하게
-- 적: 말 적게, 행동 잔인하게, 경고 없이 실행. 한 번은 적이 이겨야 함.
-- "특별하다/대단하다/천재급" 직접 언급 금지 — 행동/표정으로
-
-[연출]
-- 3중 훅: 오프닝(첫 3줄) + 미드포인트(50%) + 클로징(마지막 2줄)
-- 장면 전환 최대 4회. 전환 시 감정 브릿지.
-- 새 장면 첫 3줄: 누가/어디서/언제 명확히
-
-[엑스트라 조우 — 마이크로 텐션 필수]
-※ 의미 없이 지나가는 엑스트라는 없다. 스쳐 지나가는 무림인 1명도 긴장감의 소재로 활용하라.
-- 옷에 새겨진 '적대 세력의 문양'을 발견
-- '보법'에서 위협을 감지 (저 자는 평범한 상인이 아니다)
-- 주인공의 트라우마/본능을 자극하는 요소
-- 눈빛/자세에서 숨겨진 살기 직감
-- 우연처럼 보이지만 감시당하는 느낌
-❌ "행인들이 지나갔다. 그는 계속 걸었다." (긴장감 0)
-✅ "행인 하나가 스쳤다. 보법이 이상했다. 그의 손이 무의식적으로 허리춤을 스쳤다." (마이크로 텐션)
-
-[타임라인 검증 — 연도/시간 논리 체크 (절대 규칙)]
-- 과거 시점/햇수를 언급할 때 절대 자의적으로 숫자를 뱉지 마라
-- 반드시 World Bible과 이전 화 로그에 기록된 공식 타임라인을 최우선으로 교차 검증
-- 예: 1화에서 "17년 전 멸문"이라 했으면, 2화에서도 반드시 "17년 전"이어야 함 (30년, 20년 등 임의 숫자 금지)
-- 캐릭터 나이와 사건 연도도 반드시 일치시킬 것
-- 확신 없으면 구체적 숫자 대신 "오래전", "어린 시절" 등 모호한 표현 사용
-❌ 금지: 이전 화와 다른 연도 숫자를 멋대로 출력
-✅ 필수: 이전 화의 타임라인 숫자를 그대로 유지
-
-[장면 전환 — 오버랩 기법 필수 (절대 규칙)]
-- "---" 구분선만 긋고 뜬금없이 과거 회상이나 다른 장소로 점프하는 1차원적 전환 금지
-- 현재 씬의 마지막 묘사를 자연스러운 트리거(매개체)로 삼아 다음 씬으로 오버랩
-- 트리거 예시: 현판을 바라보는 시선, 특유의 냄새, 바람의 촉감, 익숙한 소리
-- 과거 회상 진입 시: 현재의 감각 → 과거의 같은 감각으로 자연스럽게 연결
-❌ 금지: "---" + 갑자기 "17년 전, 혈교..."
-✅ 필수: "현판의 붉은 글씨가 눈에 밟혔다. 어디서 본 색이었다. 17년 전, 그날 밤의 피처럼..."
-
-[문체 — 감각적 묘사 필수 (절대 규칙)]
-- 대본/지문 같은 건조한 단문 나열 절대 금지
-- "진무혁이 고개를 든다." "문이 벌컥 열린다." 같은 뼈대만 있는 문장 금지
-- 모든 행동/상황에 시각, 청각, 촉각 중 최소 1가지 감각 디테일을 반드시 덧붙여라
-❌ 금지: "마차가 산길을 올랐다."
-✅ 필수: "가파른 산길을 오르는 마차 바퀴가 거칠게 자갈을 튕겨냈다. 흙먼지가 피어올랐다."
-
-[힘숨찐 캐릭터 대사 — 여유로운 너스레 (중요)]
-- 정체를 숨긴 고수가 의심받을 때, 당황하며 길고 궁색하게 변명하는 대사 패턴 금지
-- 능청스럽고 무심하게, 아주 짧은 너스레로 상황을 가볍게 흘려버려라
-- 변명이 아니라 자조적 유머나 엉뚱한 답변으로 화제를 돌려라
-❌ 금지: "아, 그게... 사실은 제가 예전에... 어쩌다 보니..." (궁색한 변명)
-✅ 필수: "예전 늙은 양반들 시중을 들다 보니 입에 허세가 좀 붙었나 봅니다." (짧은 너스레)
-
-[반복 제거 — 한 화 내 미시적 중복 금지 (중요)]
-- 같은 위기→구출 패턴 2회 이상 금지 (예: 습격→구해줌→또 습격→또 구해줌)
-- 같은 감정 비트 반복 금지 (예: 놀람→안도→놀람→안도)
-- 같은 대사 구조 반복 금지 (예: "...하지 마." / "...그러지 마." / "...멈춰.")
-- 주인공이 같은 내면 갈등을 2번 이상 반추하지 않게
-- 같은 능력/기술을 한 화에서 2회 이상 사용하면 변주 필요 (다른 상황, 다른 결과)
-- 같은 배경 묘사 반복 금지 (예: "바람이 불었다"를 여러 번)
-❌ 패턴 예시: 위기1→힘 발휘→해결 → 위기2→힘 발휘→해결 (같은 박자)
-✅ 대안: 위기1→실패→퇴각 → 위기2→다른 방식으로 접근→불완전한 성공
-
-[검증 — 출력 전 자가 체크]
-□ MUST-1 위반 문장 없는가? (설명 대사 0개)
-□ MUST-2 허용 범위 내인가? (능력 발현 횟수)
-□ MUST-3 직전 화와 같은 패턴 아닌가?
-□ 한 화 내 같은 상황 패턴 반복 없는가? (위기→구출, 감정 비트 등)
-□ 외래어/현대어 1개라도 있으면 수정했는가?
-□ 같은 정체성 독백을 2회 이상 반복하지 않았는가?
-□ 타임라인 숫자가 이전 화와 일치하는가? (17년 전 멸문 등)
-□ 장면 전환 시 오버랩 트리거가 있는가? (구분선만 긋고 점프 금지)
-□ 건조한 단문(대본체) 없이 감각 묘사가 있는가?
-□ 힘숨찐 캐릭터가 궁색한 변명 대신 짧은 너스레를 쓰는가?
-□ 엑스트라 조우 씬에 마이크로 텐션이 있는가?
-□ 분량 ${TARGET_MIN_CHAR}~${TARGET_MAX_CHAR}자인가?
-□ 첫 문장이 어그로인가?
-□ 마지막 2줄이 클리프행어인가?
-□ 적이 실제로 피해를 입혔는가? (경고만 하고 물러나면 안 됨)
-□ 주인공 감정 3가지 이상 표현했는가?
-
-████████████████████████████████████████
-  출력 형식
-████████████████████████████████████████
-
-JSON으로만 응답:
-{
-  "episode": {
-    "title": "화 제목",
-    "content": "본문 전체 (줄바꿈은 \\n)",
-    "endHook": "마지막 2줄"
-  },
-  "authorComment": "이 화의 핵심 포인트",
-  "nextEpisodePreview": "다음 화 예고",
-  "monologueTone": "${suggestedTone}"
-}`;
+═══ 출력 ═══
+JSON: {"episode":{"title":"","content":"(\\n)","endHook":""},"authorComment":"","nextEpisodePreview":"","monologueTone":"${suggestedTone}"}
+분량:${TARGET_MIN_CHAR}~${TARGET_MAX_CHAR}자`;
 }
 
-// 정적 시스템 규칙 (캐시 가능 - 변하지 않는 문체/연출 규칙)
+// 정적 시스템 규칙 (압축 버전 - 캐시용)
 function buildStaticSystemRules(
   persona: typeof AUTHOR_PERSONA_PRESETS[0] | undefined,
   viewpoint: string,
   authorConfig?: AuthorConfig
 ): string {
-  const genrePersonaSection = authorConfig
-    ? buildAuthorPersonaPrompt(authorConfig)
-    : '';
+  const genrePersona = authorConfig ? buildAuthorPersonaPrompt(authorConfig) : '';
+  const vp = viewpoint === 'first_person' ? '1인칭 "나"' : '3인칭';
 
-  const viewpointRule = viewpoint === 'first_person'
-    ? '1인칭 주인공 시점. "나"로 서술. 주인공이 모르는 것은 독자도 모른다.'
-    : '3인칭 작가 시점. 캐릭터 이름으로 서술. 시점 전환 가능.';
-
-  return `
-████████████████████████████████████████
-  정적 규칙: 문체 & 연출 DNA (모든 화 공통)
-████████████████████████████████████████
-
-=== 작가 정체성 ===
-${persona?.name || '웹소설 작가'}
-${genrePersonaSection ? genrePersonaSection : ''}
-
-=== 시점 ===
-${viewpointRule}
-
-=== 문체 핵심 ===
-- 첫 문장 = 감각 충격/상황 충격/의문 유발 중 하나. 느슨한 시작 금지.
-- 감정은 신체로 번역 (슬픔→턱 떨림, 분노→관자놀이 뜀, 공포→등줄기 서늘)
-- 문장 리듬: 짧→중→길→짧. 같은 길이 3문장 연속 금지.
-- 대사 3줄 이내. 핵심 대사 1줄. 대사 뒤 행동/반응 필수. A-B-A-B 탁구 금지.
-- 큰 사건 후 1~3문장 고요 삽입 (감정 잔향)
-- 긴장 후 반드시 이완 (모닥불, 식사, 걷기 등)
-- 독백에 자조/유머 섞기. 현대적 감각.
-
-=== 대화체 규칙 ===
-- 캐릭터 나이를 반드시 고려. 16세 소년이 "왜요?" "뭘요?"만 반복하면 8세처럼 들린다.
-- 10대 후반: 짧은 문장, 약간의 반항기, 표현 서투름. "...그래서요?" / "알겠습니다."
-- 무림 고수: 짧고 단정. "따라와." / 말 없이 행동.
-- 상대에 따라 말투 변화: 윗사람→존댓말 / 동갑→반말 / 적→침묵
-
-=== 문단 연결 ===
-- 장면 전환 시 감정 브릿지 필수. 앞 감정이 다음 장면에 잔향으로.
-- "그때였다." "그런데 갑자기." 한 화에 2회 이상 금지.
-- 대신: 시간 앵커, 감각 전환, 행동 전환으로 연결.
-
-=== 빌드업 규칙 ===
-- 매 화 "미완의 긴장"으로 끝. 한 화 완결 금지.
-- 긴장 3겹: 즉각 + 중기 + 장기
-- 정보는 한 꺼풀씩. 새 정보 = 새 궁금증.
-- 매 화 최소 1개 보상 (정보/감정/능력/관계)
-
-=== 캐릭터 규칙 ===
-- 주인공: 잃을 것/숨긴 것/반드시 성공해야 할 이유 중 2개 이상
-- 조력자: 숨은 동기. "왜 도와주지?"
-- 적: 말 적게, 행동 잔인하게, 경고 없이 실행. 한 번은 적이 이겨야.
-- "특별하다/대단하다/천재급" 직접 언급 금지
-
-=== 연출 규칙 ===
-- 3중 훅: 오프닝(첫 3줄) + 미드포인트(50%) + 클로징(마지막 2줄)
-- 장면 전환 최대 4회. 전환 시 감정 브릿지.
-- 새 장면 첫 3줄: 누가/어디서/언제 명확히
-
-=== 출력 형식 ===
-JSON으로만 응답:
-{
-  "episode": {
-    "title": "화 제목",
-    "content": "본문 전체 (줄바꿈은 \\n)",
-    "endHook": "마지막 2줄"
-  },
-  "authorComment": "이 화의 핵심 포인트",
-  "nextEpisodePreview": "다음 화 예고",
-  "monologueTone": "사용한 독백 톤"
-}
-`;
+  return `═══ 정적 규칙 (캐시됨) ═══
+[작가] ${persona?.name || '웹소설 작가'}
+${genrePersona}
+[시점] ${vp}
+[문체] 첫문장=어그로 | 감정→신체 | 리듬:짧중길짧 | 대사≤3줄→행동 | 사건후 고요
+[대화] 나이맞춤(16세≠8세) | 고수=짧고단정 | 상대따라 변화
+[연결] 전환시 감정브릿지 | "그때였다"2회↑금지
+[빌드업] 미완으로끝 | 3겹긴장 | 정보한꺼풀
+[캐릭터] 주인공:결핍/비밀2↑ | 적:말적게,경고없이실행
+[출력] JSON:{"episode":{"title":"","content":"(\\n)","endHook":""},"authorComment":"","nextEpisodePreview":"","monologueTone":""}`;
 }
 
-// 동적 시스템 규칙 (에피소드별 변동)
+// 동적 시스템 규칙 (압축 버전)
 function buildDynamicSystemRules(
   episodeNumber: number,
   previousMonologueTone?: MonologueTone,
   recentLogs?: EpisodeLog[],
   previousCliffhangerType?: string
 ): string {
-  // 이번 화 독백 톤 (이전 화 톤 제외)
-  const availableTones = previousMonologueTone
-    ? MONOLOGUE_TONES.filter(t => t !== previousMonologueTone)
-    : MONOLOGUE_TONES;
-  const suggestedTone = availableTones[episodeNumber % availableTones.length];
+  const tones = previousMonologueTone ? MONOLOGUE_TONES.filter(t => t !== previousMonologueTone) : MONOLOGUE_TONES;
+  const suggestedTone = tones[episodeNumber % tones.length];
+  const cliffs = previousCliffhangerType ? CLIFFHANGER_TYPES.filter(t => t !== previousCliffhangerType) : CLIFFHANGER_TYPES;
+  const suggestedCliff = cliffs[(episodeNumber - 1) % cliffs.length];
+  const pacing = episodeNumber <= 10 ? '빠르게' : episodeNumber <= 50 ? '깊게' : '폭풍';
 
-  // 이번 화 클리프행어 유형 (이전 화 유형 제외)
-  const availableCliffhangers = previousCliffhangerType
-    ? CLIFFHANGER_TYPES.filter(t => t !== previousCliffhangerType)
-    : CLIFFHANGER_TYPES;
-  const suggestedCliffhanger = availableCliffhangers[(episodeNumber - 1) % availableCliffhangers.length];
-
-  // 구간별 속도
-  let pacingGuide = '';
-  if (episodeNumber <= 10) {
-    pacingGuide = '초반: 빠르게. 설명 최소화.';
-  } else if (episodeNumber <= 50) {
-    pacingGuide = '중반: 깊게. 감정/관계/갈등 파고들기.';
-  } else {
-    pacingGuide = '후반: 폭풍. 쉴 틈 없이.';
-  }
-
-  const abilityConstraint = getAbilityConstraint(episodeNumber);
-  const patternBanList = getPatternBanList(recentLogs);
-
-  return `
-████████████████████████████████████████
-  동적 규칙: 제${episodeNumber}화 전용
-████████████████████████████████████████
-
-=== 절대 규칙 (MUST) ===
-
-[MUST-1] 설명 금지
-캐릭터가 설정/능력/세계관을 대사로 설명하면 안 된다.
-"이건 ~이야", "~하는 것이다" 패턴 절대 금지.
-행동/감각/결과로만 보여줄 것.
-❌ "이건 혈통 추적 부적이야."
-✅ 검은 부적이 이마에 닿았다. 타들어갔다.
-
-[MUST-2] 능력/정체 공개 속도 제한
-${abilityConstraint}
-
-[MUST-3] 같은 패턴 반복 금지
-${patternBanList}
-
-※ MUST 위반 문장이 1개라도 있으면 그 화 전체가 실패.
-
-=== 이번 화 컨텍스트 ===
-독백 톤: "${suggestedTone}" ${previousMonologueTone ? `(직전 "${previousMonologueTone}" 금지)` : ''}
-클리프행어: "${suggestedCliffhanger}" ${previousCliffhangerType ? `(직전 "${previousCliffhangerType}" 금지)` : ''}
-구간: ${pacingGuide}
-
-=== 검증 체크리스트 ===
-□ MUST-1 위반 없음 (설명 대사 0개)
-□ MUST-2 허용 범위 내
-□ MUST-3 직전 화와 다른 패턴
-□ 분량 ${TARGET_MIN_CHAR}~${TARGET_MAX_CHAR}자
-□ 첫 문장이 어그로
-□ 마지막 2줄이 클리프행어
-`;
+  return `═══ ${episodeNumber}화 규칙 ═══
+[M1] 설명대사 0개 [M2] ${getAbilityConstraint(episodeNumber)} [M3] ${getPatternBanList(recentLogs)}
+톤:"${suggestedTone}" 클리프:"${suggestedCliff}" 속도:${pacing} 분량:${TARGET_MIN_CHAR}~${TARGET_MAX_CHAR}자`;
 }
 
 // 캐시된 시스템 프롬프트 생성 (Anthropic Prompt Caching용)
@@ -1582,24 +1289,29 @@ export async function POST(req: NextRequest) {
         };
 
         try {
-          // 1. 즉시 연결 확인 메시지 전송 (프록시 버퍼 flush 유도)
-          const connectMsg = JSON.stringify({
-            type: 'connected',
-            message: '연결 성공, 작가 AI가 집필을 시작합니다...'
-          });
-          safeEnqueue(encoder.encode(`data: ${connectMsg}\n\n`));
+          // ============================================
+          // 즉시 플러시 (Immediate Flush) - 타임아웃 방지
+          // ============================================
 
-          // 2. 즉시 heartbeat 전송 (연결 유지 확인)
+          // 1. 연결 확인 즉시 전송
+          safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: 'connected' })}\n\n`));
+
+          // 2. 다중 heartbeat 버스트 (프록시 버퍼 강제 플러시)
+          safeEnqueue(encoder.encode(': heartbeat\n\n'));
           safeEnqueue(encoder.encode(': heartbeat\n\n'));
 
-          // 3. 5초 간격 heartbeat 시작 (Railway/Vercel 타임아웃 방지 - 더 공격적)
+          // 3. 상태 메시지 전송 (사용자에게 진행 알림)
+          safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: 'status', message: '프롬프트 준비 중...' })}\n\n`));
+
+          // 4. 3초 간격 heartbeat (더 공격적)
           heartbeat = setInterval(() => {
             safeEnqueue(encoder.encode(': heartbeat\n\n'));
-          }, 5000);
+          }, 3000);
 
           let fullText = '';
 
-          // 4. Anthropic API 호출 전 추가 heartbeat (프롬프트 처리 동안 연결 유지)
+          // 5. API 호출 직전 상태 + heartbeat
+          safeEnqueue(encoder.encode(`data: ${JSON.stringify({ type: 'status', message: 'AI 집필 시작...' })}\n\n`));
           safeEnqueue(encoder.encode(': heartbeat\n\n'));
 
           // Anthropic Prompt Caching 적용 - 정적 규칙은 캐시됨

@@ -199,6 +199,12 @@ function extractRelevantCharacters(
 /**
  * 동적 가지치기가 적용된 Active Context를 생성합니다.
  * 장면 유형에 따라 불필요한 컨텍스트를 제거하여 토큰을 절약합니다.
+ *
+ * 가지치기 전략:
+ * 1. 이번 화 등장 캐릭터만 (PD 디렉션 + 최근 2화)
+ * 2. 액션 필요한 떡밥만
+ * 3. 직전 1화 로그만 (3화→1화)
+ * 4. 세력 정보 최소화
  */
 export function buildPrunedActiveContext(
   params: BuildActiveContextParams & {
@@ -214,14 +220,13 @@ export function buildPrunedActiveContext(
     episodeDirection,
   } = params;
 
-  // 1. 직전 3화 로그 추출
-  const recentLogs = getRecentLogs(episodeLogs, currentEpisodeNumber, 3);
+  // 1. 직전 1화 로그만 추출 (3화→1화로 축소)
+  const recentLogs = getRecentLogs(episodeLogs, currentEpisodeNumber, 1);
 
   // 2. 장면 유형 감지
   const sceneType = detectSceneType(episodeDirection, recentLogs);
-  console.log(`[Dynamic Pruning] Detected scene type: ${sceneType}`);
 
-  // 3. 관련 캐릭터 추출
+  // 3. 관련 캐릭터 추출 (더 공격적으로)
   const relevantCharacters = extractRelevantCharacters(
     recentLogs,
     typeof episodeDirection !== 'string' ? episodeDirection : undefined
@@ -230,24 +235,39 @@ export function buildPrunedActiveContext(
   // 4. World Bible 가지치기
   const prunedWorldBible = pruneWorldBible(worldBible, sceneType, relevantCharacters);
 
-  // 5. 나머지 컨텍스트 조립
-  const previousEnding = getPreviousEnding(episodes, currentEpisodeNumber);
-  const activeBreadcrumbs = getActiveBreadcrumbs(prunedWorldBible, currentEpisodeNumber);
-  const unresolvedTensions = collectUnresolvedTensions(recentLogs);
-  const characterStates = getCharacterStates(prunedWorldBible);
-  const episodeMeta = calculateEpisodeMeta(currentEpisodeNumber, recentLogs, prunedWorldBible);
-  const feedbackGuide = getRecurringFeedback(feedbackHistory);
+  // 5. 세력 정보 추가 축소 (2줄까지)
+  if (prunedWorldBible.factions) {
+    const factionLines = prunedWorldBible.factions.split('\n').slice(0, 2);
+    prunedWorldBible.factions = factionLines.join('\n');
+  }
 
-  // 토큰 절감 로그
-  const originalChars = Object.keys(worldBible.characters || {}).length;
-  const prunedChars = Object.keys(prunedWorldBible.characters || {}).length;
-  console.log(`[Dynamic Pruning] Characters: ${originalChars} → ${prunedChars} (${Math.round((1 - prunedChars/originalChars) * 100) || 0}% reduction)`);
+  // 6. 나머지 컨텍스트 조립
+  const previousEnding = getPreviousEnding(episodes, currentEpisodeNumber);
+
+  // 7. 떡밥 - 액션 필요한 것만 (hidden 상태로 10화+ 지난 것)
+  const allBreadcrumbs = getActiveBreadcrumbs(prunedWorldBible, currentEpisodeNumber);
+  const urgentBreadcrumbs = allBreadcrumbs.filter(bc =>
+    bc.nextAction || // 액션 필요
+    (bc.status === 'hidden' && currentEpisodeNumber - bc.lastMentioned >= 8) // 8화 이상 방치
+  );
+
+  // 8. 미해결 긴장 (2개까지)
+  const unresolvedTensions = collectUnresolvedTensions(recentLogs).slice(0, 2);
+
+  // 9. 캐릭터 상태 (등장 캐릭터만)
+  const characterStates = getCharacterStates(prunedWorldBible);
+
+  // 10. 메타
+  const episodeMeta = calculateEpisodeMeta(currentEpisodeNumber, recentLogs, prunedWorldBible);
+
+  // 11. 피드백 (3개까지)
+  const feedbackGuide = getRecurringFeedback(feedbackHistory).slice(0, 3);
 
   return {
     worldBible: prunedWorldBible,
     recentLogs,
     previousEnding,
-    activeBreadcrumbs,
+    activeBreadcrumbs: urgentBreadcrumbs,
     unresolvedTensions,
     characterStates,
     episodeMeta,
@@ -466,95 +486,55 @@ function getRecurringFeedback(feedbackHistory: Feedback[]): string[] {
 }
 
 /**
- * Active Context를 프롬프트 문자열로 변환합니다.
+ * Active Context를 **압축된** 프롬프트 문자열로 변환합니다.
+ * 토큰 절약을 위해 최소한의 정보만 포함.
  */
 export function activeContextToPrompt(context: ActiveContext): string {
-  const sections: string[] = [];
+  const parts: string[] = [];
 
-  // 1. World Bible 섹션
-  sections.push(`## 세계관 성경 (World Bible)
+  // 1. World Bible (압축)
+  const wb = context.worldBible;
+  parts.push(`[세계] ${wb.worldSummary}`);
+  parts.push(`[규칙] 힘:${wb.rules.powerSystem?.split('.')[0] || '미정'} | 사회:${wb.rules.socialStructure?.split('.')[0] || '미정'}`);
 
-### 세계 요약
-${context.worldBible.worldSummary}
+  // 2. 캐릭터 (등장 예정자만, 한 줄씩)
+  const charEntries = Object.entries(context.characterStates);
+  if (charEntries.length > 0) {
+    parts.push(`[캐릭터] ${charEntries.slice(0, 5).map(([n, s]) => `${n}:${s.slice(0, 30)}`).join(' | ')}`);
+  }
 
-### 핵심 규칙
-- 힘의 체계: ${context.worldBible.rules.powerSystem}
-${context.worldBible.rules.magicTypes ? `- 능력 종류: ${context.worldBible.rules.magicTypes}` : ''}
-- 사회 구조: ${context.worldBible.rules.socialStructure}
-- 핵심 역사: ${context.worldBible.rules.keyHistory}
-${context.worldBible.rules.contradiction ? `- 세계의 모순: ${context.worldBible.rules.contradiction}` : ''}
-
-### 세력 관계
-${context.worldBible.factions}
-`);
-
-  // 2. 캐릭터 현재 상태
-  sections.push(`### 캐릭터 현재 상태
-${Object.entries(context.characterStates)
-  .map(([name, state]) => `- ${name}: ${state}`)
-  .join('\n')}
-`);
-
-  // 3. 직전 3화 로그
+  // 3. 직전 화 (1개만, 요약)
   if (context.recentLogs.length > 0) {
-    sections.push(`## 직전 화 요약
-${context.recentLogs.map(log =>
-  `### ${log.episodeNumber}화
-- 요약: ${log.summary}
-- 클리프행어: ${log.cliffhangerContent}
-- 미해결 긴장: ${log.unresolvedTensions.join(', ') || '없음'}`
-).join('\n\n')}
-`);
+    const last = context.recentLogs[context.recentLogs.length - 1];
+    parts.push(`[직전${last.episodeNumber}화] ${last.summary?.slice(0, 100) || ''} → ${last.cliffhangerContent?.slice(0, 50) || ''}`);
   }
 
-  // 4. 직전 화 엔딩
+  // 4. 직전 엔딩 (200자로 축소)
   if (context.previousEnding) {
-    sections.push(`## 직전 화 마지막 장면
-${context.previousEnding}
-`);
+    parts.push(`[이어쓰기] ...${context.previousEnding.slice(-200)}`);
   }
 
-  // 5. 활성 떡밥
-  if (context.activeBreadcrumbs.length > 0) {
-    sections.push(`## 활성 떡밥
-${context.activeBreadcrumbs.map(bc => {
-  let line = `- ${bc.name}: ${bc.status} (마지막 언급: ${bc.lastMentioned}화)`;
-  if (bc.nextAction) {
-    line += ` → **${bc.nextAction}**`;
-  }
-  return line;
-}).join('\n')}
-`);
+  // 5. 활성 떡밥 (액션 필요한 것만)
+  const actionBreadcrumbs = context.activeBreadcrumbs.filter(bc => bc.nextAction);
+  if (actionBreadcrumbs.length > 0) {
+    parts.push(`[떡밥] ${actionBreadcrumbs.map(bc => `${bc.name}→${bc.nextAction}`).join(' | ')}`);
   }
 
-  // 6. 미해결 긴장
+  // 6. 미해결 긴장 (3개까지)
   if (context.unresolvedTensions.length > 0) {
-    sections.push(`## 미해결 긴장
-${context.unresolvedTensions.map(t => `- ${t}`).join('\n')}
-`);
+    parts.push(`[긴장] ${context.unresolvedTensions.slice(0, 3).join(' | ')}`);
   }
 
-  // 7. 메타 지시
-  sections.push(`## 이번 화 메타 지시
-- ${context.episodeMeta.episodeNumber}화 (5화 미니아크 중 ${context.episodeMeta.miniArcPosition}번째)
-- 빌드업 페이즈: ${context.episodeMeta.buildupPhase}
-${context.episodeMeta.forbiddenCliffhanger ? `- 금지 클리프행어: ${context.episodeMeta.forbiddenCliffhanger} (직전 화에 사용)` : ''}
-${context.episodeMeta.forbiddenTone ? `- 금지 독백 톤: ${context.episodeMeta.forbiddenTone} (직전 화에 사용)` : ''}
-- 추천 클리프행어: ${context.episodeMeta.suggestedCliffhanger}
-- 추천 독백 톤: ${context.episodeMeta.suggestedTone}
-${context.episodeMeta.breadcrumbInstructions?.length ? `
-### 떡밥 지시
-${context.episodeMeta.breadcrumbInstructions.map(i => `- ${i}`).join('\n')}` : ''}
-`);
+  // 7. 메타 (핵심만)
+  const meta = context.episodeMeta;
+  parts.push(`[메타] ${meta.episodeNumber}화 아크${meta.miniArcPosition}/5 ${meta.buildupPhase} | 톤:${meta.suggestedTone} 클리프:${meta.suggestedCliffhanger}`);
 
-  // 8. 환님 피드백
+  // 8. 피드백 (있으면)
   if (context.feedbackGuide.length > 0) {
-    sections.push(`## 환님 피드백 (누적 - 반드시 반영)
-${context.feedbackGuide.join('\n')}
-`);
+    parts.push(`[피드백] ${context.feedbackGuide.slice(0, 3).join(' | ')}`);
   }
 
-  return sections.join('\n');
+  return parts.join('\n');
 }
 
 /**
