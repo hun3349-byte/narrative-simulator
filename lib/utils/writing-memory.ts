@@ -493,10 +493,45 @@ export function updateQualityTracker(
 }
 
 /**
+ * 영구 규칙 (100% 신뢰도) - 1화 피드백 기반 학습된 필수 규칙
+ * 이 규칙들은 모든 화에 항상 적용됨
+ */
+const PERMANENT_RULES = [
+  {
+    id: 'perm-show-dont-tell',
+    category: 'style' as const,
+    rule: '같은 내면 독백 2회 이상 반복 금지 ("나는 평범하게 살고 싶다" 같은 정체성 독백을 속마음으로 두 번 말하지 마라). 대신 무의식적 행동으로 보여라 (단전의 기운을 억누르는 손, 칼자루로 향하다 거두는 손).',
+    confidence: 100,
+  },
+  {
+    id: 'perm-timeline-check',
+    category: 'structure' as const,
+    rule: '과거 회상/연도 언급 시 World Bible의 타임라인과 반드시 교차 검증. "3년 전 마부 시작" + "17년 전 멸문" = 14년 공백 같은 논리적 충돌 금지.',
+    confidence: 100,
+  },
+  {
+    id: 'perm-extra-tension',
+    category: 'description' as const,
+    rule: '의미 없이 지나가는 엑스트라는 없다. 스쳐 지나가는 무림인 1명도 반드시 마이크로 텐션을 부여하라 (옷의 문양에서 적대 세력 감지, 보법에서 위협 직감, 주인공의 트라우마 자극).',
+    confidence: 100,
+  },
+  {
+    id: 'perm-emotion-action',
+    category: 'style' as const,
+    rule: '감정을 직접 서술하지 마라 ("분노했다", "슬펐다" 금지). 신체 반응으로 번역하라 (이를 악물었다, 손이 떨렸다, 숨이 거칠어졌다).',
+    confidence: 100,
+  },
+];
+
+/**
  * 프롬프트용 Writing Memory 문자열 생성 (500토큰 이내)
  */
 export function buildWritingMemoryPrompt(memory: WritingMemory): string {
   const sections: string[] = [];
+
+  // 0. 영구 규칙 (항상 최우선 적용)
+  sections.push(`### 영구 필수 규칙 (100% 신뢰도 - 위반 금지)
+${PERMANENT_RULES.map(r => `- ${r.rule}`).join('\n')}`);
 
   // 1. 필수 스타일 규칙 (confidence >= 50)
   const mustRules = memory.styleRules
